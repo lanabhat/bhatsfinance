@@ -1,13 +1,16 @@
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .base import *  # noqa: F401,F403
-from .base import BASE_DIR, MIDDLEWARE
-
 # Load production secrets from a .env file uploaded directly to the server
-# (never committed — see .env.example for the variable list).
-load_dotenv(BASE_DIR / '.env')
+# (never committed — see .env.example for the variable list) BEFORE importing
+# from .base, since base.py reads several SOCIAL_AUTH_*/SUPERADMIN_* values
+# from os.environ at import time.
+load_dotenv(Path(__file__).resolve().parent.parent.parent / '.env')
+
+from .base import *  # noqa: F401,F403,E402
+from .base import BASE_DIR, MIDDLEWARE  # noqa: E402
 
 SECRET_KEY = os.environ['SECRET_KEY']
 
