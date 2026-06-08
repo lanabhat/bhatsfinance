@@ -2,6 +2,13 @@ export type Id = number
 
 export type ApiListResponse<T> = T[] | { results: T[] }
 
+export type PaginatedResponse<T> = {
+  count: number
+  next: string | null
+  previous: string | null
+  results: T[]
+}
+
 export type ApiErrorMap = Record<string, string[] | string>
 
 export type OptionItem = {

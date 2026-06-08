@@ -1,5 +1,5 @@
 import { deleteJson, getJson, patchJson, postJson, toQueryString, unwrapList } from './http'
-import type { SmsApiKey, SmsMessage } from '../types/domain'
+import type { PaginatedResponse, SmsApiKey, SmsMessage } from '../types/domain'
 
 export type SmsMessageListParams = {
   status?: string
@@ -9,7 +9,11 @@ export type SmsMessageListParams = {
   ordering?: string
   received_after?: string
   received_before?: string
+  page?: number
+  page_size?: number
 }
+
+export type SmsBulkDeleteFilters = Omit<SmsMessageListParams, 'page' | 'page_size' | 'ordering'>
 
 export const smsApi = {
   listApiKeys: (householdId: number) =>
@@ -25,6 +29,21 @@ export const smsApi = {
   deleteApiKey: (id: number) =>
     deleteJson(`/api/sms-api-keys/${id}/`),
 
-  listMessages: (householdId: number, params: SmsMessageListParams = {}) =>
-    getJson<SmsMessage[]>(`/api/sms-messages/?${toQueryString({ household: householdId, ...params })}`).then(unwrapList),
+  /** Returns the raw paginated page (count/next/previous/results) so the UI can show page controls. */
+  listMessagesPage: (householdId: number, params: SmsMessageListParams = {}) =>
+    getJson<PaginatedResponse<SmsMessage>>(`/api/sms-messages/?${toQueryString({ household: householdId, ...params })}`),
+
+  deleteMessage: (id: number) =>
+    deleteJson(`/api/sms-messages/${id}/`),
+
+  /** Delete a specific set of messages by id. */
+  bulkDeleteByIds: (ids: number[]) =>
+    postJson<{ deleted: number }>('/api/sms-messages/bulk-delete/', { ids }),
+
+  /** Delete every message matching the given filters (e.g. "delete all rejected"). */
+  bulkDeleteAllMatching: (householdId: number, filters: SmsBulkDeleteFilters = {}) =>
+    postJson<{ deleted: number }>(
+      `/api/sms-messages/bulk-delete/?${toQueryString({ household: householdId, ...filters })}`,
+      { all_matching_filters: true },
+    ),
 }

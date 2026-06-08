@@ -10,6 +10,7 @@ export type DeleteEntity =
   | 'account_ownership'
   | 'household'
   | 'member'
+  | 'sms_message'
   | 'sip_mandate'
   | 'tax_record'
   | 'tax_projection'
@@ -26,6 +27,7 @@ const DEFAULTS: Record<DeleteEntity, boolean> = {
   account_ownership: true,
   household: true,
   member: true,
+  sms_message: true,
   sip_mandate: true,
   tax_record: true,
   tax_projection: true,

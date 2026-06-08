@@ -126,7 +126,7 @@ function AppInner() {
       case 'gmail-staging': return <GmailStagingPage accountOptions={accounts} />
       case 'sms-devices': return <SmsDevicesPage householdId={householdId} />
       case 'sms-test': return <SmsTestPage />
-      case 'sms-messages': return <SmsMessagesPage householdId={householdId} />
+      case 'sms-messages': return <SmsMessagesPage householdId={householdId} canDelete={canDelete} />
       case 'admin': return user.authenticated && user.role === 'super_admin' ? <AdminPage /> : <HomePage onNavigate={navigate} />
       default: return <HomePage onNavigate={navigate} />
     }

@@ -1,5 +1,6 @@
 from django.db.models import Q
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -40,15 +41,20 @@ class SmsApiKeyViewSet(viewsets.ModelViewSet):
         return Response(payload, status=status.HTTP_201_CREATED, headers=headers)
 
 
-class SmsMessageViewSet(viewsets.ReadOnlyModelViewSet):
+class SmsMessageViewSet(viewsets.ModelViewSet):
     """
     Browse staged SMS messages — search, filter by sender/status/date range,
     and filter by auto-detected category (see sms_ingestion.categorization).
+
+    Read-only by design except for delete: messages are staged for review by
+    the ingest pipeline, not edited by hand — but stale/junk messages can be
+    individually or bulk-removed (see `bulk_delete`).
     """
     serializer_class = SmsMessageSerializer
     permission_classes = [IsApprovedUser]
+    http_method_names = ['get', 'delete', 'post', 'head', 'options']
 
-    def get_queryset(self):
+    def filtered_queryset(self):
         hid = self.request.query_params.get('household')
         if not hid:
             return SmsMessage.objects.none()
@@ -77,11 +83,43 @@ class SmsMessageViewSet(viewsets.ReadOnlyModelViewSet):
         if category and category in CATEGORY_PATTERNS:
             qs = qs.filter(body__iregex=CATEGORY_PATTERNS[category])
 
+        return qs
+
+    def get_queryset(self):
+        qs = self.filtered_queryset()
         ordering = self.request.query_params.get('ordering', '-received_at')
         if ordering.lstrip('-') in ('received_at', 'sender', 'created_at'):
             qs = qs.order_by(ordering)
-
         return qs
+
+    @action(detail=False, methods=['post'], url_path='bulk-delete')
+    def bulk_delete(self, request):
+        """
+        Delete many messages at once.
+
+        Body: either `{"ids": [1, 2, 3]}` to delete specific messages, or
+        `{"all_matching_filters": true, ...same query params as the list view...}`
+        to delete every message matching the current filter set (used for
+        "delete all rejected", "delete all in this search", etc).
+        """
+        ids = request.data.get('ids')
+        if ids:
+            if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+                return Response({'detail': '"ids" must be a list of integers.'}, status=status.HTTP_400_BAD_REQUEST)
+            hid = request.query_params.get('household') or request.data.get('household')
+            qs = SmsMessage.objects.filter(id__in=ids)
+            if hid:
+                qs = qs.filter(household_id=hid)
+        elif request.data.get('all_matching_filters'):
+            qs = self.filtered_queryset()
+        else:
+            return Response(
+                {'detail': 'Provide either "ids" (list of message ids) or "all_matching_filters": true.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        deleted_count, _ = qs.delete()
+        return Response({'deleted': deleted_count})
 
 
 class SmsIngestView(APIView):
