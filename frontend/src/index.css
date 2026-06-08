@@ -1,0 +1,383 @@
+@import "tailwindcss";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Primary — indigo */
+  --color-primary-50:  #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-200: #c7d2fe;
+  --color-primary-300: #a5b4fc;
+  --color-primary-400: #818cf8;
+  --color-primary-500: #6366f1;
+  --color-primary-600: #4f46e5;
+  --color-primary-700: #4338ca;
+  --color-primary-800: #3730a3;
+  --color-primary-900: #312e81;
+
+  /* Positive (inflow / gain) */
+  --color-positive-50:  #ecfdf5;
+  --color-positive-100: #d1fae5;
+  --color-positive-500: #10b981;
+  --color-positive-600: #059669;
+  --color-positive-700: #047857;
+
+  /* Negative (outflow / loss) */
+  --color-negative-50:  #fff1f2;
+  --color-negative-100: #ffe4e6;
+  --color-negative-500: #f43f5e;
+  --color-negative-600: #e11d48;
+  --color-negative-700: #be123c;
+
+  /* Accent — amber */
+  --color-accent-50:  #fffbeb;
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+}
+
+/* ─────────────────────────────────────────
+   Design tokens (CSS variables)
+   ───────────────────────────────────────── */
+
+:root {
+  --bg:          #f7f7f8;
+  --surface:     #ffffff;
+  --surface-2:   #f4f4f5;
+  --surface-3:   #e4e4e7;
+  --border:      #e4e4e7;
+  --border-2:    #d4d4d8;
+  --text:        #18181b;
+  --text-2:      #3f3f46;
+  --text-muted:  #71717a;
+  --text-faint:  #a1a1aa;
+  --positive:    #10b981;
+  --negative:    #f43f5e;
+  --primary:     #4f46e5;
+  --primary-light: #e0e7ff;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-hover: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-modal: 0 20px 60px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.08);
+}
+
+.dark {
+  --bg:          #0f0f10;
+  --surface:     #18181b;
+  --surface-2:   #27272a;
+  --surface-3:   #3f3f46;
+  --border:      #3f3f46;
+  --border-2:    #52525b;
+  --text:        #fafafa;
+  --text-2:      #e4e4e7;
+  --text-muted:  #a1a1aa;
+  --text-faint:  #71717a;
+  --positive:    #34d399;
+  --negative:    #fb7185;
+  --primary:     #818cf8;
+  --primary-light: #312e81;
+
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-hover: 0 4px 16px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
+  --shadow-modal: 0 20px 60px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.4);
+}
+
+/* ─────────────────────────────────────────
+   Base resets & typography
+   ───────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  transition: background 0.2s, color 0.2s;
+}
+
+/* ─────────────────────────────────────────
+   Component layer
+   ───────────────────────────────────────── */
+
+@layer components {
+  /* Card — the fundamental surface */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: 1rem;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .card:hover {
+    box-shadow: var(--shadow-hover);
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: 1rem;
+  }
+
+  /* Grid helpers */
+  .cards {
+    @apply mb-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4;
+  }
+  .two-col {
+    @apply grid grid-cols-1 gap-4 xl:grid-cols-2;
+  }
+  .single-col {
+    @apply grid grid-cols-1 gap-4;
+  }
+  .form-grid {
+    @apply grid grid-cols-1 gap-3 md:grid-cols-2;
+  }
+
+  /* Typography utilities */
+  .hero-number {
+    font-size: 2.25rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: var(--text);
+  }
+  .section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .label-muted {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Status / feedback */
+  .error {
+    @apply mb-3 rounded-xl border px-4 py-3 text-sm;
+    background: var(--negative-50, #fff1f2);
+    border-color: #fecdd3;
+    color: #be123c;
+  }
+  .dark .error {
+    background: rgba(244,63,94,0.1);
+    border-color: rgba(244,63,94,0.25);
+    color: #fb7185;
+  }
+  .muted {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+  }
+
+  /* Section card with left accent border */
+  .section-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  /* Icon badge (circular colored container) */
+  .icon-badge {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.125rem;
+    flex-shrink: 0;
+  }
+
+  /* Progress bar */
+  .fill-bar {
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--surface-3);
+    overflow: hidden;
+  }
+  .fill-bar-inner {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* FAB */
+  .fab {
+    @apply fixed bottom-24 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary-600 text-2xl text-white shadow-lg hover:bg-primary-700 md:bottom-6;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .fab:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 24px rgba(79,70,229,0.4);
+  }
+
+  /* Button helpers */
+  .secondary-btn {
+    display: inline-flex;
+    height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    padding: 0 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-2);
+    transition: background 0.12s;
+  }
+  .secondary-btn:hover {
+    background: var(--surface-3);
+  }
+
+  /* List link */
+  .list-link {
+    display: block;
+    width: 100%;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-size: 0.875rem;
+    color: var(--text);
+    transition: background 0.12s;
+  }
+  .list-link:hover {
+    background: var(--surface-3);
+  }
+
+  .simple-list {
+    @apply mt-2 grid list-none gap-1 p-0;
+  }
+
+  .row-actions {
+    @apply mt-3 flex items-center gap-2;
+  }
+
+  /* Table base */
+  table {
+    @apply mt-2 w-full border-collapse;
+  }
+  th {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.5rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  td {
+    font-size: 0.875rem;
+    color: var(--text);
+    padding: 0.625rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  tbody tr:hover td {
+    background: var(--surface-2);
+  }
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* Skeleton animation */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-2) 25%,
+      var(--surface-3) 50%,
+      var(--surface-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Page fade-in */
+  .page-enter {
+    animation: fadeUp 0.22s ease-out;
+  }
+}
+
+/* ─────────────────────────────────────────
+   Keyframes
+   ───────────────────────────────────────── */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes slide-out-right {
+  from { transform: translateX(0);    opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
+}
+
+@keyframes toast-in {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ─────────────────────────────────────────
+   Scrollbar
+   ───────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+/* ─────────────────────────────────────────
+   Recharts fix
+   ───────────────────────────────────────── */
+
+.recharts-responsive-container {
+  min-height: 0;
+}
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}

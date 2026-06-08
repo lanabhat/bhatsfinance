@@ -1,0 +1,496 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useMaskedFmt } from '../components/common/Money'
+import { ledgerApi } from '../api/ledgerApi'
+import { portfolioApi } from '../api/portfolioApi'
+import { accountApi } from '../api/accountApi'
+import { AccountCard } from '../components/assets/AccountCard'
+import { useApp } from '../context/AppContext'
+import { useAuth } from '../context/AuthContext'
+import type { Account, AccountBalance, AccountOwnership, Transaction } from '../types/domain'
+
+function Sheet({ title, onClose, children, tall }: { title: string; onClose: () => void; children: React.ReactNode; tall?: boolean }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div
+        className={`w-full max-w-lg rounded-t-2xl bg-white shadow-xl ${tall ? 'max-h-[90vh] overflow-y-auto' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-2xl bg-white px-6 pt-6 pb-4">
+          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+        <div className="px-6 pb-8">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+const ACCOUNT_TYPES = ['bank', 'broker', 'pf', 'loan', 'credit_card', 'insurance', 'cash', 'other'] as const
+const INP = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+
+function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
+  householdId: number; account?: Account
+  onSave: () => void; onCancel: () => void; onDelete?: () => void
+}) {
+  const { members } = useApp()
+  const [form, setForm] = useState<Omit<Account, 'id'>>({
+    household: householdId,
+    name: account?.name ?? '',
+    account_type: account?.account_type ?? 'bank',
+    institution_name: account?.institution_name ?? '',
+    primary_member: account?.primary_member ?? null,
+    opening_balance: account?.opening_balance ?? '0',
+    credit_limit: account?.credit_limit ?? null,
+    statement_due_day: account?.statement_due_day ?? null,
+    is_active: account?.is_active ?? true,
+  })
+  const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setSaving(true); setError('')
+    try {
+      if (account) {
+        await portfolioApi.updateAccount(account.id, form)
+        // Sync ownership if primary_member changed
+        if (form.primary_member !== account.primary_member) {
+          const existing = await portfolioApi.listAccountOwnerships(account.id)
+          for (const o of existing) await portfolioApi.deleteAccountOwnership(o.id)
+          if (form.primary_member) {
+            await portfolioApi.createAccountOwnership({ account: account.id, member: form.primary_member, allocation_percent: '100.00' })
+          }
+        }
+      } else {
+        const created = await portfolioApi.createAccount(form)
+        if (form.primary_member) {
+          await portfolioApi.createAccountOwnership({ account: created.id, member: form.primary_member, allocation_percent: '100.00' })
+        }
+      }
+      onSave()
+    } catch { setError('Failed to save account') } finally { setSaving(false) }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div><label className="mb-1 block text-xs font-medium text-slate-600">Name</label>
+        <input className={INP} value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required /></div>
+      <div><label className="mb-1 block text-xs font-medium text-slate-600">Type</label>
+        <select className={INP} value={form.account_type} onChange={(e) => setForm((p) => ({ ...p, account_type: e.target.value as Account['account_type'] }))}>
+          {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+        </select></div>
+      <div><label className="mb-1 block text-xs font-medium text-slate-600">Primary Owner</label>
+        <select className={INP} value={form.primary_member ?? ''} onChange={(e) => setForm((p) => ({ ...p, primary_member: e.target.value ? Number(e.target.value) : null }))}>
+          <option value="">— None —</option>
+          {members.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select></div>
+      <div><label className="mb-1 block text-xs font-medium text-slate-600">Institution</label>
+        <input className={INP} value={form.institution_name} onChange={(e) => setForm((p) => ({ ...p, institution_name: e.target.value }))} /></div>
+      {form.account_type !== 'credit_card' && (
+        <div><label className="mb-1 block text-xs font-medium text-slate-600">Opening Balance (₹)</label>
+          <input type="number" className={INP} value={form.opening_balance} onChange={(e) => setForm((p) => ({ ...p, opening_balance: e.target.value }))} /></div>
+      )}
+      {form.account_type === 'credit_card' && (<>
+        <div><label className="mb-1 block text-xs font-medium text-slate-600">Credit Limit (₹)</label>
+          <input type="number" className={INP} value={form.credit_limit ?? ''} onChange={(e) => setForm((p) => ({ ...p, credit_limit: e.target.value || null }))} /></div>
+        <div><label className="mb-1 block text-xs font-medium text-slate-600">Statement Due Day</label>
+          <input type="number" min={1} max={31} className={INP} placeholder="e.g. 5 (5th of each month)"
+            value={form.statement_due_day ?? ''} onChange={(e) => setForm((p) => ({ ...p, statement_due_day: e.target.value ? Number(e.target.value) : null }))} /></div>
+      </>)}
+      {error && <p className="text-xs text-red-500">{error}</p>}
+      <div className="flex gap-2 pt-2">
+        <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          {saving ? 'Saving…' : account ? 'Update' : 'Add Account'}
+        </button>
+        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+      </div>
+      {account && onDelete && (
+        <div className="border-t border-slate-100 pt-3">
+          {!confirmDelete ? (
+            <button type="button" onClick={() => setConfirmDelete(true)} className="w-full rounded-lg border border-red-200 py-2 text-sm text-red-500 hover:bg-red-50">Delete Account</button>
+          ) : (
+            <div className="rounded-lg bg-red-50 p-3 text-center">
+              <p className="mb-2 text-xs text-red-600">Delete this account and all its transaction history?</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={onDelete} className="flex-1 rounded-lg bg-red-500 py-1.5 text-xs font-medium text-white hover:bg-red-600">Yes, delete</button>
+                <button type="button" onClick={() => setConfirmDelete(false)} className="flex-1 rounded-lg border border-slate-200 py-1.5 text-xs text-slate-600">Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </form>
+  )
+}
+
+function fmtDate(d: string) {
+  return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })
+}
+
+function CCSpendForm({ account, householdId, onSave, onCancel, mode }: {
+  account: Account; householdId: number
+  onSave: () => void; onCancel: () => void
+  mode: 'spend' | 'payment'
+}) {
+  const { members } = useApp()
+  const today = new Date().toISOString().split('T')[0]
+  const [form, setForm] = useState({ date: today, amount: '', description: '', member: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setSaving(true); setError('')
+    try {
+      await ledgerApi.createTransaction({
+        household: householdId,
+        account: account.id,
+        instrument: null,
+        member: form.member ? Number(form.member) : null,
+        tx_date: form.date,
+        amount: form.amount,
+        direction: mode === 'spend' ? 'outflow' : 'inflow',
+        transaction_type: mode === 'spend' ? 'other' : 'deposit',
+        quantity: null,
+        price_per_unit: null,
+        fees: '0',
+        taxes: '0',
+        currency: 'INR',
+        external_reference: form.description,
+        idempotency_key: '',
+        metadata: {},
+      })
+      onSave()
+    } catch { setError('Failed to save') } finally { setSaving(false) }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div><label className="mb-1 block text-xs font-medium text-slate-600">Date</label>
+        <input type="date" className={INP} value={form.date} onChange={(e) => setForm(p => ({ ...p, date: e.target.value }))} required /></div>
+      <div><label className="mb-1 block text-xs font-medium text-slate-600">Amount (₹)</label>
+        <input type="number" step="0.01" min="0" className={INP} placeholder="0.00"
+          value={form.amount} onChange={(e) => setForm(p => ({ ...p, amount: e.target.value }))} required /></div>
+      {mode === 'spend' && (
+        <div><label className="mb-1 block text-xs font-medium text-slate-600">Spent by</label>
+          <select className={INP} value={form.member} onChange={(e) => setForm(p => ({ ...p, member: e.target.value }))}>
+            <option value="">— Anyone —</option>
+            {members.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select></div>
+      )}
+      <div><label className="mb-1 block text-xs font-medium text-slate-600">Description</label>
+        <input className={INP} placeholder={mode === 'spend' ? 'e.g. Groceries, Amazon…' : 'e.g. Bill payment'}
+          value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} /></div>
+      {error && <p className="text-xs text-red-500">{error}</p>}
+      <div className="flex gap-2 pt-2">
+        <button type="submit" disabled={saving}
+          className={`flex-1 rounded-lg py-2 text-sm font-medium text-white disabled:opacity-50 ${mode === 'spend' ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+          {saving ? 'Saving…' : mode === 'spend' ? 'Record Spend' : 'Record Payment'}
+        </button>
+        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+      </div>
+    </form>
+  )
+}
+
+function CardDetailSheet({ account, householdId, onEdit, onClose }: {
+  account: Account; householdId: number; onEdit: () => void; onClose: () => void
+}) {
+  const fmtINR = useMaskedFmt()
+  const fmtVal = fmtINR
+  const { canWrite } = useAuth()
+  const [balance, setBalance] = useState<AccountBalance | null>(null)
+  const [txs, setTxs] = useState<Transaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [subSheet, setSubSheet] = useState<'spend' | 'payment' | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [b, t] = await Promise.all([
+        accountApi.getBalance(account.id),
+        ledgerApi.listTransactionsForAccount(householdId, account.id),
+      ])
+      setBalance(b)
+      setTxs(t.sort((a, b) => b.tx_date.localeCompare(a.tx_date)))
+    } finally { setLoading(false) }
+  }
+
+  useEffect(() => { void load() }, [account.id])
+
+  // Group transactions by statement month (YYYY-MM)
+  const grouped = useMemo(() => {
+    const m = new Map<string, Transaction[]>()
+    for (const tx of txs) {
+      const key = tx.tx_date.slice(0, 7)
+      if (!m.has(key)) m.set(key, [])
+      m.get(key)!.push(tx)
+    }
+    return m
+  }, [txs])
+
+  const outstandingRaw = balance?.outstanding ?? 0
+  const outstanding = outstandingRaw > 0 ? outstandingRaw : 0
+  const limit = balance?.credit_limit ?? 0
+  const available = balance?.available ?? null
+  const utilPct = limit > 0 ? Math.min((outstanding / limit) * 100, 100) : 0
+
+  if (subSheet) {
+    return (
+      <Sheet title={subSheet === 'spend' ? 'Record Spend' : 'Record Payment'} onClose={() => setSubSheet(null)}>
+        <CCSpendForm account={account} householdId={householdId} mode={subSheet}
+          onSave={async () => { setSubSheet(null); await load() }}
+          onCancel={() => setSubSheet(null)} />
+      </Sheet>
+    )
+  }
+
+  return (
+    <Sheet title={account.name} onClose={onClose} tall>
+      {/* Header stats */}
+      <div className="mb-4 rounded-xl bg-rose-50 p-4">
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-xs text-slate-500">Outstanding</p>
+            <p className="text-2xl font-black text-rose-600">{outstanding > 0 ? fmtINR(-outstanding) : '₹0'}</p>
+          </div>
+          {limit > 0 && (
+            <div className="text-right">
+              <p className="text-xs text-slate-500">Available</p>
+              <p className="text-base font-bold text-slate-700">{available != null ? fmtVal(available) : '—'}</p>
+              <p className="text-xs text-slate-400">of {fmtVal(limit)} limit</p>
+            </div>
+          )}
+        </div>
+        {limit > 0 && (
+          <div className="fill-bar mt-3">
+            <div className="fill-bar-inner bg-rose-400" style={{ width: `${utilPct}%` }} />
+          </div>
+        )}
+        {account.statement_due_day && (
+          <p className="mt-2 text-xs text-slate-500">Payment due: {account.statement_due_day}th of each month</p>
+        )}
+      </div>
+
+      {/* Action buttons */}
+      <div className="mb-4 flex gap-2">
+        <button type="button" onClick={() => setSubSheet('spend')} disabled={!canWrite}
+          className="flex-1 rounded-lg bg-rose-500 py-2 text-sm font-medium text-white hover:bg-rose-600 disabled:opacity-50">
+          + Record Spend
+        </button>
+        <button type="button" onClick={() => setSubSheet('payment')} disabled={!canWrite}
+          className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          Pay Bill
+        </button>
+        <button type="button" onClick={onEdit} disabled={!canWrite}
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+          Edit
+        </button>
+      </div>
+
+      {/* Transaction history */}
+      {loading ? (
+        <p className="py-6 text-center text-xs text-slate-400">Loading…</p>
+      ) : txs.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center">
+          <p className="text-2xl">💳</p>
+          <p className="mt-1 text-sm text-slate-500">No transactions yet</p>
+          <p className="text-xs text-slate-400">Tap "Record Spend" to add your first entry.</p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {Array.from(grouped.entries()).map(([month, monthTxs]) => {
+            const monthSpend = monthTxs.filter(t => t.direction === 'outflow').reduce((s, t) => s + parseFloat(t.amount), 0)
+            const monthPaid = monthTxs.filter(t => t.direction === 'inflow').reduce((s, t) => s + parseFloat(t.amount), 0)
+            const label = new Date(month + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+            return (
+              <div key={month}>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+                  <div className="flex gap-2 text-xs">
+                    {monthSpend > 0 && <span className="text-rose-500">{fmtINR(-monthSpend)}</span>}
+                    {monthPaid > 0 && <span className="text-indigo-600">{fmtINR(monthPaid)}</span>}
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  {monthTxs.map(tx => (
+                    <div key={tx.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 shadow-sm">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-slate-900">
+                          {tx.external_reference || tx.transaction_type.replace(/_/g, ' ')}
+                        </p>
+                        <p className="text-xs text-slate-400">{fmtDate(tx.tx_date)}</p>
+                      </div>
+                      <p className={`ml-3 shrink-0 text-sm font-semibold ${tx.direction === 'outflow' ? 'text-rose-600' : 'text-indigo-600'}`}>
+                        {fmtINR(tx.direction === 'outflow' ? -parseFloat(tx.amount) : parseFloat(tx.amount))}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Sheet>
+  )
+}
+
+type GroupBy = 'none' | 'owner' | 'type'
+type SheetState =
+  | { type: 'none' }
+  | { type: 'account'; item?: Account }
+  | { type: 'card_detail'; item: Account }
+
+export function AccountsPage() {
+  const { canWrite } = useAuth()
+  const { householdId, members } = useApp()
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [ownerships, setOwnerships] = useState<AccountOwnership[]>([])
+  const [loading, setLoading] = useState(false)
+  const [groupBy, setGroupBy] = useState<GroupBy>('none')
+  const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [a, o] = await Promise.all([portfolioApi.listAccounts(householdId), portfolioApi.listAccountOwnerships(undefined, householdId)])
+      setAccounts(a); setOwnerships(o)
+    } finally { setLoading(false) }
+  }
+
+  useEffect(() => { void load() }, [householdId])
+
+  const ownerMap = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const a of accounts) {
+      const owners = ownerships.filter((o) => o.account === a.id)
+      if (owners.length) {
+        m.set(a.id, owners.map((o) => members.find((mb) => mb.id === o.member)?.label ?? `#${o.member}`).join(', '))
+      } else if (a.primary_member) {
+        m.set(a.id, members.find((mb) => mb.id === a.primary_member)?.label ?? `#${a.primary_member}`)
+      } else {
+        m.set(a.id, 'Unassigned')
+      }
+    }
+    return m
+  }, [accounts, ownerships, members])
+
+  const unownedAccounts = useMemo(
+    () => accounts.filter(a => ownerMap.get(a.id) === 'Unassigned'),
+    [accounts, ownerMap]
+  )
+
+  const grouped = useMemo(() => {
+    const g = new Map<string, Account[]>()
+    for (const a of accounts) {
+      const key = groupBy === 'owner' ? (ownerMap.get(a.id) ?? 'Unassigned')
+        : groupBy === 'type' ? a.account_type.replace(/_/g, ' ')
+        : '__flat__'
+      if (!g.has(key)) g.set(key, [])
+      g.get(key)!.push(a)
+    }
+    return g
+  }, [accounts, groupBy, ownerMap])
+
+  const close = () => setSheet({ type: 'none' })
+  const afterSave = async () => { close(); await load() }
+  const deleteAccount = async (id: number) => {
+    try { await portfolioApi.deleteAccount(id); close(); await load() }
+    catch { alert('Failed to delete account.') }
+  }
+
+  const handleCardClick = (a: Account) => {
+    if (a.account_type === 'credit_card') {
+      setSheet({ type: 'card_detail', item: a })
+    } else {
+      setSheet({ type: 'account', item: a })
+    }
+  }
+
+  const GROUP_OPTS: { value: GroupBy; label: string }[] = [
+    { value: 'none', label: 'None' },
+    { value: 'owner', label: 'Owner' },
+    { value: 'type', label: 'Type' },
+  ]
+
+  const renderList = (list: Account[]) =>
+    list.map((a) => <AccountCard key={a.id} account={a} onClick={() => handleCardClick(a)} />)
+
+  return (
+    <div className="grid gap-3">
+      <div className="flex items-center gap-1">
+        <span className="mr-1 text-xs text-slate-400">Group:</span>
+        {GROUP_OPTS.map((o) => (
+          <button key={o.value} type="button" onClick={() => setGroupBy(o.value)}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${groupBy === o.value ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+            {o.label}
+          </button>
+        ))}
+        <button type="button" onClick={() => setSheet({ type: 'account' })} disabled={!canWrite}
+          className="ml-auto shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          + Add Account
+        </button>
+      </div>
+
+      {!loading && unownedAccounts.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
+          <span className="mt-0.5 text-lg">⚠️</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              {unownedAccounts.length} account{unownedAccounts.length > 1 ? 's' : ''} without an owner
+            </p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              {unownedAccounts.map(a => a.name).join(', ')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setGroupBy('owner')}
+            className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+          >
+            View
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="py-6 text-center text-xs text-slate-400">Loading…</p>
+      ) : accounts.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center">
+          <p className="text-3xl">🏦</p>
+          <p className="mt-2 text-sm font-medium text-slate-700">No accounts yet</p>
+          <p className="mt-1 text-xs text-slate-400">Tap + to add your first account.</p>
+        </div>
+      ) : groupBy === 'none' ? (
+        <div className="grid gap-2">{renderList(accounts)}</div>
+      ) : (
+        <div className="grid gap-2">
+          {Array.from(grouped.entries()).map(([label, group]) => (
+            <div key={label}>
+              <div className="mt-3 first:mt-0">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+              </div>
+              {renderList(group)}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {sheet.type === 'account' && (
+        <Sheet title={sheet.item ? 'Edit Account' : 'Add Account'} onClose={close}>
+          <AccountForm householdId={householdId} account={sheet.item} onSave={afterSave} onCancel={close}
+            onDelete={sheet.item ? () => deleteAccount(sheet.item!.id) : undefined} />
+        </Sheet>
+      )}
+
+      {sheet.type === 'card_detail' && (
+        <CardDetailSheet
+          account={sheet.item}
+          householdId={householdId}
+          onEdit={() => setSheet({ type: 'account', item: sheet.type === 'card_detail' ? sheet.item : undefined })}
+          onClose={close}
+        />
+      )}
+    </div>
+  )
+}

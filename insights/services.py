@@ -1,0 +1,446 @@
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+from math import isfinite
+
+from ledger.models import Transaction
+from valuations.models import ValuationSnapshot
+
+
+ZERO = Decimal('0.00')
+
+
+def _signed_amount(transaction: Transaction) -> Decimal:
+    return transaction.amount if transaction.direction == Transaction.Direction.INFLOW else -transaction.amount
+
+
+def _signed_quantity(transaction: Transaction) -> Decimal:
+    qty = transaction.quantity or Decimal('0')
+    if transaction.transaction_type == Transaction.TransactionType.SELL:
+        return -qty
+    if transaction.transaction_type == Transaction.TransactionType.BUY:
+        return qty
+    return Decimal('0')
+
+
+def _latest_valuation(instrument_id: int, as_of: date):
+    return (
+        ValuationSnapshot.objects.filter(instrument_id=instrument_id, valuation_date__lte=as_of)
+        .order_by('-valuation_date', '-id')
+        .first()
+    )
+
+
+def _household_share_maps(household_id: int) -> tuple[dict[int, Decimal], dict[int, Decimal]]:
+    """Return (instrument_share, account_share) maps where each value is the
+    summed allocation_percent (as a 0..1 Decimal) across active members with
+    include_in_networth=True. Used to scale holdings/account balances in
+    household-wide aggregates so excluded members are dropped naturally.
+
+    Instruments/accounts with no ownership rows are absent from the map; callers
+    treat a missing key as factor 1 (fully included)."""
+    from core.models import Member
+    from instruments.models import AccountOwnership, InstrumentOwnership
+
+    included_member_ids = list(
+        Member.objects.filter(
+            household_id=household_id, is_active=True, include_in_networth=True,
+        ).values_list('id', flat=True)
+    )
+
+    instrument_share: dict[int, Decimal] = {}
+    for row in InstrumentOwnership.objects.filter(member_id__in=included_member_ids).values('instrument_id', 'allocation_percent'):
+        instrument_share[row['instrument_id']] = (
+            instrument_share.get(row['instrument_id'], Decimal('0'))
+            + Decimal(str(row['allocation_percent'])) / Decimal('100')
+        )
+
+    account_share: dict[int, Decimal] = {}
+    for row in AccountOwnership.objects.filter(member_id__in=included_member_ids).values('account_id', 'allocation_percent'):
+        account_share[row['account_id']] = (
+            account_share.get(row['account_id'], Decimal('0'))
+            + Decimal(str(row['allocation_percent'])) / Decimal('100')
+        )
+
+    return instrument_share, account_share
+
+
+def compute_holdings(household_id: int, as_of: date, member_id: int | None = None) -> list[dict]:
+    txs = (
+        Transaction.objects.filter(household_id=household_id, tx_date__lte=as_of, instrument__isnull=False)
+        .select_related('instrument')
+        .order_by('tx_date', 'id')
+    )
+
+    # Build allocation map for member filtering
+    member_allocation: dict[int, Decimal] | None = None
+    household_instrument_share: dict[int, Decimal] | None = None
+    if member_id is not None:
+        from instruments.models import InstrumentOwnership
+        ownerships = InstrumentOwnership.objects.filter(member_id=member_id).values('instrument_id', 'allocation_percent')
+        member_allocation = {o['instrument_id']: Decimal(str(o['allocation_percent'])) / Decimal('100') for o in ownerships}
+        txs = txs.filter(instrument_id__in=member_allocation.keys())
+    else:
+        household_instrument_share, _ = _household_share_maps(household_id)
+
+    by_instrument: dict[int, dict] = {}
+
+    for tx in txs:
+        key = tx.instrument_id
+        item = by_instrument.setdefault(
+            key,
+            {
+                'instrument_id': tx.instrument_id,
+                'instrument_name': tx.instrument.name,
+                'instrument_type': tx.instrument.instrument_type,
+                'asset_category': tx.instrument.asset_category_id,
+                'quantity': Decimal('0'),
+                'net_invested': Decimal('0'),
+            },
+        )
+        item['quantity'] += _signed_quantity(tx)
+        item['net_invested'] += -_signed_amount(tx)
+
+    holdings = []
+    for instrument_id, item in by_instrument.items():
+        valuation = _latest_valuation(instrument_id, as_of)
+        quantity = item['quantity']
+        if valuation and valuation.unit_price is not None:
+            market_value = quantity * valuation.unit_price
+        elif valuation and valuation.market_value is not None:
+            market_value = valuation.market_value
+        else:
+            market_value = item['net_invested']
+
+        # Apply member allocation scaling
+        if member_allocation is not None:
+            factor = member_allocation.get(instrument_id, Decimal('1'))
+            market_value = market_value * factor
+        elif household_instrument_share is not None:
+            # Household-wide: scale by summed share of members included in net worth.
+            # Instruments with no ownership rows fall through (treated as fully included).
+            factor = household_instrument_share.get(instrument_id, Decimal('1'))
+            market_value = market_value * factor
+
+        holdings.append(
+            {
+                **item,
+                'quantity': quantity.quantize(Decimal('0.000001')),
+                'market_value': market_value.quantize(Decimal('0.01')),
+            }
+        )
+
+    return holdings
+
+
+def compute_networth(household_id: int, as_of: date, member_id: int | None = None) -> Decimal:
+    from instruments.models import Account
+    from django.db.models import Sum
+
+    holdings_total = sum((h['market_value'] for h in compute_holdings(household_id, as_of, member_id)), start=ZERO)
+
+    # Build account allocation map for member filtering
+    account_allocation: dict[int, Decimal] | None = None
+    household_account_share: dict[int, Decimal] | None = None
+    if member_id is not None:
+        from instruments.models import AccountOwnership
+        ao = AccountOwnership.objects.filter(member_id=member_id).values('account_id', 'allocation_percent')
+        account_allocation = {o['account_id']: Decimal(str(o['allocation_percent'])) / Decimal('100') for o in ao}
+    else:
+        _, household_account_share = _household_share_maps(household_id)
+
+    # Account balances: opening_balance + inflows - outflows up to as_of, per account
+    accounts_qs = Account.objects.filter(household_id=household_id, is_active=True)
+    if account_allocation is not None:
+        accounts_qs = accounts_qs.filter(id__in=account_allocation.keys())
+
+    accounts_total = ZERO
+    for account in accounts_qs:
+        txs = Transaction.objects.filter(account=account, tx_date__lte=as_of)
+        inflow = txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
+        outflow = txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
+        if account_allocation is not None:
+            factor = account_allocation.get(account.id, Decimal('1'))
+        elif household_account_share is not None:
+            factor = household_account_share.get(account.id, Decimal('1'))
+        else:
+            factor = Decimal('1')
+        if account.account_type == 'credit_card':
+            # Outstanding balance is a liability — subtract from net worth
+            outstanding = max(Decimal(str(outflow)) - Decimal(str(inflow)), ZERO)
+            accounts_total -= outstanding * factor
+        else:
+            balance = account.opening_balance + Decimal(str(inflow)) - Decimal(str(outflow))
+            accounts_total += balance * factor
+
+    return holdings_total + accounts_total
+
+
+def compute_members_networth(household_id: int, as_of: date) -> list[dict]:
+    from core.models import Member
+    members = Member.objects.filter(household_id=household_id, is_active=True)
+    result = []
+    for member in members:
+        nw = compute_networth(household_id, as_of, member_id=member.id)
+        result.append({
+            'member_id': member.id,
+            'member_name': member.full_name,
+            'relation_type': member.relation_type,
+            'networth': str(nw.quantize(Decimal('0.01'))),
+            'include_in_networth': member.include_in_networth,
+        })
+    return result
+
+
+def compute_allocation(household_id: int, as_of: date) -> list[dict]:
+    holdings = compute_holdings(household_id, as_of)
+    grouped: dict[str, Decimal] = {}
+    for h in holdings:
+        grouped[h['instrument_type']] = grouped.get(h['instrument_type'], ZERO) + h['market_value']
+    total = sum(grouped.values(), start=ZERO)
+    rows = []
+    for instrument_type, value in grouped.items():
+        ratio = Decimal('0.00') if total == ZERO else (value / total * Decimal('100')).quantize(Decimal('0.01'))
+        rows.append({'instrument_type': instrument_type, 'market_value': value, 'allocation_percent': ratio})
+    rows.sort(key=lambda x: x['market_value'], reverse=True)
+    return rows
+
+
+def compute_category_breakdown(household_id: int, as_of: date, member_id: int | None = None) -> list[dict]:
+    """Group holdings market_value by AssetCategory. Instruments with no category go to Uncategorised."""
+    from instruments.models import Instrument
+    holdings = compute_holdings(household_id, as_of, member_id)
+    if not holdings:
+        return []
+
+    instrument_ids = [h['instrument_id'] for h in holdings]
+    cat_by_instrument: dict[int, object] = {}
+    for inst in Instrument.objects.filter(id__in=instrument_ids).select_related('asset_category'):
+        cat_by_instrument[inst.id] = inst.asset_category
+
+    grouped: dict = {}
+    for h in holdings:
+        cat = cat_by_instrument.get(h['instrument_id'])
+        if cat:
+            key = cat.id
+            if key not in grouped:
+                grouped[key] = {'category_id': cat.id, 'category_name': cat.name,
+                                'color': cat.color, 'icon_name': cat.icon_name, 'total': ZERO}
+        else:
+            key = None
+            if key not in grouped:
+                grouped[key] = {'category_id': None, 'category_name': 'Uncategorised',
+                                'color': '#94a3b8', 'icon_name': '', 'total': ZERO}
+        grouped[key]['total'] += h['market_value']
+
+    total_all = sum(g['total'] for g in grouped.values()) or ZERO
+    result = []
+    for g in grouped.values():
+        pct = (g['total'] / total_all * Decimal('100')).quantize(Decimal('0.01')) if total_all else ZERO
+        result.append({
+            'category_id': g['category_id'],
+            'category_name': g['category_name'],
+            'color': g['color'],
+            'icon_name': g['icon_name'],
+            'market_value': str(g['total'].quantize(Decimal('0.01'))),
+            'allocation_percent': str(pct),
+        })
+    result.sort(key=lambda x: Decimal(x['market_value']), reverse=True)
+    return result
+
+
+def compute_cashflow(household_id: int, year: int, month: int | None = None) -> list[dict]:
+    """Return monthly income/expense/savings summary for a given year (optionally single month)."""
+    from collections import defaultdict
+
+    INCOME_TYPES = {
+        Transaction.TransactionType.SALARY,
+        Transaction.TransactionType.DIVIDEND,
+        Transaction.TransactionType.INTEREST,
+        Transaction.TransactionType.TAX_REFUND,
+        Transaction.TransactionType.LOAN_DISBURSAL,
+        Transaction.TransactionType.DEPOSIT,
+    }
+    EXPENSE_TYPES = {
+        Transaction.TransactionType.WITHDRAWAL,
+        Transaction.TransactionType.EMI,
+        Transaction.TransactionType.TAX_PAYMENT,
+        Transaction.TransactionType.PREMIUM,
+    }
+
+    qs = Transaction.objects.filter(household_id=household_id, tx_date__year=year)
+    if month:
+        qs = qs.filter(tx_date__month=month)
+
+    by_month: dict[str, dict] = defaultdict(lambda: {'income': ZERO, 'expense': ZERO, 'investment': ZERO})
+
+    for tx in qs:
+        key = tx.tx_date.strftime('%Y-%m')
+        if tx.transaction_type in INCOME_TYPES:
+            by_month[key]['income'] += tx.amount
+        elif tx.transaction_type in EXPENSE_TYPES:
+            by_month[key]['expense'] += tx.amount
+        elif tx.transaction_type == Transaction.TransactionType.BUY:
+            by_month[key]['investment'] += tx.amount
+
+    result = []
+    for m_key in sorted(by_month):
+        row = by_month[m_key]
+        income = row['income']
+        expense = row['expense']
+        investment = row['investment']
+        result.append({
+            'month': m_key,
+            'income': float(income),
+            'expense': float(expense),
+            'investment': float(investment),
+            'savings': float(income - expense - investment),
+        })
+    return result
+
+
+def compute_spend_analytics(household_id: int, months: int = 12) -> dict:
+    """Return spend analytics for the trailing `months` months (inclusive of current)."""
+    from datetime import date as _date
+    from django.db.models import Sum
+    from django.db.models.functions import TruncMonth
+    from ledger.models import Transaction
+
+    today = _date.today()
+    months = max(1, min(months, 60))
+    year = today.year
+    month_idx = today.month - (months - 1)
+    while month_idx <= 0:
+        month_idx += 12
+        year -= 1
+    window_start = _date(year, month_idx, 1)
+
+    qs = Transaction.objects.filter(
+        household_id=household_id,
+        classification=Transaction.Classification.SPEND,
+        tx_date__gte=window_start,
+    )
+
+    by_month_rows = (
+        qs.annotate(m=TruncMonth('tx_date'))
+        .values('m')
+        .annotate(amount=Sum('amount'))
+        .order_by('m')
+    )
+    by_month = [
+        {'month': row['m'].strftime('%Y-%m'), 'amount': float(row['amount'] or 0)}
+        for row in by_month_rows
+    ]
+
+    by_category_rows = (
+        qs.values('spend_category')
+        .annotate(amount=Sum('amount'))
+        .order_by('-amount')
+    )
+    by_category = [
+        {
+            'category': row['spend_category'],
+            'label': row['spend_category'],
+            'amount': float(row['amount'] or 0),
+        }
+        for row in by_category_rows
+    ]
+
+    by_member_rows = (
+        qs.values('member_id', 'member__full_name')
+        .annotate(amount=Sum('amount'))
+        .order_by('-amount')
+    )
+    by_member = [
+        {
+            'member_id': row['member_id'],
+            'name': row['member__full_name'] or 'Unassigned',
+            'amount': float(row['amount'] or 0),
+        }
+        for row in by_member_rows
+    ]
+
+    by_month_category_rows = (
+        qs.annotate(m=TruncMonth('tx_date'))
+        .values('m', 'spend_category')
+        .annotate(amount=Sum('amount'))
+        .order_by('m', 'spend_category')
+    )
+    by_month_category = [
+        {
+            'month': row['m'].strftime('%Y-%m'),
+            'category': row['spend_category'],
+            'amount': float(row['amount'] or 0),
+        }
+        for row in by_month_category_rows
+    ]
+
+    total = float(qs.aggregate(s=Sum('amount'))['s'] or 0)
+
+    return {
+        'by_month': by_month,
+        'by_category': by_category,
+        'by_member': by_member,
+        'by_month_category': by_month_category,
+        'total': total,
+        'window': {
+            'start': window_start.isoformat(),
+            'end': today.isoformat(),
+            'months': months,
+        },
+    }
+
+
+def _xnpv(rate: float, flows: list[tuple[date, float]]) -> float:
+    if rate <= -1:
+        return float('inf')
+    start = flows[0][0]
+    return sum(amount / ((1 + rate) ** ((d - start).days / 365.0)) for d, amount in flows)
+
+
+def _xirr(flows: list[tuple[date, float]]) -> float:
+    guess = 0.12
+    for _ in range(100):
+        value = _xnpv(guess, flows)
+        derivative = (_xnpv(guess + 1e-6, flows) - value) / 1e-6
+        if derivative == 0:
+            break
+        next_guess = guess - value / derivative
+        if not isfinite(next_guess):
+            break
+        if abs(next_guess - guess) < 1e-10:
+            return next_guess
+        guess = next_guess
+    return guess
+
+
+def compute_xirr(household_id: int, as_of: date, instrument_id: int | None = None) -> float | None:
+    tx_query = Transaction.objects.filter(household_id=household_id, tx_date__lte=as_of).exclude(
+        transaction_type=Transaction.TransactionType.WITHDRAWAL
+    )
+    if instrument_id:
+        tx_query = tx_query.filter(instrument_id=instrument_id)
+    else:
+        tx_query = tx_query.filter(instrument__isnull=False)
+
+    flows = [(tx.tx_date, float(_signed_amount(tx))) for tx in tx_query.order_by('tx_date', 'id')]
+    if not flows:
+        return None
+    if all(amount >= 0 for _, amount in flows) or all(amount <= 0 for _, amount in flows):
+        return None
+
+    if instrument_id:
+        terminal = sum(
+            (h['market_value'] for h in compute_holdings(household_id, as_of) if h['instrument_id'] == instrument_id),
+            start=ZERO,
+        )
+    else:
+        terminal = sum((h['market_value'] for h in compute_holdings(household_id, as_of)), start=ZERO)
+    if terminal:
+        flows.append((as_of, float(terminal)))
+
+    try:
+        return round(_xirr(flows), 6)
+    except Exception:
+        return None
