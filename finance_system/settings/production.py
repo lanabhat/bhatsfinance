@@ -1,7 +1,13 @@
 import os
 
+from dotenv import load_dotenv
+
 from .base import *  # noqa: F401,F403
 from .base import BASE_DIR, MIDDLEWARE
+
+# Load production secrets from a .env file uploaded directly to the server
+# (never committed — see .env.example for the variable list).
+load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.environ['SECRET_KEY']
 
