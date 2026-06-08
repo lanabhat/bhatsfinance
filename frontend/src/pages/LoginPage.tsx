@@ -1,5 +1,7 @@
 export function LoginPage() {
-  const loginHref = `${window.location.protocol}//localhost:8000/api/auth/login/google-oauth2/`
+  const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  const backendOrigin = isLocalDev ? `${window.location.protocol}//localhost:8000` : window.location.origin
+  const loginHref = `${backendOrigin}/api/auth/login/google-oauth2/`
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
