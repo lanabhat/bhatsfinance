@@ -56,14 +56,19 @@ class SmsIngestSerializer(serializers.Serializer):
 
 class SmsMessageSerializer(serializers.ModelSerializer):
     categories = serializers.SerializerMethodField()
+    parsed_tx = serializers.SerializerMethodField()
 
     class Meta:
         model = SmsMessage
         fields = [
             'id', 'household', 'owner', 'sender', 'body', 'received_at',
-            'status', 'imported_transaction_id', 'created_at', 'categories',
+            'status', 'template_key', 'confidence', 'parsed_tx',
+            'imported_transaction_id', 'created_at', 'categories',
         ]
         read_only_fields = fields
 
     def get_categories(self, obj):
         return categorize(obj.body)
+
+    def get_parsed_tx(self, obj):
+        return (obj.raw_payload or {}).get('parsed_tx') or {}

@@ -64,6 +64,22 @@ export type SmsApiKey = {
   created_at: string
 }
 
+export type ParsedSmsTransaction = {
+  account?: string
+  member?: string
+  amount?: string
+  direction?: 'inflow' | 'outflow' | ''
+  transaction_type?: string
+  tx_date?: string
+  currency?: string
+  fees?: string
+  taxes?: string
+  external_reference?: string
+  classification?: TransactionClassification
+  spend_category?: string
+  merchant?: string
+}
+
 export type SmsMessage = {
   id: number
   household: number
@@ -72,6 +88,9 @@ export type SmsMessage = {
   body: string
   received_at: string
   status: 'pending' | 'approved' | 'rejected'
+  template_key: string
+  confidence: number | null
+  parsed_tx: ParsedSmsTransaction
   imported_transaction_id: number | null
   created_at: string
   categories: string[]

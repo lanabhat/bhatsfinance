@@ -38,7 +38,13 @@ from gmail_ingestion.views import (
     GmailTemplatesView,
 )
 from networth_tree.views import NetWorthTreeNodeCreateView, NetWorthTreeNodeDetailView, NetWorthTreeSeedView, NetWorthTreeView
-from sms_ingestion.views import SmsApiKeyViewSet, SmsIngestView, SmsMessageViewSet
+from sms_ingestion.views import (
+    SmsApiKeyViewSet,
+    SmsIngestView,
+    SmsMessageViewSet,
+    SmsStagedActionView,
+    SmsStagedUpdateView,
+)
 from tax.views import TaxProjectionViewSet, TaxRecordViewSet
 from valuations.views import BulkSnapshotView, ValuationSnapshotViewSet
 
@@ -107,4 +113,7 @@ urlpatterns = router.urls + [
     path('gmail/staged/<int:pk>/approve', GmailStagedActionView.as_view(), {'action': 'approve'}, name='gmail-staged-approve'),
     path('gmail/staged/<int:pk>/reject', GmailStagedActionView.as_view(), {'action': 'reject'}, name='gmail-staged-reject'),
     path('sms/ingest', SmsIngestView.as_view(), name='sms-ingest'),
+    path('sms-messages/<int:pk>/edit/', SmsStagedUpdateView.as_view(), name='sms-staged-edit'),
+    path('sms-messages/<int:pk>/approve/', SmsStagedActionView.as_view(), {'action': 'approve'}, name='sms-staged-approve'),
+    path('sms-messages/<int:pk>/reject/', SmsStagedActionView.as_view(), {'action': 'reject'}, name='sms-staged-reject'),
 ]

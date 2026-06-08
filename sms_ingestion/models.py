@@ -58,6 +58,8 @@ class SmsMessage(TimeStampedModel):
     raw_payload = models.JSONField(default=dict, blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    template_key = models.CharField(max_length=60, blank=True)
+    confidence = models.FloatField(null=True, blank=True)
     imported_transaction_id = models.IntegerField(null=True, blank=True)
 
     class Meta:

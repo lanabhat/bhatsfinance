@@ -1,5 +1,9 @@
 import { deleteJson, getJson, patchJson, postJson, toQueryString, unwrapList } from './http'
-import type { PaginatedResponse, SmsApiKey, SmsMessage } from '../types/domain'
+import type { ParsedSmsTransaction, PaginatedResponse, SmsApiKey, SmsMessage } from '../types/domain'
+
+export type SmsApprovalOverrides = Partial<ParsedSmsTransaction>
+
+export type SmsApprovalResult = SmsMessage & { transaction_id?: number }
 
 export type SmsMessageListParams = {
   status?: string
@@ -46,4 +50,15 @@ export const smsApi = {
       `/api/sms-messages/bulk-delete/?${toQueryString({ household: householdId, ...filters })}`,
       { all_matching_filters: true },
     ),
+
+  /** Save edits to the parsed-transaction suggestion before approving (also re-opens a rejected item). */
+  updateStaged: (id: number, overrides: SmsApprovalOverrides) =>
+    patchJson<SmsMessage>(`/api/sms-messages/${id}/edit/`, overrides),
+
+  /** Approve a staged message — creates the ledger Transaction with any field overrides applied on top of the parsed suggestion. */
+  approveStaged: (id: number, overrides: SmsApprovalOverrides = {}) =>
+    postJson<SmsApprovalResult>(`/api/sms-messages/${id}/approve/`, overrides),
+
+  rejectStaged: (id: number) =>
+    postJson<SmsMessage>(`/api/sms-messages/${id}/reject/`, {}),
 }

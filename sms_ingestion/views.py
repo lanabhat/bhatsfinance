@@ -10,6 +10,7 @@ from sms_ingestion.categorization import CATEGORY_PATTERNS
 from sms_ingestion.models import SmsApiKey, SmsMessage
 from sms_ingestion.permissions import HasSmsApiKey
 from sms_ingestion.serializers import SmsApiKeySerializer, SmsIngestSerializer, SmsMessageSerializer
+from sms_ingestion.templates import SMS_TEMPLATES, build_parsed_tx
 
 
 class SmsApiKeyViewSet(viewsets.ModelViewSet):
@@ -143,6 +144,9 @@ class SmsIngestView(APIView):
         data = serializer.validated_data
 
         api_key = request.auth
+        detected = build_parsed_tx(data['body'], data['sender'], data['timestamp'])
+        raw_payload = dict(request.data)
+        raw_payload['parsed_tx'] = detected['parsed_tx']
         msg, created = SmsMessage.objects.get_or_create(
             household=api_key.household,
             sender=data['sender'],
@@ -150,7 +154,9 @@ class SmsIngestView(APIView):
             body=data['body'],
             defaults={
                 'api_key': api_key,
-                'raw_payload': request.data,
+                'raw_payload': raw_payload,
+                'template_key': detected['template_key'],
+                'confidence': detected['confidence'],
             },
         )
 
@@ -158,3 +164,153 @@ class SmsIngestView(APIView):
             SmsMessageSerializer(msg).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+
+# ---------------------------------------------------------------------------
+# Staged-message review / approval
+# ---------------------------------------------------------------------------
+
+def _require_household_admin(request):
+    """Returns (profile, household) or a Response describing why access is denied."""
+    profile = getattr(request.user, 'profile', None)
+    if not profile or profile.role not in ('admin', 'super_admin'):
+        return None, Response({'error': 'Not allowed'}, status=status.HTTP_403_FORBIDDEN)
+    if not profile.household_id:
+        return None, Response({'error': 'No household selected'}, status=status.HTTP_400_BAD_REQUEST)
+    from core.models import Household
+    return (profile, Household.objects.get(pk=profile.household_id)), None
+
+
+class SmsStagedUpdateView(APIView):
+    """Edit the parsed_tx suggestion of a staged SMS message before approving."""
+    permission_classes = [IsApprovedUser]
+
+    def patch(self, request, pk):
+        ctx, denied = _require_household_admin(request)
+        if denied:
+            return denied
+        _profile, household = ctx
+        try:
+            msg = SmsMessage.objects.get(pk=pk, household=household)
+        except SmsMessage.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if msg.status not in (SmsMessage.STATUS_PENDING, SmsMessage.STATUS_REJECTED):
+            return Response({'error': 'Only pending or rejected items can be edited'}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = request.data or {}
+        allowed = {
+            'account', 'member', 'direction', 'amount', 'transaction_type', 'tx_date',
+            'currency', 'fees', 'taxes', 'external_reference', 'classification', 'spend_category',
+        }
+        parsed_tx = dict(msg.raw_payload.get('parsed_tx') or {})
+        for field in allowed:
+            if field in data:
+                parsed_tx[field] = data[field]
+
+        raw_payload = dict(msg.raw_payload)
+        raw_payload['parsed_tx'] = parsed_tx
+        msg.raw_payload = raw_payload
+        msg.status = SmsMessage.STATUS_PENDING
+        msg.save(update_fields=['raw_payload', 'status'])
+        return Response(SmsMessageSerializer(msg).data)
+
+
+class SmsStagedActionView(APIView):
+    """
+    Approve or reject a staged SMS message.
+
+    Approving creates the corresponding ledger Transaction (the only
+    destination wired up so far — account-balance/investment/FD/tax targets
+    can be added to this dispatcher later without changing the staging model
+    or the frontend contract).
+    """
+    permission_classes = [IsApprovedUser]
+
+    def post(self, request, pk, action):
+        from decimal import Decimal, InvalidOperation
+        from core.models import Member
+        from instruments.models import Account
+        from ledger.models import Transaction as _Tx
+
+        ctx, denied = _require_household_admin(request)
+        if denied:
+            return denied
+        _profile, household = ctx
+        try:
+            msg = SmsMessage.objects.get(pk=pk, household=household)
+        except SmsMessage.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if action == 'reject':
+            msg.status = SmsMessage.STATUS_REJECTED
+            msg.save(update_fields=['status'])
+            return Response(SmsMessageSerializer(msg).data)
+
+        if action != 'approve':
+            return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if msg.status == SmsMessage.STATUS_APPROVED:
+            return Response({'error': 'Already approved'}, status=status.HTTP_400_BAD_REQUEST)
+
+        overrides = request.data or {}
+        tx_row = dict(msg.raw_payload.get('parsed_tx') or {})
+        for field in ('account', 'member', 'direction', 'amount', 'transaction_type', 'tx_date', 'currency',
+                      'fees', 'taxes', 'external_reference', 'classification', 'spend_category'):
+            if field in overrides:
+                tx_row[field] = overrides[field]
+
+        if not (tx_row.get('amount') and tx_row.get('direction') and tx_row.get('tx_date') and tx_row.get('account')):
+            return Response({'error': 'account, amount, direction and tx_date are required to approve'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            acc = Account.objects.get(pk=int(tx_row['account']), household=household)
+        except (Account.DoesNotExist, ValueError, TypeError):
+            return Response({'error': 'Invalid account'}, status=status.HTTP_400_BAD_REQUEST)
+
+        member = None
+        if tx_row.get('member'):
+            try:
+                member = Member.objects.get(pk=int(tx_row['member']), household=household)
+            except (Member.DoesNotExist, ValueError, TypeError):
+                return Response({'error': 'Invalid member'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            member = msg.owner
+
+        template = SMS_TEMPLATES.get(msg.template_key or '', {})
+        classification = tx_row.get('classification') or template.get('classification', '')
+        spend_category = tx_row.get('spend_category') or (
+            template.get('default_spend_category', '') if classification == 'spend' else ''
+        )
+
+        try:
+            created = _Tx.objects.create(
+                household=household,
+                member=member,
+                account=acc,
+                tx_date=tx_row['tx_date'],
+                amount=Decimal(tx_row['amount']),
+                direction=tx_row['direction'],
+                transaction_type=tx_row.get('transaction_type', 'other'),
+                currency=tx_row.get('currency', 'INR'),
+                fees=Decimal(tx_row.get('fees') or '0'),
+                taxes=Decimal(tx_row.get('taxes') or '0'),
+                external_reference=tx_row.get('external_reference', ''),
+                description=tx_row.get('merchant', '') or '',
+                source='api',
+                metadata={'sms_message_id': msg.pk, 'sms_sender': msg.sender},
+                classification=classification,
+                spend_category=spend_category,
+            )
+        except (InvalidOperation, KeyError, Exception) as ex:
+            return Response({'error': f'Failed to create transaction: {ex}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        msg.status = SmsMessage.STATUS_APPROVED
+        msg.imported_transaction_id = created.pk
+        if member is not None and msg.owner_id != member.pk:
+            msg.owner = member
+            msg.save(update_fields=['status', 'imported_transaction_id', 'owner'])
+        else:
+            msg.save(update_fields=['status', 'imported_transaction_id'])
+
+        return Response({**SmsMessageSerializer(msg).data, 'transaction_id': created.pk})

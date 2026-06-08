@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { SmsMessage } from '../types/domain'
+import type { OptionItem, SmsMessage } from '../types/domain'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { smsApi } from '../api/smsApi'
 import { Tabs } from '../components/ui/Tabs'
@@ -8,10 +8,13 @@ import { Button } from '../components/ui/Button'
 import { Drawer } from '../components/ui/Drawer'
 import { DeleteButton } from '../components/common/DeleteButton'
 import { normalizeApiError } from '../hooks/errorUtils'
+import { SmsApprovalForm } from '../components/sms/SmsApprovalForm'
 
 type Props = {
   householdId: number
   canDelete: (e: DeleteEntity) => boolean
+  accountOptions: OptionItem[]
+  memberOptions: OptionItem[]
 }
 
 type CategoryFilter = 'all' | 'transaction' | 'otp' | 'sip_reminder' | 'promotion' | 'alert'
@@ -61,7 +64,7 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-export function SmsMessagesPage({ householdId, canDelete }: Props) {
+export function SmsMessagesPage({ householdId, canDelete, accountOptions, memberOptions }: Props) {
   const [messages, setMessages] = useState<SmsMessage[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -78,6 +81,7 @@ export function SmsMessagesPage({ householdId, canDelete }: Props) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [selected, setSelected] = useState<SmsMessage | null>(null)
+  const [approving, setApproving] = useState<SmsMessage | null>(null)
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false)
   const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false)
@@ -149,6 +153,17 @@ export function SmsMessagesPage({ householdId, canDelete }: Props) {
       messages.forEach((m) => next.add(m.id))
       return next
     })
+  }
+
+  const rejectOne = async (id: number) => {
+    setError('')
+    try {
+      await smsApi.rejectStaged(id)
+      setSelected(null)
+      load()
+    } catch (e) {
+      setError(normalizeApiError(e))
+    }
   }
 
   const deleteOne = async (id: number) => {
@@ -325,6 +340,7 @@ export function SmsMessagesPage({ householdId, canDelete }: Props) {
               <col />
               <col className="w-48" />
               <col className="w-28" />
+              <col className="w-44" />
               {canDelete('sms_message') && <col className="w-20" />}
             </colgroup>
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -339,6 +355,7 @@ export function SmsMessagesPage({ householdId, canDelete }: Props) {
                 <th className="px-4 py-2.5">Message</th>
                 <th className="px-4 py-2.5">Categories</th>
                 <th className="px-4 py-2.5">Status</th>
+                <th className="px-4 py-2.5">Actions</th>
                 {canDelete('sms_message') && <th className="px-4 py-2.5"></th>}
               </tr>
             </thead>
@@ -368,6 +385,16 @@ export function SmsMessagesPage({ householdId, canDelete }: Props) {
                   </td>
                   <td className="px-4 py-2.5">
                     <Badge label={msg.status} color={STATUS_COLOR[msg.status]} />
+                  </td>
+                  <td className="px-4 py-2.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    {msg.status !== 'approved' && (
+                      <div className="flex gap-1.5">
+                        <Button size="sm" onClick={() => setApproving(msg)}>Approve</Button>
+                        {msg.status !== 'rejected' && (
+                          <Button size="sm" variant="secondary" onClick={() => rejectOne(msg.id)}>Reject</Button>
+                        )}
+                      </div>
+                    )}
                   </td>
                   {canDelete('sms_message') && (
                     <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -422,10 +449,23 @@ export function SmsMessagesPage({ householdId, canDelete }: Props) {
             </div>
             <div>
               <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Status</span>
-              <div className="mt-1">
+              <div className="mt-1 flex items-center gap-2">
                 <Badge label={selected.status} color={STATUS_COLOR[selected.status]} />
+                {selected.confidence !== null && selected.template_key && (
+                  <span className="text-xs text-slate-400">
+                    Detected: {selected.template_key.replace(/^sms_/, '').replace(/_/g, ' ')} ({Math.round((selected.confidence ?? 0) * 100)}% match)
+                  </span>
+                )}
               </div>
             </div>
+            {selected.status !== 'approved' && (
+              <div className="flex gap-2">
+                <Button onClick={() => setApproving(selected)}>Approve…</Button>
+                {selected.status !== 'rejected' && (
+                  <Button variant="secondary" onClick={() => rejectOne(selected.id)}>Reject</Button>
+                )}
+              </div>
+            )}
             {selected.imported_transaction_id && (
               <div>
                 <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Imported transaction</span>
@@ -449,6 +489,22 @@ export function SmsMessagesPage({ householdId, canDelete }: Props) {
               </div>
             )}
           </div>
+        )}
+      </Drawer>
+
+      <Drawer open={approving !== null} onClose={() => setApproving(null)} title="Approve SMS → Add to Ledger" width="w-full max-w-lg">
+        {approving && (
+          <SmsApprovalForm
+            message={approving}
+            accountOptions={accountOptions}
+            memberOptions={memberOptions}
+            onApproved={() => {
+              setApproving(null)
+              setSelected(null)
+              load()
+            }}
+            onCancel={() => setApproving(null)}
+          />
         )}
       </Drawer>
     </div>
