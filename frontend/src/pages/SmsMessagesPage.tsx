@@ -3,6 +3,7 @@ import type { SmsMessage } from '../types/domain'
 import { smsApi } from '../api/smsApi'
 import { Tabs } from '../components/ui/Tabs'
 import { Badge } from '../components/ui/Badge'
+import { Drawer } from '../components/ui/Drawer'
 
 type Props = {
   householdId: number
@@ -66,6 +67,7 @@ export function SmsMessagesPage({ householdId }: Props) {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [ordering, setOrdering] = useState('-received_at')
+  const [selected, setSelected] = useState<SmsMessage | null>(null)
 
   // Debounce free-text search before triggering a refetch
   useEffect(() => {
@@ -96,7 +98,7 @@ export function SmsMessagesPage({ householdId }: Props) {
   }
 
   return (
-    <div className="grid gap-6 max-w-4xl">
+    <div className="grid gap-6">
       <div>
         <h2 className="text-lg font-semibold text-slate-900">SMS Messages</h2>
         <p className="text-sm text-slate-500 mt-0.5">
@@ -176,8 +178,15 @@ export function SmsMessagesPage({ householdId }: Props) {
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-36" />
+              <col className="w-32" />
+              <col />
+              <col className="w-48" />
+              <col className="w-28" />
+            </colgroup>
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="px-4 py-2.5">Received</th>
@@ -189,10 +198,14 @@ export function SmsMessagesPage({ householdId }: Props) {
             </thead>
             <tbody>
               {messages.map((msg) => (
-                <tr key={msg.id} className="border-t border-slate-100 align-top">
+                <tr
+                  key={msg.id}
+                  className="cursor-pointer border-t border-slate-100 align-top hover:bg-slate-50"
+                  onClick={() => setSelected(msg)}
+                >
                   <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">{formatDateTime(msg.received_at)}</td>
-                  <td className="px-4 py-2.5 font-medium text-slate-800 whitespace-nowrap">{msg.sender}</td>
-                  <td className="px-4 py-2.5 text-slate-600 max-w-md truncate" title={msg.body}>{msg.body}</td>
+                  <td className="px-4 py-2.5 font-medium text-slate-800 whitespace-nowrap truncate">{msg.sender}</td>
+                  <td className="px-4 py-2.5 text-slate-600 truncate" title={msg.body}>{msg.body}</td>
                   <td className="px-4 py-2.5">
                     <span className="flex flex-wrap gap-1">
                       {msg.categories.length === 0
@@ -211,6 +224,51 @@ export function SmsMessagesPage({ householdId }: Props) {
           </table>
         </div>
       )}
+
+      <Drawer open={selected !== null} onClose={() => setSelected(null)} title="SMS Message" width="w-full max-w-lg">
+        {selected && (
+          <div className="grid gap-4 text-sm">
+            <div>
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Sender</span>
+              <p className="mt-0.5 font-medium text-slate-800">{selected.sender}</p>
+            </div>
+            <div>
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Received</span>
+              <p className="mt-0.5 text-slate-700">{formatDateTime(selected.received_at)}</p>
+            </div>
+            <div>
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Message</span>
+              <p className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-100 bg-slate-50 p-3 text-slate-700">{selected.body}</p>
+            </div>
+            <div>
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Categories</span>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {selected.categories.length === 0
+                  ? <Badge label="Uncategorised" color="slate" />
+                  : selected.categories.map((cat) => (
+                      <Badge key={cat} label={CATEGORY_LABEL[cat] ?? cat} color={CATEGORY_COLOR[cat] ?? 'slate'} />
+                    ))}
+              </div>
+            </div>
+            <div>
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Status</span>
+              <div className="mt-1">
+                <Badge label={selected.status} color={STATUS_COLOR[selected.status]} />
+              </div>
+            </div>
+            {selected.imported_transaction_id && (
+              <div>
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Imported transaction</span>
+                <p className="mt-0.5 text-slate-700">#{selected.imported_transaction_id}</p>
+              </div>
+            )}
+            <div>
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Logged at</span>
+              <p className="mt-0.5 text-slate-700">{formatDateTime(selected.created_at)}</p>
+            </div>
+          </div>
+        )}
+      </Drawer>
     </div>
   )
 }
