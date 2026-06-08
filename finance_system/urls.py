@@ -21,5 +21,5 @@ urlpatterns = [
         {'document_root': FRONTEND_DIST},
     ),
     # Catch-all: serve the React SPA shell for any other route (client-side hash routing)
-    re_path(r'^(?!api/|admin/|static/).*$', FrontendAppView.as_view()),
+    re_path(r'^(?!api(?:/|$)|admin(?:/|$)|static(?:/|$)).*$', FrontendAppView.as_view()),
 ]
