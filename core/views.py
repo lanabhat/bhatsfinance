@@ -1,7 +1,7 @@
 from django.contrib.auth import logout as auth_logout
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,6 +14,20 @@ from core.serializers import HouseholdSerializer, IntegrationCredentialSerialize
 class HouseholdViewSet(viewsets.ModelViewSet):
     queryset = Household.objects.all()
     serializer_class = HouseholdSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        household = self.get_object()
+        if Household.objects.count() <= 1:
+            return Response(
+                {'detail': 'Cannot delete the only household.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if UserProfile.objects.filter(household=household).exists():
+            return Response(
+                {'detail': 'Cannot delete a household that is still assigned to one or more users. Reassign those users to another household first.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class MemberViewSet(viewsets.ModelViewSet):

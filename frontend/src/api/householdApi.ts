@@ -12,6 +12,7 @@ export const householdApi = {
   async updateHousehold(id: number, payload: Partial<Pick<Household, 'name' | 'base_currency'>>) {
     return patchJson<Household>(`/api/households/${id}/`, payload)
   },
+  async deleteHousehold(id: number) { return deleteJson(`/api/households/${id}/`) },
   async listMembers(householdId: number) {
     const q = toQueryString({ household: householdId })
     const data = await getJson<ApiListResponse<Member>>(`/api/members/?${q}`)

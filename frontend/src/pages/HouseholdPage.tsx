@@ -126,10 +126,24 @@ export function HouseholdPage({ householdId, householdOptions, onHouseholdsChang
             <h3>Existing Households</h3>
             <ul className="simple-list">
               {households.map((h) => (
-                <li key={h.id}>
+                <li key={h.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <button className="list-link" disabled={!canWrite} onClick={() => setHouseholdForm({ id: h.id, name: h.name, base_currency: h.base_currency })}>
                     {h.name} ({h.base_currency})
                   </button>
+                  <DeleteButton
+                    disabled={!canDelete('household')}
+                    onDelete={async () => {
+                      setError('')
+                      try {
+                        await householdApi.deleteHousehold(h.id)
+                        if (householdForm.id === h.id) setHouseholdForm({ id: 0, name: '', base_currency: 'INR' })
+                        await onHouseholdsChanged()
+                        await loadData()
+                      } catch (e) {
+                        setError(normalizeApiError(e))
+                      }
+                    }}
+                  />
                 </li>
               ))}
             </ul>
