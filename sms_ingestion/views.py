@@ -87,6 +87,14 @@ class SmsMessageViewSet(viewsets.ModelViewSet):
         return qs
 
     def get_queryset(self):
+        # Detail actions (retrieve/destroy) don't send ?household= — fall back to
+        # the user's active household so get_object() can find the record.
+        if self.action in ('retrieve', 'destroy', 'update', 'partial_update'):
+            profile = getattr(self.request.user, 'profile', None)
+            hid = profile.household_id if profile else None
+            if hid:
+                return SmsMessage.objects.filter(household_id=hid)
+            return SmsMessage.objects.none()
         qs = self.filtered_queryset()
         ordering = self.request.query_params.get('ordering', '-received_at')
         if ordering.lstrip('-') in ('received_at', 'sender', 'created_at'):
