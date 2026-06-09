@@ -32,13 +32,14 @@ import { GmailStagingPage } from './pages/GmailStagingPage'
 import { SmsDevicesPage } from './pages/SmsDevicesPage'
 import { SmsTestPage } from './pages/SmsTestPage'
 import { SmsMessagesPage } from './pages/SmsMessagesPage'
+import { SmsRulesPage } from './pages/SmsRulesPage'
 import { LoginPage } from './pages/LoginPage'
 import { PendingPage } from './pages/PendingPage'
 import { DeniedPage } from './pages/DeniedPage'
 
-type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'settings' | 'instruments' | 'ledger' | 'cashflow' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail-sync' | 'gmail-rules' | 'gmail-staging' | 'sms-devices' | 'sms-test' | 'sms-messages'
+type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'settings' | 'instruments' | 'ledger' | 'cashflow' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail-sync' | 'gmail-rules' | 'gmail-staging' | 'sms-devices' | 'sms-test' | 'sms-messages' | 'sms-rules'
 
-const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'settings', 'instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages'])
+const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'settings', 'instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules'])
 
 function routeFromHash(): RouteKey {
   const value = window.location.hash.replace('#/', '') as RouteKey
@@ -127,6 +128,7 @@ function AppInner() {
       case 'sms-devices': return <SmsDevicesPage householdId={householdId} />
       case 'sms-test': return <SmsTestPage />
       case 'sms-messages': return <SmsMessagesPage householdId={householdId} canDelete={canDelete} accountOptions={accounts} memberOptions={members} />
+      case 'sms-rules': return <SmsRulesPage householdId={householdId} accountOptions={accounts} memberOptions={members} />
       case 'admin': return user.authenticated && user.role === 'super_admin' ? <AdminPage /> : <HomePage onNavigate={navigate} />
       default: return <HomePage onNavigate={navigate} />
     }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { OptionItem, SmsMessage } from '../types/domain'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { smsApi } from '../api/smsApi'
@@ -86,6 +86,10 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
   const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false)
   const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [reapplyResult, setReapplyResult] = useState<string>('')
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: unknown[] } | null>(null)
+  const [importing, setImporting] = useState(false)
+  const importFileRef = useRef<HTMLInputElement>(null)
 
   const filters = {
     status: statusFilter,
@@ -190,6 +194,55 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
     }
   }
 
+  const reapplyRules = async () => {
+    if (checked.size === 0) return
+    setReapplyResult('')
+    setBulkBusy(true)
+    try {
+      const res = await smsApi.reapplyRules(Array.from(checked))
+      setReapplyResult(`Updated ${res.updated} message${res.updated === 1 ? '' : 's'}`)
+      setChecked(new Set())
+      load()
+    } catch (e) {
+      setError(normalizeApiError(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const exportMessages = () => {
+    const url = checked.size > 0
+      ? smsApi.exportUrl(householdId, { ids: Array.from(checked) })
+      : smsApi.exportUrl(householdId, filters)
+    window.open(url, '_blank')
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      const messages: { sender: string; body: string; timestamp: string }[] = (
+        parsed.sms_messages ?? parsed.messages ?? parsed
+      ).map((m: Record<string, string>) => ({
+        sender: m.sender ?? '',
+        body: m.body ?? '',
+        timestamp: m.received_at ?? m.timestamp ?? '',
+      }))
+      const result = await smsApi.importMessages(householdId, messages)
+      setImportResult(result)
+      if (result.created > 0) load()
+    } catch {
+      setError('Import failed — check the file is a valid SMS export JSON.')
+    } finally {
+      setImporting(false)
+      if (importFileRef.current) importFileRef.current.value = ''
+    }
+  }
+
   const deleteAllMatching = async () => {
     setError('')
     setBulkBusy(true)
@@ -284,12 +337,47 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {importResult && (
+        <div className={`rounded-xl border px-4 py-3 text-sm ${importResult.errors.length > 0 ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`}>
+          <p className={importResult.errors.length > 0 ? 'text-amber-800' : 'text-green-800'}>
+            Import complete — <strong>{importResult.created}</strong> created, <strong>{importResult.skipped}</strong> skipped (duplicates)
+            {importResult.errors.length > 0 && `, ${importResult.errors.length} error${importResult.errors.length === 1 ? '' : 's'}`}.
+          </p>
+          <button type="button" onClick={() => setImportResult(null)} className="mt-1 text-xs text-slate-500 hover:text-slate-700">Dismiss</button>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-slate-500">
           {count === 0 ? 'No messages' : `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, count)} of ${count}`}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {reapplyResult && (
+            <span className="text-xs text-green-600">{reapplyResult}</span>
+          )}
+          {/* Export */}
+          <Button size="sm" variant="secondary" onClick={exportMessages}>
+            {checked.size > 0 ? `Export selected (${checked.size})` : 'Export all'}
+          </Button>
+          {/* Import */}
+          <label className="cursor-pointer">
+            <span className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+              {importing ? 'Importing…' : 'Import JSON'}
+            </span>
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".json"
+              className="sr-only"
+              onChange={handleImportFile}
+              disabled={importing}
+            />
+          </label>
+          {checked.size > 0 && (
+            <Button size="sm" variant="secondary" loading={bulkBusy} onClick={reapplyRules}>
+              Re-apply rules ({checked.size})
+            </Button>
+          )}
           {checked.size > 0 && canDelete('sms_message') && (
             confirmingBulkDelete ? (
               <span className="flex items-center gap-2 text-xs">
@@ -451,11 +539,6 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
               <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Status</span>
               <div className="mt-1 flex items-center gap-2">
                 <Badge label={selected.status} color={STATUS_COLOR[selected.status]} />
-                {selected.confidence !== null && selected.template_key && (
-                  <span className="text-xs text-slate-400">
-                    Detected: {selected.template_key.replace(/^sms_/, '').replace(/_/g, ' ')} ({Math.round((selected.confidence ?? 0) * 100)}% match)
-                  </span>
-                )}
               </div>
             </div>
             {selected.status !== 'approved' && (

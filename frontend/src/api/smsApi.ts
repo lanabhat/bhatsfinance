@@ -61,4 +61,27 @@ export const smsApi = {
 
   rejectStaged: (id: number) =>
     postJson<SmsMessage>(`/api/sms-messages/${id}/reject/`, {}),
+
+  /** Re-run rules on a list of staged messages and update their parsed_tx. */
+  reapplyRules: (ids: number[]) =>
+    postJson<{ updated: number; results: { id: number; matched_rule_name: string | null; parsed_tx: Partial<ParsedSmsTransaction> }[] }>(
+      '/api/sms-messages/reapply-rules/', { ids }
+    ),
+
+  /**
+   * Export messages as a JSON blob URL. Pass ids to export selected rows only,
+   * or omit to export all messages matching the current filters.
+   */
+  exportUrl: (householdId: number, options: { ids?: number[] } & SmsBulkDeleteFilters = {}) => {
+    const { ids, ...filters } = options
+    const params: Record<string, string | number | boolean | undefined> = { household: householdId, ...filters }
+    if (ids && ids.length > 0) params['ids'] = ids.join(',')
+    return `/api/sms-messages/export/?${toQueryString(params)}`
+  },
+
+  /** Import messages from a parsed JSON export. */
+  importMessages: (householdId: number, messages: { sender: string; body: string; timestamp: string }[]) =>
+    postJson<{ created: number; skipped: number; errors: { index: number; detail: unknown }[] }>(
+      `/api/sms-messages/import/?household=${householdId}`, { messages }
+    ),
 }

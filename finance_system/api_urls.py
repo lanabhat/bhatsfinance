@@ -42,6 +42,8 @@ from sms_ingestion.views import (
     SmsApiKeyViewSet,
     SmsIngestView,
     SmsMessageViewSet,
+    SmsRuleViewSet,
+    SmsRuleSuggestionViewSet,
     SmsStagedActionView,
     SmsStagedUpdateView,
 )
@@ -67,6 +69,8 @@ router.register('tax-projections', TaxProjectionViewSet)
 router.register('expense-categories', ExpenseCategoryViewSet, basename='expense-category')
 router.register('sms-api-keys', SmsApiKeyViewSet, basename='sms-api-key')
 router.register('sms-messages', SmsMessageViewSet, basename='sms-message')
+router.register('sms-rules', SmsRuleViewSet, basename='sms-rule')
+router.register('sms-rule-suggestions', SmsRuleSuggestionViewSet, basename='sms-rule-suggestion')
 
 urlpatterns = router.urls + [
     path('csrf/', CsrfView.as_view(), name='csrf'),

@@ -45,7 +45,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
 
   const [account, setAccount] = useState(tx.account ?? '')
   const [member, setMember] = useState(tx.member ?? (message.owner ? String(message.owner) : ''))
-  const [direction, setDirection] = useState(tx.direction || 'outflow')
+  const [direction, setDirection] = useState<'inflow' | 'outflow'>(tx.direction || 'outflow')
   const [amount, setAmount] = useState(tx.amount ?? '')
   const [txType, setTxType] = useState(tx.transaction_type || 'other')
   const [txDate, setTxDate] = useState(tx.tx_date ?? '')
@@ -128,7 +128,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Direction *</span>
-          <select value={direction} onChange={(e) => setDirection(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+          <select value={direction} onChange={(e) => setDirection(e.target.value as 'inflow' | 'outflow')} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
             <option value="outflow">Outflow (Debit)</option>
             <option value="inflow">Inflow (Credit)</option>
           </select>
@@ -149,7 +149,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Classification</span>
-          <select value={classification} onChange={(e) => setClassification(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+          <select value={classification} onChange={(e) => setClassification(e.target.value as typeof classification)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
             {CLASSIFICATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </label>

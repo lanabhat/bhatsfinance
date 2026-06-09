@@ -34,6 +34,7 @@ const BASE_GROUPS: RouteGroup[] = [
       { key: 'sms-devices', label: 'SMS Devices', icon: '📱' },
       { key: 'sms-test', label: 'SMS Test Sender', icon: '🧪' },
       { key: 'sms-messages', label: 'SMS Messages', icon: '💬' },
+      { key: 'sms-rules', label: 'SMS Rules', icon: '📐' },
       { key: 'maintenance', label: 'Maintenance', icon: '🔧' },
     ],
   },

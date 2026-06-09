@@ -4,7 +4,7 @@ from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 
 from sms_ingestion.categorization import categorize
-from sms_ingestion.models import SmsApiKey, SmsMessage
+from sms_ingestion.models import SmsApiKey, SmsMessage, SmsRule, SmsRuleSuggestion
 
 
 def _mask_token(token: str) -> str:
@@ -72,3 +72,47 @@ class SmsMessageSerializer(serializers.ModelSerializer):
 
     def get_parsed_tx(self, obj):
         return (obj.raw_payload or {}).get('parsed_tx') or {}
+
+
+class SmsRuleSerializer(serializers.ModelSerializer):
+    account_name = serializers.SerializerMethodField()
+    member_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SmsRule
+        fields = [
+            'id', 'household', 'name', 'is_active', 'priority', 'conditions',
+            'account', 'account_name', 'member', 'member_name',
+            'direction', 'transaction_type', 'classification', 'spend_category',
+            'amount_regex', 'merchant_regex', 'reference_regex', 'notes_regex',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'account_name', 'member_name']
+
+    def get_account_name(self, obj):
+        return obj.account.name if obj.account_id else ''
+
+    def get_member_name(self, obj):
+        return obj.member.full_name if obj.member_id else ''
+
+
+class SmsRuleSuggestionSerializer(serializers.ModelSerializer):
+    account_name = serializers.SerializerMethodField()
+    member_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SmsRuleSuggestion
+        fields = [
+            'id', 'household', 'sender', 'observation_count', 'status',
+            'account', 'account_name', 'member', 'member_name',
+            'direction', 'classification', 'spend_category', 'transaction_type',
+            'body_samples', 'created_at',
+        ]
+        read_only_fields = ['id', 'household', 'sender', 'observation_count',
+                            'account_name', 'member_name', 'body_samples', 'created_at']
+
+    def get_account_name(self, obj):
+        return obj.account.name if obj.account_id else ''
+
+    def get_member_name(self, obj):
+        return obj.member.full_name if obj.member_id else ''

@@ -30,6 +30,103 @@ class SmsApiKey(TimeStampedModel):
         return f'{self.label or "SMS device"} ({self.household.name})'
 
 
+class SmsRule(TimeStampedModel):
+    """
+    User-defined rule that matches incoming SMS messages and pre-populates
+    the parsed_tx suggestion with mapped field values.  Rules are evaluated
+    in priority order at ingest time; first match wins and overrides the
+    generic template-detection result.
+    """
+    household = models.ForeignKey('core.Household', on_delete=models.CASCADE, related_name='sms_rules')
+    name = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True)
+    priority = models.IntegerField(default=0, help_text='Lower value = evaluated first')
+
+    # Condition tree stored as JSON — see rule_engine.py for schema docs
+    conditions = models.JSONField(default=dict, blank=True)
+
+    # Mapped output fields — blank means "don't override the template default"
+    account = models.ForeignKey('instruments.Account', on_delete=models.SET_NULL, null=True, blank=True)
+    member = models.ForeignKey('core.Member', on_delete=models.SET_NULL, null=True, blank=True, related_name='sms_rules')
+    direction = models.CharField(max_length=10, blank=True)
+    transaction_type = models.CharField(max_length=30, blank=True)
+    classification = models.CharField(max_length=20, blank=True)
+    spend_category = models.CharField(max_length=30, blank=True)
+
+    # Regex extractors — must use a named group (?P<value>...) for the captured value
+    amount_regex = models.CharField(max_length=300, blank=True)
+    merchant_regex = models.CharField(max_length=300, blank=True)
+    reference_regex = models.CharField(max_length=300, blank=True)
+    notes_regex = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ['priority', 'created_at']
+
+    def __str__(self) -> str:
+        return f'{self.name} ({"on" if self.is_active else "off"})'
+
+
+class SmsApprovalObservation(TimeStampedModel):
+    """
+    One record per approved SMS — captures which sender was mapped to which
+    account/member/direction/classification.  The suggestion engine reads these
+    to propose rules for senders with consistent patterns.
+    """
+    household = models.ForeignKey('core.Household', on_delete=models.CASCADE, related_name='sms_observations')
+    sender = models.CharField(max_length=64, db_index=True)
+    account = models.ForeignKey('instruments.Account', on_delete=models.SET_NULL, null=True, blank=True)
+    member = models.ForeignKey('core.Member', on_delete=models.SET_NULL, null=True, blank=True, related_name='sms_observations')
+    direction = models.CharField(max_length=10, blank=True)
+    classification = models.CharField(max_length=20, blank=True)
+    spend_category = models.CharField(max_length=30, blank=True)
+    transaction_type = models.CharField(max_length=30, blank=True)
+    body_sample = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.sender} → {self.account} ({self.direction})'
+
+
+class SmsRuleSuggestion(TimeStampedModel):
+    """
+    Auto-generated rule proposal derived from consistent approval observations.
+    Created when 2+ approvals from the same sender share the same
+    account/direction/classification.  Dismissed by the user or auto-deleted
+    when a covering rule is created.
+    """
+    STATUS_PENDING = 'pending'
+    STATUS_DISMISSED = 'dismissed'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_DISMISSED, 'Dismissed'),
+        (STATUS_ACCEPTED, 'Accepted'),
+    ]
+
+    household = models.ForeignKey('core.Household', on_delete=models.CASCADE, related_name='sms_suggestions')
+    sender = models.CharField(max_length=64)
+    observation_count = models.IntegerField(default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+
+    # Proposed rule fields — mirrors SmsRule mapped fields
+    account = models.ForeignKey('instruments.Account', on_delete=models.SET_NULL, null=True, blank=True)
+    member = models.ForeignKey('core.Member', on_delete=models.SET_NULL, null=True, blank=True, related_name='sms_suggestions')
+    direction = models.CharField(max_length=10, blank=True)
+    classification = models.CharField(max_length=20, blank=True)
+    spend_category = models.CharField(max_length=30, blank=True)
+    transaction_type = models.CharField(max_length=30, blank=True)
+    body_samples = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        unique_together = ('household', 'sender')
+        ordering = ['-observation_count', '-created_at']
+
+    def __str__(self) -> str:
+        return f'Suggestion: {self.sender} ({self.observation_count} obs)'
+
+
 class SmsMessage(TimeStampedModel):
     """
     Raw SMS forwarded from an Android device, staged for later review and
