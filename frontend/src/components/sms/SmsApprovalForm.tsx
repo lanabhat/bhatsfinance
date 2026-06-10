@@ -48,7 +48,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
   const [direction, setDirection] = useState<'inflow' | 'outflow'>(tx.direction || 'outflow')
   const [amount, setAmount] = useState(tx.amount ?? '')
   const [txType, setTxType] = useState(tx.transaction_type || 'other')
-  const [txDate, setTxDate] = useState(tx.tx_date ?? '')
+  const [txDate, setTxDate] = useState(tx.tx_date || message.received_at.slice(0, 10))
   const [classification, setClassification] = useState(tx.classification ?? '')
   const [spendCategory, setSpendCategory] = useState(tx.spend_category ?? '')
   const [extRef, setExtRef] = useState(tx.external_reference ?? '')
