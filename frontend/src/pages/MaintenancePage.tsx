@@ -146,10 +146,10 @@ function AccountOwnershipRow({
 
 type Section = 'instruments' | 'accounts'
 
-export function MaintenancePage() {
+export function MaintenancePage({ section: initSection }: { section?: Section } = {}) {
   const { householdId, members } = useApp()
 
-  const [section, setSection] = useState<Section>('instruments')
+  const [section, setSection] = useState<Section>(initSection ?? 'instruments')
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [instrumentOwnerships, setInstrumentOwnerships] = useState<InstrumentOwnership[]>([])
@@ -176,11 +176,15 @@ export function MaintenancePage() {
 
   useEffect(() => { void load() }, [householdId])
 
+  const pageTitle = initSection === 'instruments' ? 'Manage Instruments'
+    : initSection === 'accounts' ? 'Manage Accounts'
+    : 'Maintenance'
+
   return (
     <div className="grid gap-5">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Maintenance</h1>
-        <p className="mt-0.5 text-xs text-slate-500">Housekeeping tools for data corrections</p>
+        <h1 className="text-xl font-bold text-slate-900">{pageTitle}</h1>
+        <p className="mt-0.5 text-xs text-slate-500">Assign ownership to family members — drives per-member net worth</p>
       </div>
 
       {/* Ownership Mapping card */}
@@ -192,23 +196,25 @@ export function MaintenancePage() {
           </p>
         </div>
 
-        {/* sub-tab switcher */}
-        <div className="flex gap-1 border-b border-slate-100 px-4 pt-3 pb-0">
-          {(['instruments', 'accounts'] as Section[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSection(s)}
-              className={`px-3 pb-2.5 text-sm font-medium capitalize border-b-2 transition-colors ${
-                section === s
-                  ? 'border-indigo-600 text-indigo-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+        {/* sub-tab switcher — hidden when accessed as a dedicated page */}
+        {!initSection && (
+          <div className="flex gap-1 border-b border-slate-100 px-4 pt-3 pb-0">
+            {(['instruments', 'accounts'] as Section[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSection(s)}
+                className={`px-3 pb-2.5 text-sm font-medium capitalize border-b-2 transition-colors ${
+                  section === s
+                    ? 'border-indigo-600 text-indigo-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="px-4 py-1">
           {loading ? (

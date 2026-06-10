@@ -24,6 +24,13 @@ const BASE_GROUPS: RouteGroup[] = [
     ],
   },
   {
+    label: 'Manage',
+    items: [
+      { key: 'manage-instruments', label: 'Instruments', icon: '🏷️' },
+      { key: 'manage-accounts', label: 'Accounts', icon: '🏦' },
+    ],
+  },
+  {
     label: 'Setup',
     items: [
       { key: 'household', label: 'Household & Members', icon: '👪' },
@@ -35,7 +42,6 @@ const BASE_GROUPS: RouteGroup[] = [
       { key: 'sms-test', label: 'SMS Test Sender', icon: '🧪' },
       { key: 'sms-messages', label: 'SMS Messages', icon: '💬' },
       { key: 'sms-rules', label: 'SMS Rules', icon: '📐' },
-      { key: 'maintenance', label: 'Maintenance', icon: '🔧' },
     ],
   },
   {

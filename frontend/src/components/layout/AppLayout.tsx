@@ -93,13 +93,14 @@ const CHEVRON_RIGHT = (
   </svg>
 )
 
-const SECONDARY_KEYS = new Set(['instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'household', 'maintenance', 'help', 'import', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules'])
+const SECONDARY_KEYS = new Set(['instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'household', 'maintenance', 'manage-instruments', 'manage-accounts', 'help', 'import', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules'])
 const MOBILE_SECONDARY_KEYS = new Set([...SECONDARY_KEYS, 'spend-trends'])
 
 const PAGE_TITLES: Record<string, string> = {
   home: 'Home', holdings: 'Investments', accounts: 'Accounts', expenses: 'Spending', settings: 'Settings',
   instruments: 'Instruments', ledger: 'Ledger', cashflow: 'Cash Flow', 'spend-trends': 'Spend Trends', alerts: 'Alerts', tax: 'Tax',
   valuation: 'Valuation', insurance: 'Insurance', household: 'Household & Members', maintenance: 'Maintenance',
+  'manage-instruments': 'Manage Instruments', 'manage-accounts': 'Manage Accounts',
   help: 'Help', import: 'Import', admin: 'User Management', 'gmail-sync': 'Gmail Sync',
   'gmail-rules': 'Gmail Rules', 'gmail-staging': 'Gmail Transactions', 'sms-devices': 'SMS Devices', 'sms-test': 'SMS Test Sender', 'sms-messages': 'SMS Messages', 'sms-rules': 'SMS Rules',
 }

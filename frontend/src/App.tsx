@@ -37,9 +37,9 @@ import { LoginPage } from './pages/LoginPage'
 import { PendingPage } from './pages/PendingPage'
 import { DeniedPage } from './pages/DeniedPage'
 
-type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'settings' | 'instruments' | 'ledger' | 'cashflow' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail-sync' | 'gmail-rules' | 'gmail-staging' | 'sms-devices' | 'sms-test' | 'sms-messages' | 'sms-rules'
+type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'settings' | 'instruments' | 'ledger' | 'cashflow' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'help' | 'import' | 'household' | 'maintenance' | 'manage-instruments' | 'manage-accounts' | 'admin' | 'gmail-sync' | 'gmail-rules' | 'gmail-staging' | 'sms-devices' | 'sms-test' | 'sms-messages' | 'sms-rules'
 
-const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'settings', 'instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules'])
+const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'settings', 'instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'help', 'import', 'household', 'maintenance', 'manage-instruments', 'manage-accounts', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules'])
 
 function routeFromHash(): RouteKey {
   const value = window.location.hash.replace('#/', '') as RouteKey
@@ -122,6 +122,8 @@ function AppInner() {
       case 'help': return <HelpPage />
       case 'import': return <ImportWizard householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} />
       case 'maintenance': return <MaintenancePage />
+      case 'manage-instruments': return <MaintenancePage section="instruments" />
+      case 'manage-accounts': return <MaintenancePage section="accounts" />
       case 'gmail-sync': return <GmailSyncPage householdId={householdId} accountOptions={accounts} instrumentOptions={instruments} memberOptions={members} />
       case 'gmail-rules': return <GmailRulesPage householdId={householdId} accountOptions={accounts} memberOptions={members} />
       case 'gmail-staging': return <GmailStagingPage accountOptions={accounts} />
