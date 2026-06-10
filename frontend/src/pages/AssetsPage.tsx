@@ -970,6 +970,15 @@ export function AssetsPage() {
 
       {manageTab === 'instruments' && (
         <div className="grid gap-2">
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => { window.location.hash = '/instruments' }}
+              className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+            >
+              Manage all instruments →
+            </button>
+          </div>
           {!loading && unownedInstruments.length > 0 && (
             <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
               <span className="mt-0.5 text-lg">⚠️</span>

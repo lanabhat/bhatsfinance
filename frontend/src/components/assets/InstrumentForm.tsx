@@ -15,7 +15,7 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
   householdId: number; instrument?: Instrument
   onSave: () => void; onCancel: () => void; onDelete?: () => void
 }) {
-  const { categories } = useApp()
+  const { categories, accounts } = useApp()
   const [form, setForm] = useState<Omit<Instrument, 'id'>>({
     household: householdId,
     name: instrument?.name ?? '',
@@ -62,6 +62,13 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
           <option value="">— None —</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select></div>
+      <div><label className="mb-1 block text-xs font-medium text-slate-600">Linked Account</label>
+        <select className={INP} value={form.default_account ?? ''} onChange={(e) => setForm((p) => ({ ...p, default_account: e.target.value ? Number(e.target.value) : null }))}>
+          <option value="">— None —</option>
+          {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+        </select>
+        <p className="mt-1 text-[11px] text-slate-400">The bank/demat account SIP debits come from. Used to filter instruments when approving SMS.</p>
+      </div>
       <div><label className="mb-1 block text-xs font-medium text-slate-600">Symbol / Ticker</label>
         <input className={INP} value={form.symbol ?? ''} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} /></div>
       {form.instrument_type === 'fd' && (
