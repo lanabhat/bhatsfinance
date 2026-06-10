@@ -141,7 +141,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
   }
 
   return (
-    <div className="grid gap-4 text-sm">
+    <div className="grid w-full min-w-0 gap-4 text-sm overflow-hidden">
       {/* Original message */}
       <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
         <div className="mb-1 flex items-center justify-between">
@@ -170,19 +170,19 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
       </div>
 
       {/* Shared: Account + Date */}
-      <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">
+      <div className="grid grid-cols-2 gap-3 min-w-0">
+        <label className="flex min-w-0 flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
             {mode === 'investment' ? 'Debit Account *' : 'Account *'}
           </span>
-          <select value={account} onChange={(e) => setAccount(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+          <select value={account} onChange={(e) => setAccount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
             <option value="">— select —</option>
             {accountOptions.map((a) => <option key={a.id} value={String(a.id)}>{a.label}</option>)}
           </select>
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Date *</span>
-          <input type="date" value={txDate} onChange={(e) => setTxDate(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
+          <input type="date" value={txDate} onChange={(e) => setTxDate(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
         </label>
       </div>
 
@@ -259,53 +259,53 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
         </div>
       ) : (
         /* Transaction mode */
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1">
+        <div className="grid grid-cols-2 gap-3 min-w-0">
+          <label className="flex min-w-0 flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Member</span>
-            <select value={member} onChange={(e) => setMember(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+            <select value={member} onChange={(e) => setMember(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
               <option value="">— unassigned —</option>
               {memberOptions.map((m) => <option key={m.id} value={String(m.id)}>{m.label}</option>)}
             </select>
           </label>
-          <label className="flex flex-col gap-1">
+          <label className="flex min-w-0 flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Direction *</span>
-            <select value={direction} onChange={(e) => setDirection(e.target.value as 'inflow' | 'outflow')} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+            <select value={direction} onChange={(e) => setDirection(e.target.value as 'inflow' | 'outflow')} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
               <option value="outflow">Outflow (Debit)</option>
               <option value="inflow">Inflow (Credit)</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1">
+          <label className="flex min-w-0 flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Amount (INR) *</span>
-            <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
+            <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
           </label>
-          <label className="flex flex-col gap-1">
+          <label className="flex min-w-0 flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Type</span>
-            <select value={txType} onChange={(e) => setTxType(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+            <select value={txType} onChange={(e) => setTxType(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
               {TX_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </label>
-          <label className="flex flex-col gap-1">
+          <label className="flex min-w-0 flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Classification</span>
-            <select value={classification} onChange={(e) => setClassification(e.target.value as typeof classification)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+            <select value={classification} onChange={(e) => setClassification(e.target.value as typeof classification)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
               {CLASSIFICATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
           </label>
           {classification === 'spend' ? (
-            <label className="flex flex-col gap-1">
+            <label className="flex min-w-0 flex-col gap-1">
               <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Spend Category</span>
-              <select value={spendCategory} onChange={(e) => setSpendCategory(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+              <select value={spendCategory} onChange={(e) => setSpendCategory(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
                 <option value="">— select —</option>
                 {spendCategories.map((c) => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
               </select>
             </label>
           ) : <div />}
-          <label className="flex flex-col gap-1">
+          <label className="flex min-w-0 flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Merchant / Payee</span>
-            <input type="text" value={merchant} onChange={(e) => setMerchant(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
+            <input type="text" value={merchant} onChange={(e) => setMerchant(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
           </label>
-          <label className="flex flex-col gap-1">
+          <label className="flex min-w-0 flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Reference</span>
-            <input type="text" value={extRef} onChange={(e) => setExtRef(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
+            <input type="text" value={extRef} onChange={(e) => setExtRef(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
           </label>
         </div>
       )}
