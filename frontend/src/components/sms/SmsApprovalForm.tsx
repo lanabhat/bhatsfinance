@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ExpenseCategory, OptionItem, SmsMessage } from '../../types/domain'
+import type { ExpenseCategory, InstrumentOption, OptionItem, SmsMessage } from '../../types/domain'
 import { smsApi } from '../../api/smsApi'
 import type { SmsApprovalOverrides } from '../../api/smsApi'
 import { expenseApi } from '../../api/expenseApi'
@@ -12,7 +12,7 @@ type Props = {
   message: SmsMessage
   accountOptions: OptionItem[]
   memberOptions: OptionItem[]
-  instrumentOptions: OptionItem[]
+  instrumentOptions: InstrumentOption[]
   onApproved: (transactionId: number | undefined) => void
   onCancel: () => void
 }
@@ -76,6 +76,39 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
   const [investAmount, setInvestAmount] = useState(tx.amount ?? '')
   const [investMember, setInvestMember] = useState(tx.member ?? (message.owner ? String(message.owner) : ''))
   const [quantity, setQuantity] = useState('')
+
+  // When an instrument is picked, auto-fill account from its default_account
+  const handleInstrumentChange = (id: string) => {
+    setInstrument(id)
+    if (id) {
+      const found = instrumentOptions.find((i) => String(i.id) === id)
+      if (found?.default_account && !account) {
+        setAccount(String(found.default_account))
+      }
+    }
+  }
+
+  // When account changes, if the currently selected instrument doesn't belong to it, clear it
+  const handleAccountChange = (id: string) => {
+    setAccount(id)
+    if (mode === 'investment' && instrument && id) {
+      const found = instrumentOptions.find((i) => String(i.id) === instrument)
+      if (found?.default_account && String(found.default_account) !== id) {
+        setInstrument('')
+      }
+    }
+  }
+
+  // Instruments linked to the selected account (or with no account link = unlinked)
+  const linkedInstruments = account
+    ? instrumentOptions.filter((i) => !i.default_account || String(i.default_account) === account)
+    : instrumentOptions
+  // Instruments explicitly linked to a different account
+  const otherInstruments = account
+    ? instrumentOptions.filter((i) => i.default_account && String(i.default_account) !== account)
+    : []
+  // If account is chosen but nothing is linked, show everything ungrouped
+  const filteredInstruments = (account && linkedInstruments.length === 0) ? instrumentOptions : linkedInstruments
 
   const [spendCategories, setSpendCategories] = useState<ExpenseCategory[]>([])
   const [busy, setBusy] = useState(false)
@@ -175,7 +208,11 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
           <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
             {mode === 'investment' ? 'Debit Account *' : 'Account *'}
           </span>
-          <select value={account} onChange={(e) => setAccount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+          <select
+            value={account}
+            onChange={(e) => mode === 'investment' ? handleAccountChange(e.target.value) : setAccount(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+          >
             <option value="">— select —</option>
             {accountOptions.map((a) => <option key={a.id} value={String(a.id)}>{a.label}</option>)}
           </select>
@@ -219,10 +256,24 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
         <div className="grid gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Instrument (Fund / Stock) *</span>
-            <select value={instrument} onChange={(e) => setInstrument(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+            <select value={instrument} onChange={(e) => handleInstrumentChange(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
               <option value="">— select instrument —</option>
-              {instrumentOptions.map((i) => <option key={i.id} value={String(i.id)}>{i.label}</option>)}
+              {filteredInstruments.length > 0 && (
+                account
+                  ? <optgroup label="Linked to selected account">
+                      {filteredInstruments.map((i) => <option key={i.id} value={String(i.id)}>{i.label}</option>)}
+                    </optgroup>
+                  : filteredInstruments.map((i) => <option key={i.id} value={String(i.id)}>{i.label}</option>)
+              )}
+              {otherInstruments.length > 0 && (
+                <optgroup label="Other accounts">
+                  {otherInstruments.map((i) => <option key={i.id} value={String(i.id)}>{i.label}</option>)}
+                </optgroup>
+              )}
             </select>
+            {account && filteredInstruments.length === 0 && (
+              <span className="text-[11px] text-amber-600">No instruments linked to this account — showing all below</span>
+            )}
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Amount Invested (INR) *</span>

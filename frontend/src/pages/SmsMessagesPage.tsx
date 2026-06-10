@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { OptionItem, SmsMessage } from '../types/domain'
+import type { InstrumentOption, OptionItem, SmsMessage } from '../types/domain'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { smsApi } from '../api/smsApi'
 import { Tabs } from '../components/ui/Tabs'
@@ -15,7 +15,7 @@ type Props = {
   canDelete: (e: DeleteEntity) => boolean
   accountOptions: OptionItem[]
   memberOptions: OptionItem[]
-  instrumentOptions: OptionItem[]
+  instrumentOptions: InstrumentOption[]
 }
 
 type CategoryFilter = 'all' | 'transaction' | 'otp' | 'sip_reminder' | 'promotion' | 'alert'

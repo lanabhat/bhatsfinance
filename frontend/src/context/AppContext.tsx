@@ -4,7 +4,7 @@ import { ledgerApi } from '../api/ledgerApi'
 import { normalizeApiError } from '../hooks/errorUtils'
 import { type DeleteEntity, useDeleteConfig } from '../hooks/useDeleteConfig'
 import { invalidateOptionCache, useOptionLoaders } from '../hooks/useOptionLoaders'
-import type { AssetCategory, DashboardPayload, OptionItem } from '../types/domain'
+import type { AssetCategory, DashboardPayload, InstrumentOption, OptionItem } from '../types/domain'
 import { useAuth } from './AuthContext'
 
 const EMPTY_DASHBOARD: DashboardPayload = {
@@ -30,6 +30,7 @@ type AppContextValue = {
   members: OptionItem[]
   accounts: OptionItem[]
   instruments: OptionItem[]
+  instrumentsFull: InstrumentOption[]
   categories: AssetCategory[]
   refreshOptions: () => void
   refreshCategories: () => Promise<void>
@@ -55,7 +56,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [categories, setCategories] = useState<AssetCategory[]>([])
   const [error, setError] = useState('')
 
-  const { households, members, accounts, instruments } = useOptionLoaders(householdId)
+  const { households, members, accounts, instruments, instrumentsFull } = useOptionLoaders(householdId)
   const { config: deleteConfig, toggle: toggleDelete, canDelete } = useDeleteConfig()
 
   const refreshDashboard = async () => {
@@ -103,7 +104,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       householdId, setHouseholdId,
       asOf, setAsOf,
       dashboard, refreshDashboard, dashboardLoading,
-      households, members, accounts, instruments,
+      households, members, accounts, instruments, instrumentsFull,
       categories, refreshCategories,
       refreshOptions,
       canDelete, deleteConfig, toggleDelete,

@@ -16,6 +16,11 @@ export type OptionItem = {
   label: string
 }
 
+export type InstrumentOption = OptionItem & {
+  instrument_type: string
+  default_account: number | null
+}
+
 export type Household = {
   id: number
   name: string
