@@ -150,16 +150,33 @@ def compute_networth(household_id: int, as_of: date, member_id: int | None = Non
     else:
         _, household_account_share = _household_share_maps(household_id)
 
-    # Account balances: opening_balance + inflows - outflows up to as_of, per account
+    # Account balances: use the most recent ValuationSnapshot on or before as_of
+    # as the anchor balance, then add/subtract only transactions after that date.
+    # Falls back to opening_balance + all transactions if no snapshot exists.
     accounts_qs = Account.objects.filter(household_id=household_id, is_active=True)
     if account_allocation is not None:
         accounts_qs = accounts_qs.filter(id__in=account_allocation.keys())
 
     accounts_total = ZERO
     for account in accounts_qs:
-        txs = Transaction.objects.filter(account=account, tx_date__lte=as_of)
+        snapshot = (
+            ValuationSnapshot.objects
+            .filter(account=account, valuation_date__lte=as_of)
+            .order_by('-valuation_date', '-id')
+            .first()
+        )
+        if snapshot:
+            anchor_balance = snapshot.balance
+            anchor_date = snapshot.valuation_date
+            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date, tx_date__lte=as_of)
+        else:
+            anchor_balance = account.opening_balance
+            anchor_date = None
+            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of)
+
         inflow = txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
         outflow = txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
+
         if account_allocation is not None:
             factor = account_allocation.get(account.id, Decimal('1'))
         elif household_account_share is not None:
@@ -167,11 +184,10 @@ def compute_networth(household_id: int, as_of: date, member_id: int | None = Non
         else:
             factor = Decimal('1')
         if account.account_type == 'credit_card':
-            # Outstanding balance is a liability — subtract from net worth
             outstanding = max(Decimal(str(outflow)) - Decimal(str(inflow)), ZERO)
             accounts_total -= outstanding * factor
         else:
-            balance = account.opening_balance + Decimal(str(inflow)) - Decimal(str(outflow))
+            balance = anchor_balance + Decimal(str(inflow)) - Decimal(str(outflow))
             accounts_total += balance * factor
 
     return holdings_total + accounts_total

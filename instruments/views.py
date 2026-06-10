@@ -69,18 +69,35 @@ class AccountBalanceView(APIView):
             return Response({'error': 'Account not found'}, status=404)
 
         from ledger.models import Transaction
-        txs = Transaction.objects.filter(account=account)
+        from valuations.models import ValuationSnapshot
+
+        # Use the most recent balance snapshot as the anchor; fall back to opening_balance
+        snapshot = (
+            ValuationSnapshot.objects
+            .filter(account=account)
+            .order_by('-valuation_date', '-id')
+            .first()
+        )
+        if snapshot:
+            anchor_balance = float(snapshot.balance)
+            anchor_date = snapshot.valuation_date
+            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date)
+        else:
+            anchor_balance = float(account.opening_balance)
+            anchor_date = None
+            txs = Transaction.objects.filter(account=account)
+
         total_inflow = txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or 0
         total_outflow = txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or 0
-
-        opening = float(account.opening_balance)
-        current_balance = opening + float(total_inflow) - float(total_outflow)
+        current_balance = anchor_balance + float(total_inflow) - float(total_outflow)
 
         data = {
             'account_id': account.pk,
             'account_name': account.name,
             'account_type': account.account_type,
-            'opening_balance': opening,
+            'opening_balance': float(account.opening_balance),
+            'anchor_balance': anchor_balance,
+            'anchor_date': anchor_date.isoformat() if anchor_date else None,
             'total_inflow': float(total_inflow),
             'total_outflow': float(total_outflow),
             'current_balance': current_balance,
