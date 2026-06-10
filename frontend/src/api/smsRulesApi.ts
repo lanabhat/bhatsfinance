@@ -133,6 +133,15 @@ export const smsRuleSuggestionsApi = {
   dismiss: (id: number) =>
     postJson<{ status: string }>(`/api/sms-rule-suggestions/${id}/dismiss/`, {}),
 
+  /** Returns prefill data and leaves suggestion status unchanged — safe to cancel. */
   accept: (id: number) =>
     postJson<SmsRuleSuggestionAcceptResult>(`/api/sms-rule-suggestions/${id}/accept/`, {}),
+
+  /** Call after the rule is actually saved to mark the suggestion accepted. */
+  confirmAccepted: (id: number) =>
+    postJson<{ status: string }>(`/api/sms-rule-suggestions/${id}/confirm-accepted/`, {}),
+
+  /** Permanently delete — won't resurface unlike dismiss. */
+  deleteSuggestion: (id: number) =>
+    deleteJson(`/api/sms-rule-suggestions/${id}/delete/`),
 }

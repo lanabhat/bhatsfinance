@@ -768,8 +768,12 @@ class SmsRuleSuggestionViewSet(viewsets.GenericViewSet):
     @action(detail=True, methods=['post'], url_path='accept')
     def accept(self, request, pk=None):
         """
-        Mark accepted and return pre-filled SmsRuleFormData for the frontend
-        to open the rule editor with everything already filled in.
+        Return pre-filled SmsRuleFormData for the frontend editor.
+        Does NOT mark the suggestion as accepted yet — that happens when the
+        user actually saves the rule (via confirm_accepted).  This way
+        cancelling the editor leaves the suggestion intact.
+        Regexes are inferred from existing household rules that share
+        non-empty patterns, favouring rules whose sender condition overlaps.
         """
         profile = getattr(request.user, 'profile', None)
         hid = profile.household_id if profile else None
@@ -778,10 +782,42 @@ class SmsRuleSuggestionViewSet(viewsets.GenericViewSet):
         except SmsRuleSuggestion.DoesNotExist:
             return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        suggestion.status = SmsRuleSuggestion.STATUS_ACCEPTED
-        suggestion.save(update_fields=['status'])
+        # Infer regexes from existing rules — prefer rules whose sender
+        # condition contains the suggestion sender string, then fall back
+        # to any rule that has a non-empty regex.
+        amount_regex = ''
+        merchant_regex = ''
+        reference_regex = ''
+        notes_regex = ''
 
-        # Return the pre-filled rule data the frontend editor needs
+        existing_rules = list(SmsRule.objects.filter(household_id=hid))
+        sender_lower = suggestion.sender.lower()
+
+        def _sender_match_score(rule):
+            """Higher score = sender condition more relevant to this suggestion."""
+            conds = rule.conditions or {}
+            for c in (conds.get('conditions') or []):
+                if isinstance(c, dict) and c.get('field') == 'sender':
+                    val = (c.get('value') or '').lower()
+                    if val and (val in sender_lower or sender_lower in val):
+                        return 2
+                    return 1
+            return 0
+
+        scored = sorted(existing_rules, key=_sender_match_score, reverse=True)
+
+        for rule in scored:
+            if not amount_regex and rule.amount_regex:
+                amount_regex = rule.amount_regex
+            if not merchant_regex and rule.merchant_regex:
+                merchant_regex = rule.merchant_regex
+            if not reference_regex and rule.reference_regex:
+                reference_regex = rule.reference_regex
+            if not notes_regex and rule.notes_regex:
+                notes_regex = rule.notes_regex
+            if amount_regex and merchant_regex and reference_regex and notes_regex:
+                break
+
         prefill = {
             'household': hid,
             'name': f'{suggestion.sender} — auto',
@@ -799,12 +835,37 @@ class SmsRuleSuggestionViewSet(viewsets.GenericViewSet):
             'transaction_type': suggestion.transaction_type,
             'classification': suggestion.classification,
             'spend_category': suggestion.spend_category,
-            'amount_regex': '',
-            'merchant_regex': '',
-            'reference_regex': '',
-            'notes_regex': '',
+            'amount_regex': amount_regex,
+            'merchant_regex': merchant_regex,
+            'reference_regex': reference_regex,
+            'notes_regex': notes_regex,
         }
         return Response({
             'suggestion': SmsRuleSuggestionSerializer(suggestion).data,
             'prefill': prefill,
         })
+
+    @action(detail=True, methods=['post'], url_path='confirm-accepted')
+    def confirm_accepted(self, request, pk=None):
+        """Mark suggestion accepted after the rule has actually been saved."""
+        profile = getattr(request.user, 'profile', None)
+        hid = profile.household_id if profile else None
+        try:
+            suggestion = SmsRuleSuggestion.objects.get(pk=pk, household_id=hid)
+        except SmsRuleSuggestion.DoesNotExist:
+            return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        suggestion.status = SmsRuleSuggestion.STATUS_ACCEPTED
+        suggestion.save(update_fields=['status'])
+        return Response({'status': 'accepted'})
+
+    @action(detail=True, methods=['delete'], url_path='delete')
+    def delete_suggestion(self, request, pk=None):
+        """Permanently delete a suggestion (harder than dismiss — won't resurface)."""
+        profile = getattr(request.user, 'profile', None)
+        hid = profile.household_id if profile else None
+        try:
+            suggestion = SmsRuleSuggestion.objects.get(pk=pk, household_id=hid)
+        except SmsRuleSuggestion.DoesNotExist:
+            return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        suggestion.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

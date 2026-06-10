@@ -816,10 +816,12 @@ function RuleRow({
 function SuggestionCard({
   suggestion,
   onDismiss,
+  onDelete,
   onCreateRule,
 }: {
   suggestion: SmsRuleSuggestion
   onDismiss: () => void
+  onDelete: () => void
   onCreateRule: () => void
 }) {
   const dirColor = suggestion.direction === 'outflow'
@@ -891,20 +893,31 @@ function SuggestionCard({
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onCreateRule}
+            className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+          >
+            Create Rule
+          </button>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-100"
+            title="Hide for now — will resurface if more approvals come in"
+          >
+            Dismiss
+          </button>
+        </div>
         <button
           type="button"
-          onClick={onCreateRule}
-          className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+          onClick={onDelete}
+          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-500 hover:bg-red-50"
+          title="Permanently delete this suggestion"
         >
-          Create Rule
-        </button>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-100"
-        >
-          Dismiss
+          Delete
         </button>
       </div>
     </div>
@@ -1292,8 +1305,10 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
   const [importOpen, setImportOpen] = useState(false)
 
   const [editing, setEditing] = useState<SmsRule | null | 'new'>(null)
-  // When editing is a pre-filled SmsRuleFormData (from suggestion accept), pass it as initialFormData
   const [editingPrefill, setEditingPrefill] = useState<SmsRuleFormData | null>(null)
+  // Track which suggestion triggered the current editor open, so we can
+  // confirm it accepted only when the rule is actually saved (not on cancel)
+  const [activeSuggestionId, setActiveSuggestionId] = useState<number | null>(null)
 
   useEffect(() => {
     if (!householdId) return
@@ -1315,7 +1330,14 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
       const idx = prev.findIndex((r) => r.id === saved.id)
       return idx >= 0 ? prev.map((r) => (r.id === saved.id ? saved : r)) : [...prev, saved]
     })
+    // If this save came from a suggestion, confirm it accepted and remove the card
+    if (activeSuggestionId !== null) {
+      smsRuleSuggestionsApi.confirmAccepted(activeSuggestionId).catch(() => {})
+      setSuggestions((prev) => prev.filter((s) => s.id !== activeSuggestionId))
+      setActiveSuggestionId(null)
+    }
     setEditing(null)
+    setEditingPrefill(null)
   }
 
   async function handleDelete(rule: SmsRule) {
@@ -1375,11 +1397,21 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
   async function handleAcceptSuggestion(id: number) {
     try {
       const { prefill } = await smsRuleSuggestionsApi.accept(id)
-      setSuggestions((prev) => prev.filter((s) => s.id !== id))
+      // Keep the suggestion card visible — only remove it once the rule is saved
+      setActiveSuggestionId(id)
       setEditingPrefill(prefill)
       setEditing('new')
     } catch {
       setError('Failed to load suggestion.')
+    }
+  }
+
+  async function handleDeleteSuggestion(id: number) {
+    try {
+      await smsRuleSuggestionsApi.deleteSuggestion(id)
+      setSuggestions((prev) => prev.filter((s) => s.id !== id))
+    } catch {
+      setError('Delete failed.')
     }
   }
 
@@ -1459,6 +1491,7 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
                   key={sg.id}
                   suggestion={sg}
                   onDismiss={() => handleDismissSuggestion(sg.id)}
+                  onDelete={() => handleDeleteSuggestion(sg.id)}
                   onCreateRule={() => handleAcceptSuggestion(sg.id)}
                 />
               ))}
