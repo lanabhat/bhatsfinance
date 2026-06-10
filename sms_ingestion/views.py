@@ -544,6 +544,74 @@ class SmsStagedActionView(APIView):
         return Response({**SmsMessageSerializer(msg).data, 'transaction_id': created.pk})
 
 
+class SmsStagedBalanceView(APIView):
+    """
+    Approve a staged SMS by recording a ValuationSnapshot (account balance)
+    instead of a ledger transaction.
+
+    POST /api/sms-messages/<pk>/record-balance/
+    Body: { "account": <id>, "balance": "12450.00", "valuation_date": "2026-06-10", "notes": "" }
+    """
+    permission_classes = [IsApprovedUser]
+
+    def post(self, request, pk):
+        from decimal import Decimal, InvalidOperation
+        from instruments.models import Account
+        from valuations.models import ValuationSnapshot
+
+        ctx, denied = _require_household_admin(request)
+        if denied:
+            return denied
+        _profile, household = ctx
+
+        try:
+            msg = SmsMessage.objects.get(pk=pk, household=household)
+        except SmsMessage.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if msg.status == SmsMessage.STATUS_APPROVED:
+            return Response({'error': 'Already approved'}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = request.data or {}
+        account_id = data.get('account')
+        balance_raw = data.get('balance')
+        valuation_date = data.get('valuation_date')
+
+        if not account_id or balance_raw is None or not valuation_date:
+            return Response(
+                {'error': 'account, balance and valuation_date are required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            account = Account.objects.get(pk=int(account_id), household=household)
+        except (Account.DoesNotExist, ValueError, TypeError):
+            return Response({'error': 'Invalid account'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            balance = Decimal(str(balance_raw).replace(',', ''))
+        except InvalidOperation:
+            return Response({'error': 'Invalid balance amount'}, status=status.HTTP_400_BAD_REQUEST)
+
+        snapshot = ValuationSnapshot.objects.create(
+            household=household,
+            account=account,
+            balance=balance,
+            valuation_date=valuation_date,
+            source='api',
+            notes=data.get('notes', '') or f'From SMS: {msg.sender}',
+        )
+
+        msg.status = SmsMessage.STATUS_APPROVED
+        msg.imported_transaction_id = snapshot.pk
+        msg.save(update_fields=['status', 'imported_transaction_id'])
+
+        return Response({
+            **SmsMessageSerializer(msg).data,
+            'snapshot_id': snapshot.pk,
+        })
+
+
 # ---------------------------------------------------------------------------
 # SMS Rules CRUD + test
 # ---------------------------------------------------------------------------

@@ -45,6 +45,7 @@ from sms_ingestion.views import (
     SmsRuleViewSet,
     SmsRuleSuggestionViewSet,
     SmsStagedActionView,
+    SmsStagedBalanceView,
     SmsStagedUpdateView,
 )
 from tax.views import TaxProjectionViewSet, TaxRecordViewSet
@@ -120,4 +121,5 @@ urlpatterns = router.urls + [
     path('sms-messages/<int:pk>/edit/', SmsStagedUpdateView.as_view(), name='sms-staged-edit'),
     path('sms-messages/<int:pk>/approve/', SmsStagedActionView.as_view(), {'action': 'approve'}, name='sms-staged-approve'),
     path('sms-messages/<int:pk>/reject/', SmsStagedActionView.as_view(), {'action': 'reject'}, name='sms-staged-reject'),
+    path('sms-messages/<int:pk>/record-balance/', SmsStagedBalanceView.as_view(), name='sms-staged-balance'),
 ]

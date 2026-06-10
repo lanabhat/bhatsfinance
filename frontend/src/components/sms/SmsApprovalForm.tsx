@@ -39,20 +39,34 @@ function ConfidencePill({ value }: { value: number | null }) {
   )
 }
 
+type ApprovalMode = 'transaction' | 'balance'
+
 export function SmsApprovalForm({ message, accountOptions, memberOptions, onApproved, onCancel }: Props) {
   const { householdId } = useApp()
   const tx = message.parsed_tx ?? {}
 
+  // Guess initial mode: if the body contains "balance" keywords and no amount, default to balance
+  const bodyLower = message.body.toLowerCase()
+  const looksLikeBalance = /\b(balance|avl bal|avail bal|available balance|closing bal)\b/.test(bodyLower) && !tx.amount
+  const [mode, setMode] = useState<ApprovalMode>(looksLikeBalance ? 'balance' : 'transaction')
+
+  // Shared
   const [account, setAccount] = useState(tx.account ?? '')
+  const [txDate, setTxDate] = useState(tx.tx_date || message.received_at.slice(0, 10))
+
+  // Transaction fields
   const [member, setMember] = useState(tx.member ?? (message.owner ? String(message.owner) : ''))
   const [direction, setDirection] = useState<'inflow' | 'outflow'>(tx.direction || 'outflow')
   const [amount, setAmount] = useState(tx.amount ?? '')
   const [txType, setTxType] = useState(tx.transaction_type || 'other')
-  const [txDate, setTxDate] = useState(tx.tx_date || message.received_at.slice(0, 10))
   const [classification, setClassification] = useState(tx.classification ?? '')
   const [spendCategory, setSpendCategory] = useState(tx.spend_category ?? '')
   const [extRef, setExtRef] = useState(tx.external_reference ?? '')
   const [merchant, setMerchant] = useState(tx.merchant ?? '')
+
+  // Balance fields
+  const [balance, setBalance] = useState(tx.amount ?? '')
+  const [balanceNotes, setBalanceNotes] = useState('')
 
   const [spendCategories, setSpendCategories] = useState<ExpenseCategory[]>([])
   const [busy, setBusy] = useState(false)
@@ -63,28 +77,38 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
     expenseApi.listCategories(householdId).then(setSpendCategories).catch(() => {})
   }, [householdId])
 
-  const buildOverrides = (): SmsApprovalOverrides => ({
-    account,
-    member: member || undefined,
-    direction: direction as 'inflow' | 'outflow',
-    amount,
-    transaction_type: txType,
-    tx_date: txDate,
-    classification: classification as SmsApprovalOverrides['classification'],
-    spend_category: classification === 'spend' ? spendCategory : '',
-    external_reference: extRef,
-    merchant,
-  })
-
   const handleApprove = async () => {
     setError('')
     if (!account) { setError('Select an account.'); return }
-    if (!amount) { setError('Enter an amount.'); return }
-    if (!txDate) { setError('Enter a transaction date.'); return }
+    if (!txDate) { setError('Enter a date.'); return }
+
     setBusy(true)
     try {
-      const result = await smsApi.approveStaged(message.id, buildOverrides())
-      onApproved(result.transaction_id)
+      if (mode === 'balance') {
+        if (!balance) { setError('Enter a balance amount.'); setBusy(false); return }
+        const result = await smsApi.recordBalance(message.id, {
+          account,
+          balance,
+          valuation_date: txDate,
+          notes: balanceNotes,
+        })
+        onApproved(result.transaction_id)
+      } else {
+        if (!amount) { setError('Enter an amount.'); setBusy(false); return }
+        const result = await smsApi.approveStaged(message.id, {
+          account,
+          member: member || undefined,
+          direction: direction as 'inflow' | 'outflow',
+          amount,
+          transaction_type: txType,
+          tx_date: txDate,
+          classification: classification as SmsApprovalOverrides['classification'],
+          spend_category: classification === 'spend' ? spendCategory : '',
+          external_reference: extRef,
+          merchant,
+        })
+        onApproved(result.transaction_id)
+      }
     } catch (e) {
       setError(normalizeApiError(e))
     } finally {
@@ -94,23 +118,34 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
 
   return (
     <div className="grid gap-4 text-sm">
+      {/* Original message */}
       <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
         <div className="mb-1 flex items-center justify-between">
           <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Original message</span>
           <ConfidencePill value={message.confidence} />
         </div>
         <p className="whitespace-pre-wrap text-xs text-slate-600">{message.body}</p>
-        {message.template_key && (
-          <p className="mt-1.5 text-[11px] text-slate-400">
-            Auto-detected as <span className="font-medium text-slate-600">{message.template_key.replace(/^sms_/, '').replace(/_/g, ' ')}</span> — review and adjust the fields below before approving.
-          </p>
-        )}
       </div>
 
-      <p className="text-xs text-slate-500">
-        Approving will create a transaction in your <span className="font-medium text-slate-700">Ledger</span> using the details below.
-      </p>
+      {/* Mode toggle */}
+      <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+        {(['transaction', 'balance'] as ApprovalMode[]).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+              mode === m
+                ? 'bg-white shadow-sm text-slate-800 border border-slate-200'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {m === 'transaction' ? 'Record Transaction' : 'Record Balance'}
+          </button>
+        ))}
+      </div>
 
+      {/* Shared: Account + Date */}
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Account *</span>
@@ -120,67 +155,106 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
           </select>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Member</span>
-          <select value={member} onChange={(e) => setMember(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
-            <option value="">— unassigned —</option>
-            {memberOptions.map((m) => <option key={m.id} value={String(m.id)}>{m.label}</option>)}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Direction *</span>
-          <select value={direction} onChange={(e) => setDirection(e.target.value as 'inflow' | 'outflow')} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
-            <option value="outflow">Outflow (Debit)</option>
-            <option value="inflow">Inflow (Credit)</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Amount (INR) *</span>
-          <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Type</span>
-          <select value={txType} onChange={(e) => setTxType(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
-            {TX_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Date *</span>
           <input type="date" value={txDate} onChange={(e) => setTxDate(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Classification</span>
-          <select value={classification} onChange={(e) => setClassification(e.target.value as typeof classification)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
-            {CLASSIFICATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-          </select>
-        </label>
-        {classification === 'spend' && (
+      </div>
+
+      {mode === 'balance' ? (
+        /* Balance mode */
+        <div className="grid gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Spend Category</span>
-            <select value={spendCategory} onChange={(e) => setSpendCategory(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
-              <option value="">— select —</option>
-              {spendCategories.map((c) => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Balance (INR) *</span>
+            <input
+              type="number"
+              step="0.01"
+              value={balance}
+              onChange={(e) => setBalance(e.target.value)}
+              placeholder="e.g. 12450.00"
+              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Notes</span>
+            <input
+              type="text"
+              value={balanceNotes}
+              onChange={(e) => setBalanceNotes(e.target.value)}
+              placeholder="Optional note"
+              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+            />
+          </label>
+          <p className="text-[11px] text-slate-400">
+            Records a balance snapshot on the account — useful for tracking account balances from bank alerts.
+          </p>
+        </div>
+      ) : (
+        /* Transaction mode */
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Member</span>
+            <select value={member} onChange={(e) => setMember(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+              <option value="">— unassigned —</option>
+              {memberOptions.map((m) => <option key={m.id} value={String(m.id)}>{m.label}</option>)}
             </select>
           </label>
-        )}
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Merchant / Payee</span>
-          <input type="text" value={merchant} onChange={(e) => setMerchant(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Reference</span>
-          <input type="text" value={extRef} onChange={(e) => setExtRef(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
-        </label>
-      </div>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Direction *</span>
+            <select value={direction} onChange={(e) => setDirection(e.target.value as 'inflow' | 'outflow')} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+              <option value="outflow">Outflow (Debit)</option>
+              <option value="inflow">Inflow (Credit)</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Amount (INR) *</span>
+            <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Type</span>
+            <select value={txType} onChange={(e) => setTxType(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+              {TX_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Classification</span>
+            <select value={classification} onChange={(e) => setClassification(e.target.value as typeof classification)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+              {CLASSIFICATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          </label>
+          {classification === 'spend' ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Spend Category</span>
+              <select value={spendCategory} onChange={(e) => setSpendCategory(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+                <option value="">— select —</option>
+                {spendCategories.map((c) => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
+              </select>
+            </label>
+          ) : <div />}
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Merchant / Payee</span>
+            <input type="text" value={merchant} onChange={(e) => setMerchant(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Reference</span>
+            <input type="text" value={extRef} onChange={(e) => setExtRef(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
+          </label>
+        </div>
+      )}
 
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
       )}
 
       <div className="flex items-center justify-between">
-        <Badge label={`Will create: Ledger ${direction === 'inflow' ? 'income' : 'expense'} transaction`} color="blue" />
+        <Badge
+          label={mode === 'balance' ? 'Will record: Account balance snapshot' : `Will create: Ledger ${direction === 'inflow' ? 'income' : 'expense'} transaction`}
+          color="blue"
+        />
         <div className="flex gap-2">
           <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
-          <Button onClick={handleApprove} loading={busy}>Approve &amp; Add to Ledger</Button>
+          <Button onClick={handleApprove} loading={busy}>
+            {mode === 'balance' ? 'Save Balance' : 'Approve & Add to Ledger'}
+          </Button>
         </div>
       </div>
     </div>

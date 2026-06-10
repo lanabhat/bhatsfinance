@@ -84,4 +84,8 @@ export const smsApi = {
     postJson<{ created: number; skipped: number; errors: { index: number; detail: unknown }[] }>(
       `/api/sms-messages/import/?household=${householdId}`, { messages }
     ),
+
+  /** Approve a staged SMS as a balance snapshot instead of a ledger transaction. */
+  recordBalance: (id: number, data: { account: string; balance: string; valuation_date: string; notes?: string }) =>
+    postJson<SmsApprovalResult>(`/api/sms-messages/${id}/record-balance/`, data),
 }
