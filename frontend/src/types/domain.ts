@@ -328,6 +328,14 @@ export type DashboardHolding = {
   net_invested: string
 }
 
+export type MemberAccount = {
+  account_id: number
+  account_name: string
+  account_type: string
+  balance: string
+  allocation_percent: string
+}
+
 export type DashboardAllocation = {
   instrument_type: string
   market_value: string

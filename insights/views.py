@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from insights.services import compute_allocation, compute_cashflow, compute_category_breakdown, compute_holdings, compute_members_networth, compute_networth, compute_spend_analytics, compute_xirr
+from insights.services import compute_allocation, compute_cashflow, compute_category_breakdown, compute_holdings, compute_member_accounts, compute_members_networth, compute_networth, compute_spend_analytics, compute_xirr
 
 
 def _get_member_id(request):
@@ -19,7 +19,10 @@ class HoldingsView(APIView):
         if not household_id:
             return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
         as_of = date.fromisoformat(request.query_params['as_of']) if request.query_params.get('as_of') else date.today()
-        return Response({'as_of': as_of, 'holdings': compute_holdings(int(household_id), as_of, _get_member_id(request))})
+        member_id = _get_member_id(request)
+        holdings = compute_holdings(int(household_id), as_of, member_id)
+        accounts = compute_member_accounts(int(household_id), as_of, member_id) if member_id else []
+        return Response({'as_of': as_of, 'holdings': holdings, 'accounts': accounts})
 
 
 class NetWorthView(APIView):

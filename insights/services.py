@@ -193,6 +193,54 @@ def compute_networth(household_id: int, as_of: date, member_id: int | None = Non
     return holdings_total + accounts_total
 
 
+def compute_member_accounts(household_id: int, as_of: date, member_id: int) -> list[dict]:
+    """Return account balances for a specific member (accounts they own via AccountOwnership)."""
+    from instruments.models import Account, AccountOwnership
+    from django.db.models import Sum
+
+    ao = AccountOwnership.objects.filter(member_id=member_id).values('account_id', 'allocation_percent')
+    account_allocation = {o['account_id']: Decimal(str(o['allocation_percent'])) / Decimal('100') for o in ao}
+    if not account_allocation:
+        return []
+
+    accounts = Account.objects.filter(id__in=account_allocation.keys(), household_id=household_id, is_active=True)
+    result = []
+    for account in accounts:
+        snapshot = (
+            ValuationSnapshot.objects
+            .filter(account=account, valuation_date__lte=as_of)
+            .order_by('-valuation_date', '-id')
+            .first()
+        )
+        if snapshot:
+            anchor_balance = Decimal(str(snapshot.balance))
+            anchor_date = snapshot.valuation_date
+            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date, tx_date__lte=as_of)
+        else:
+            anchor_balance = account.opening_balance
+            anchor_date = None
+            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of)
+
+        inflow = Decimal(str(txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO))
+        outflow = Decimal(str(txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or ZERO))
+        factor = account_allocation.get(account.id, Decimal('1'))
+
+        if account.account_type == 'credit_card':
+            outstanding = max(outflow - inflow, ZERO)
+            balance = -(outstanding * factor)
+        else:
+            balance = (anchor_balance + inflow - outflow) * factor
+
+        result.append({
+            'account_id': account.id,
+            'account_name': account.name,
+            'account_type': account.account_type,
+            'balance': str(balance.quantize(Decimal('0.01'))),
+            'allocation_percent': str(account_allocation[account.id] * 100),
+        })
+    return result
+
+
 def compute_members_networth(household_id: int, as_of: date) -> list[dict]:
     from core.models import Member
     members = Member.objects.filter(household_id=household_id, is_active=True)

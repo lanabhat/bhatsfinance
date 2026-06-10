@@ -11,7 +11,7 @@ import { useMaskedFmt } from '../components/common/Money'
 import { useApp } from '../context/AppContext'
 import { fdDetailsApi } from '../api/fdDetailsApi'
 import { getJson, toQueryString } from '../api/http'
-import type { CategoryBreakdownItem, DashboardHolding, MaturingFD, MissedSipAlert } from '../types/domain'
+import type { CategoryBreakdownItem, DashboardHolding, MaturingFD, MemberAccount, MissedSipAlert } from '../types/domain'
 
 const TYPE_ICONS: Record<string, string> = {
   mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡',
@@ -40,6 +40,7 @@ export function HomePage({ onNavigate }: Props) {
   const [excluded, setExcluded] = useState<Set<string>>(loadExcluded)
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null)
   const [memberHoldings, setMemberHoldings] = useState<DashboardHolding[]>([])
+  const [memberAccounts, setMemberAccounts] = useState<MemberAccount[]>([])
   const [memberHoldingsLoading, setMemberHoldingsLoading] = useState(false)
   const [maturingFDs, setMaturingFDs] = useState<MaturingFD[]>([])
   const MATURING_WINDOW_DAYS = 180
@@ -55,13 +56,13 @@ export function HomePage({ onNavigate }: Props) {
   }, [householdId])
 
   useEffect(() => {
-    if (expandedMemberId === null) { setMemberHoldings([]); return }
+    if (expandedMemberId === null) { setMemberHoldings([]); setMemberAccounts([]); return }
     let active = true
     setMemberHoldingsLoading(true)
     const q = toQueryString({ household_id: householdId, as_of: asOf, member_id: expandedMemberId })
-    getJson<{ holdings: DashboardHolding[] }>(`/api/holdings?${q}`)
-      .then((d) => { if (active) setMemberHoldings(d.holdings ?? []) })
-      .catch(() => { if (active) setMemberHoldings([]) })
+    getJson<{ holdings: DashboardHolding[]; accounts: MemberAccount[] }>(`/api/holdings?${q}`)
+      .then((d) => { if (active) { setMemberHoldings(d.holdings ?? []); setMemberAccounts(d.accounts ?? []) } })
+      .catch(() => { if (active) { setMemberHoldings([]); setMemberAccounts([]) } })
       .finally(() => { if (active) setMemberHoldingsLoading(false) })
     return () => { active = false }
   }, [expandedMemberId, householdId, asOf])
@@ -197,7 +198,7 @@ export function HomePage({ onNavigate }: Props) {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">By Member</h2>
-            <span className="text-[10px] text-slate-400">Tap a row to see holdings</span>
+            <span className="text-[10px] text-slate-400">Tap a row to see breakdown</span>
           </div>
           <div className="grid gap-2">
             {dashboard.membersNetworth.map((m) => {
@@ -212,13 +213,38 @@ export function HomePage({ onNavigate }: Props) {
                     <MemberNetWorthRow member={m} householdTotal={parseFloat(dashboard.networth)} />
                   </button>
                   {isExpanded && (
-                    <div className="mt-2 ml-3 border-l-2 border-primary-200 pl-3">
+                    <div className="mt-2 ml-3 border-l-2 border-primary-200 pl-3 grid gap-3">
                       {memberHoldingsLoading ? (
-                        <p className="py-2 text-xs text-slate-400">Loading {m.member_name}'s holdings…</p>
-                      ) : memberHoldings.length === 0 ? (
-                        <p className="py-2 text-xs text-slate-400">No holdings recorded for {m.member_name}.</p>
+                        <p className="py-2 text-xs text-slate-400">Loading {m.member_name}'s breakdown…</p>
                       ) : (
-                        <RecentHoldings holdings={memberHoldings} onViewAll={() => onNavigate('holdings')} />
+                        <>
+                          {memberAccounts.length > 0 && (
+                            <div>
+                              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Savings &amp; Accounts</p>
+                              <div className="grid gap-1">
+                                {memberAccounts.map((a) => (
+                                  <div key={a.account_id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                                    <div>
+                                      <p className="text-xs font-medium text-slate-700">{a.account_name}</p>
+                                      <p className="text-[10px] capitalize text-slate-400">{a.account_type.replace(/_/g, ' ')}</p>
+                                    </div>
+                                    <p className={`text-sm font-semibold tabular-nums ${parseFloat(a.balance) < 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                                      {fmtINR(a.balance)}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {memberHoldings.length > 0 ? (
+                            <div>
+                              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Investments</p>
+                              <RecentHoldings holdings={memberHoldings} onViewAll={() => onNavigate('holdings')} />
+                            </div>
+                          ) : memberAccounts.length === 0 ? (
+                            <p className="py-2 text-xs text-slate-400">No holdings or accounts recorded for {m.member_name}.</p>
+                          ) : null}
+                        </>
                       )}
                     </div>
                   )}
