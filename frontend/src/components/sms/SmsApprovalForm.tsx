@@ -152,13 +152,13 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
       </div>
 
       {/* Mode toggle */}
-      <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
+      <div className="flex flex-wrap rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
         {(['transaction', 'balance', 'investment'] as ApprovalMode[]).map((m) => (
           <button
             key={m}
             type="button"
             onClick={() => setMode(m)}
-            className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+            className={`flex-1 min-w-[7rem] rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
               mode === m
                 ? 'bg-white shadow-sm text-slate-800 border border-slate-200'
                 : 'text-slate-500 hover:text-slate-700'
@@ -215,7 +215,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
           </p>
         </div>
       ) : mode === 'investment' ? (
-        /* Investment mode */
+        /* Investment mode — single column to fit the drawer */
         <div className="grid gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Instrument (Fund / Stock) *</span>
@@ -224,30 +224,28 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
               {instrumentOptions.map((i) => <option key={i.id} value={String(i.id)}>{i.label}</option>)}
             </select>
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Amount Invested (INR) *</span>
-              <input
-                type="number"
-                step="0.01"
-                value={investAmount}
-                onChange={(e) => setInvestAmount(e.target.value)}
-                placeholder="e.g. 5000.00"
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Units Purchased</span>
-              <input
-                type="number"
-                step="0.000001"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder="Optional"
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
-              />
-            </label>
-          </div>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Amount Invested (INR) *</span>
+            <input
+              type="number"
+              step="0.01"
+              value={investAmount}
+              onChange={(e) => setInvestAmount(e.target.value)}
+              placeholder="e.g. 5000.00"
+              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Units Purchased (optional)</span>
+            <input
+              type="number"
+              step="0.000001"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              placeholder="Leave blank if unknown"
+              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+            />
+          </label>
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Member</span>
             <select value={investMember} onChange={(e) => setInvestMember(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
