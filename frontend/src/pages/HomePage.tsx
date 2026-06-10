@@ -4,6 +4,7 @@ import { MaturingFDsCard } from '../components/home/MaturingFDsCard'
 import { MarkSipPaidSheet } from '../components/home/MarkSipPaidSheet'
 import { MarkAllSipsPaidSheet } from '../components/home/MarkAllSipsPaidSheet'
 import { MemberNetWorthRow } from '../components/home/MemberNetWorthRow'
+import { MemberWealthBreakdown } from '../components/home/MemberWealthBreakdown'
 import { NetWorthHero } from '../components/home/NetWorthHero'
 import { RecentHoldings } from '../components/home/RecentHoldings'
 import { NetWorthTrendChart } from '../components/charts/NetWorthTrendChart'
@@ -36,7 +37,7 @@ type Props = { onNavigate: (route: string) => void }
 
 export function HomePage({ onNavigate }: Props) {
   const fmtINR = useMaskedFmt()
-  const { householdId, dashboard, dashboardLoading, asOf, setAsOf, refreshDashboard, accounts } = useApp()
+  const { householdId, dashboard, dashboardLoading, asOf, setAsOf, refreshDashboard, accounts, categories } = useApp()
   const [excluded, setExcluded] = useState<Set<string>>(loadExcluded)
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null)
   const [memberHoldings, setMemberHoldings] = useState<DashboardHolding[]>([])
@@ -213,38 +214,20 @@ export function HomePage({ onNavigate }: Props) {
                     <MemberNetWorthRow member={m} householdTotal={parseFloat(dashboard.networth)} />
                   </button>
                   {isExpanded && (
-                    <div className="mt-2 ml-3 border-l-2 border-primary-200 pl-3 grid gap-3">
+                    <div className="mt-2 ml-3 border-l-2 border-primary-200 pl-3">
                       {memberHoldingsLoading ? (
                         <p className="py-2 text-xs text-slate-400">Loading {m.member_name}'s breakdown…</p>
+                      ) : memberHoldings.length === 0 && memberAccounts.length === 0 ? (
+                        <p className="py-2 text-xs text-slate-400">No holdings or accounts recorded for {m.member_name}.</p>
                       ) : (
-                        <>
-                          {memberAccounts.length > 0 && (
-                            <div>
-                              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Savings &amp; Accounts</p>
-                              <div className="grid gap-1">
-                                {memberAccounts.map((a) => (
-                                  <div key={a.account_id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                                    <div>
-                                      <p className="text-xs font-medium text-slate-700">{a.account_name}</p>
-                                      <p className="text-[10px] capitalize text-slate-400">{a.account_type.replace(/_/g, ' ')}</p>
-                                    </div>
-                                    <p className={`text-sm font-semibold tabular-nums ${parseFloat(a.balance) < 0 ? 'text-red-600' : 'text-slate-800'}`}>
-                                      {fmtINR(a.balance)}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {memberHoldings.length > 0 ? (
-                            <div>
-                              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Investments</p>
-                              <RecentHoldings holdings={memberHoldings} onViewAll={() => onNavigate('holdings')} />
-                            </div>
-                          ) : memberAccounts.length === 0 ? (
-                            <p className="py-2 text-xs text-slate-400">No holdings or accounts recorded for {m.member_name}.</p>
-                          ) : null}
-                        </>
+                        <MemberWealthBreakdown
+                          memberName={m.member_name}
+                          holdings={memberHoldings}
+                          accounts={memberAccounts}
+                          memberTotal={parseFloat(m.networth)}
+                          householdTotal={parseFloat(dashboard.networth)}
+                          categories={categories}
+                        />
                       )}
                     </div>
                   )}
