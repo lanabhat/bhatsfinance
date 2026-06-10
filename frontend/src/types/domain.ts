@@ -78,6 +78,8 @@ export type ParsedSmsTransaction = {
   classification?: TransactionClassification
   spend_category?: string
   merchant?: string
+  instrument?: string
+  quantity?: string
 }
 
 export type SmsMessage = {

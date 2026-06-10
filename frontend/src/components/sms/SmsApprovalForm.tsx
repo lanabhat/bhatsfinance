@@ -12,6 +12,7 @@ type Props = {
   message: SmsMessage
   accountOptions: OptionItem[]
   memberOptions: OptionItem[]
+  instrumentOptions: OptionItem[]
   onApproved: (transactionId: number | undefined) => void
   onCancel: () => void
 }
@@ -39,16 +40,18 @@ function ConfidencePill({ value }: { value: number | null }) {
   )
 }
 
-type ApprovalMode = 'transaction' | 'balance'
+type ApprovalMode = 'transaction' | 'balance' | 'investment'
 
-export function SmsApprovalForm({ message, accountOptions, memberOptions, onApproved, onCancel }: Props) {
+export function SmsApprovalForm({ message, accountOptions, memberOptions, instrumentOptions, onApproved, onCancel }: Props) {
   const { householdId } = useApp()
   const tx = message.parsed_tx ?? {}
 
-  // Guess initial mode: if the body contains "balance" keywords and no amount, default to balance
+  // Guess initial mode
   const bodyLower = message.body.toLowerCase()
   const looksLikeBalance = /\b(balance|avl bal|avail bal|available balance|closing bal)\b/.test(bodyLower) && !tx.amount
-  const [mode, setMode] = useState<ApprovalMode>(looksLikeBalance ? 'balance' : 'transaction')
+  const looksLikeSip = /\b(sip|mutual fund|mf|nav|units|folio)\b/.test(bodyLower)
+  const defaultMode: ApprovalMode = looksLikeBalance ? 'balance' : looksLikeSip ? 'investment' : 'transaction'
+  const [mode, setMode] = useState<ApprovalMode>(defaultMode)
 
   // Shared
   const [account, setAccount] = useState(tx.account ?? '')
@@ -67,6 +70,12 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
   // Balance fields
   const [balance, setBalance] = useState(tx.amount ?? '')
   const [balanceNotes, setBalanceNotes] = useState('')
+
+  // Investment fields
+  const [instrument, setInstrument] = useState(String(tx.instrument ?? ''))
+  const [investAmount, setInvestAmount] = useState(tx.amount ?? '')
+  const [investMember, setInvestMember] = useState(tx.member ?? (message.owner ? String(message.owner) : ''))
+  const [quantity, setQuantity] = useState('')
 
   const [spendCategories, setSpendCategories] = useState<ExpenseCategory[]>([])
   const [busy, setBusy] = useState(false)
@@ -92,6 +101,21 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
           valuation_date: txDate,
           notes: balanceNotes,
         })
+        onApproved(result.transaction_id)
+      } else if (mode === 'investment') {
+        if (!instrument) { setError('Select an instrument.'); setBusy(false); return }
+        if (!investAmount) { setError('Enter an amount.'); setBusy(false); return }
+        const overrides: SmsApprovalOverrides = {
+          account,
+          member: investMember || undefined,
+          direction: 'outflow',
+          amount: investAmount,
+          transaction_type: 'buy',
+          tx_date: txDate,
+          instrument,
+          ...(quantity ? { quantity } : {}),
+        }
+        const result = await smsApi.approveStaged(message.id, overrides)
         onApproved(result.transaction_id)
       } else {
         if (!amount) { setError('Enter an amount.'); setBusy(false); return }
@@ -129,7 +153,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
 
       {/* Mode toggle */}
       <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
-        {(['transaction', 'balance'] as ApprovalMode[]).map((m) => (
+        {(['transaction', 'balance', 'investment'] as ApprovalMode[]).map((m) => (
           <button
             key={m}
             type="button"
@@ -140,7 +164,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            {m === 'transaction' ? 'Record Transaction' : 'Record Balance'}
+            {m === 'transaction' ? 'Record Transaction' : m === 'balance' ? 'Record Balance' : 'Record Investment'}
           </button>
         ))}
       </div>
@@ -148,7 +172,9 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
       {/* Shared: Account + Date */}
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Account *</span>
+          <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+            {mode === 'investment' ? 'Debit Account *' : 'Account *'}
+          </span>
           <select value={account} onChange={(e) => setAccount(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
             <option value="">— select —</option>
             {accountOptions.map((a) => <option key={a.id} value={String(a.id)}>{a.label}</option>)}
@@ -186,6 +212,51 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
           </label>
           <p className="text-[11px] text-slate-400">
             Records a balance snapshot on the account — useful for tracking account balances from bank alerts.
+          </p>
+        </div>
+      ) : mode === 'investment' ? (
+        /* Investment mode */
+        <div className="grid gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Instrument (Fund / Stock) *</span>
+            <select value={instrument} onChange={(e) => setInstrument(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+              <option value="">— select instrument —</option>
+              {instrumentOptions.map((i) => <option key={i.id} value={String(i.id)}>{i.label}</option>)}
+            </select>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Amount Invested (INR) *</span>
+              <input
+                type="number"
+                step="0.01"
+                value={investAmount}
+                onChange={(e) => setInvestAmount(e.target.value)}
+                placeholder="e.g. 5000.00"
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Units Purchased</span>
+              <input
+                type="number"
+                step="0.000001"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="Optional"
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+              />
+            </label>
+          </div>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Member</span>
+            <select value={investMember} onChange={(e) => setInvestMember(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+              <option value="">— unassigned —</option>
+              {memberOptions.map((m) => <option key={m.id} value={String(m.id)}>{m.label}</option>)}
+            </select>
+          </label>
+          <p className="text-[11px] text-slate-400">
+            Records a <strong>buy</strong> transaction linked to both the debit account and the selected instrument.
           </p>
         </div>
       ) : (
@@ -247,13 +318,17 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, onAppr
 
       <div className="flex items-center justify-between">
         <Badge
-          label={mode === 'balance' ? 'Will record: Account balance snapshot' : `Will create: Ledger ${direction === 'inflow' ? 'income' : 'expense'} transaction`}
+          label={
+            mode === 'balance' ? 'Will record: Account balance snapshot'
+            : mode === 'investment' ? 'Will record: Instrument buy transaction'
+            : `Will create: Ledger ${direction === 'inflow' ? 'income' : 'expense'} transaction`
+          }
           color="blue"
         />
         <div className="flex gap-2">
           <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
           <Button onClick={handleApprove} loading={busy}>
-            {mode === 'balance' ? 'Save Balance' : 'Approve & Add to Ledger'}
+            {mode === 'balance' ? 'Save Balance' : mode === 'investment' ? 'Record Investment' : 'Approve & Add to Ledger'}
           </Button>
         </div>
       </div>

@@ -471,7 +471,8 @@ class SmsStagedActionView(APIView):
         overrides = request.data or {}
         tx_row = dict(msg.raw_payload.get('parsed_tx') or {})
         for field in ('account', 'member', 'direction', 'amount', 'transaction_type', 'tx_date', 'currency',
-                      'fees', 'taxes', 'external_reference', 'classification', 'spend_category'):
+                      'fees', 'taxes', 'external_reference', 'classification', 'spend_category',
+                      'instrument', 'quantity'):
             if field in overrides:
                 tx_row[field] = overrides[field]
 
@@ -492,11 +493,26 @@ class SmsStagedActionView(APIView):
         else:
             member = msg.owner
 
+        instrument = None
+        if tx_row.get('instrument'):
+            from instruments.models import Instrument as InstrumentModel
+            try:
+                instrument = InstrumentModel.objects.get(pk=int(tx_row['instrument']), household=household)
+            except (InstrumentModel.DoesNotExist, ValueError, TypeError):
+                return Response({'error': 'Invalid instrument'}, status=status.HTTP_400_BAD_REQUEST)
+
         classification = tx_row.get('classification', '')
         spend_category = tx_row.get('spend_category', '') if classification == 'spend' else ''
 
+        quantity = None
+        if tx_row.get('quantity'):
+            try:
+                quantity = Decimal(str(tx_row['quantity']))
+            except (InvalidOperation, TypeError):
+                pass
+
         try:
-            created = _Tx.objects.create(
+            create_kwargs = dict(
                 household=household,
                 member=member,
                 account=acc,
@@ -514,6 +530,11 @@ class SmsStagedActionView(APIView):
                 classification=classification,
                 spend_category=spend_category,
             )
+            if instrument is not None:
+                create_kwargs['instrument'] = instrument
+            if quantity is not None:
+                create_kwargs['quantity'] = quantity
+            created = _Tx.objects.create(**create_kwargs)
         except (InvalidOperation, KeyError, Exception) as ex:
             return Response({'error': f'Failed to create transaction: {ex}'}, status=status.HTTP_400_BAD_REQUEST)
 

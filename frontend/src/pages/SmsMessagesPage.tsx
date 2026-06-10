@@ -15,6 +15,7 @@ type Props = {
   canDelete: (e: DeleteEntity) => boolean
   accountOptions: OptionItem[]
   memberOptions: OptionItem[]
+  instrumentOptions: OptionItem[]
 }
 
 type CategoryFilter = 'all' | 'transaction' | 'otp' | 'sip_reminder' | 'promotion' | 'alert'
@@ -64,7 +65,7 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-export function SmsMessagesPage({ householdId, canDelete, accountOptions, memberOptions }: Props) {
+export function SmsMessagesPage({ householdId, canDelete, accountOptions, memberOptions, instrumentOptions }: Props) {
   const [messages, setMessages] = useState<SmsMessage[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -581,6 +582,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
             message={approving}
             accountOptions={accountOptions}
             memberOptions={memberOptions}
+            instrumentOptions={instrumentOptions}
             onApproved={() => {
               setApproving(null)
               setSelected(null)
