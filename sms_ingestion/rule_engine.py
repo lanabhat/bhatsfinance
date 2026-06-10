@@ -14,7 +14,6 @@ ConditionLeaf   { "field": "sender"|"body",
 All string comparisons are case-insensitive.
 """
 import re
-from datetime import date, datetime, timezone as dt_timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -111,12 +110,11 @@ def _extract(pattern: str, text: str) -> str:
 def apply_rule(rule: 'SmsRule', base_parsed_tx: dict, body: str, received_at: 'datetime | None' = None) -> dict:
     """
     Overlay rule's mapped fields onto base_parsed_tx.
-    Only non-blank rule fields override the base value.
-    Always sets tx_date (extracted from body, falling back to received_at or today)
-    and currency (defaulting to INR) so the approval form is never missing them.
+    Only sets fields the rule explicitly defines — date/currency/sender are
+    handled by _enrich_parsed_tx in views.py so they are always set regardless
+    of whether any rule matched.
     Returns a new dict (base_parsed_tx is not mutated).
     """
-    from sms_ingestion.templates import extract_date
     result = dict(base_parsed_tx)
 
     if rule.account_id:
@@ -148,17 +146,6 @@ def apply_rule(rule: 'SmsRule', base_parsed_tx: dict, body: str, received_at: 'd
     notes = _extract(rule.notes_regex, body)
     if notes:
         result['notes'] = notes
-
-    # Always populate tx_date and currency so the approval form is never blank
-    if not result.get('tx_date'):
-        if received_at is not None:
-            fallback = received_at.date() if hasattr(received_at, 'date') else received_at
-        else:
-            fallback = date.today()
-        result['tx_date'] = extract_date(body, fallback).isoformat()
-
-    if not result.get('currency'):
-        result['currency'] = 'INR'
 
     return result
 

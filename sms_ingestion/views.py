@@ -14,6 +14,31 @@ from sms_ingestion.serializers import SmsApiKeySerializer, SmsIngestSerializer, 
 from sms_ingestion.suggestions import record_observation
 
 
+def _enrich_parsed_tx(parsed_tx: dict, body: str, sender: str, received_at) -> dict:
+    """
+    Always populate the raw fields that come directly from the SMS itself —
+    tx_date (extracted from body, falling back to received_at) and sender.
+    These do not depend on any rule matching.
+    """
+    from sms_ingestion.templates import extract_date
+    from datetime import date
+
+    if not parsed_tx.get('tx_date'):
+        if received_at is not None:
+            fallback = received_at.date() if hasattr(received_at, 'date') else received_at
+        else:
+            fallback = date.today()
+        parsed_tx['tx_date'] = extract_date(body, fallback).isoformat()
+
+    if not parsed_tx.get('currency'):
+        parsed_tx['currency'] = 'INR'
+
+    if not parsed_tx.get('sender'):
+        parsed_tx['sender'] = sender
+
+    return parsed_tx
+
+
 class SmsApiKeyViewSet(viewsets.ModelViewSet):
     """
     Manage SMS-forwarder device credentials (admin/super_admin write access,
@@ -234,6 +259,7 @@ class SmsMessageViewSet(viewsets.ModelViewSet):
                 raw_payload['parsed_tx'] = apply_rule(matched_rule, {}, data['body'], data['timestamp'])
                 raw_payload['matched_rule_id'] = matched_rule.id
                 raw_payload['matched_rule_name'] = matched_rule.name
+            _enrich_parsed_tx(raw_payload['parsed_tx'], data['body'], data['sender'], data['timestamp'])
 
             _, was_created = SmsMessage.objects.get_or_create(
                 household=household,
@@ -287,6 +313,7 @@ class SmsMessageViewSet(viewsets.ModelViewSet):
                 raw_payload['parsed_tx'] = {}
                 raw_payload.pop('matched_rule_id', None)
                 raw_payload.pop('matched_rule_name', None)
+            _enrich_parsed_tx(raw_payload['parsed_tx'], msg.body, msg.sender, msg.received_at)
             msg.raw_payload = raw_payload
             msg.template_key = ''
             msg.confidence = None
@@ -324,13 +351,16 @@ class SmsIngestView(APIView):
         raw_payload = dict(request.data)
         raw_payload['parsed_tx'] = {}
 
-        # Apply user-defined rules — rules are the only source of parsed_tx pre-fill
+        # Apply user-defined rules — rules map the SMS to ledger fields
         rules = list(SmsRule.objects.filter(household=api_key.household, is_active=True))
         matched_rule = find_matching_rule(rules, data['sender'], data['body'])
         if matched_rule:
             raw_payload['parsed_tx'] = apply_rule(matched_rule, {}, data['body'], data['timestamp'])
             raw_payload['matched_rule_id'] = matched_rule.id
             raw_payload['matched_rule_name'] = matched_rule.name
+
+        # Always set date/currency/sender from raw SMS fields regardless of rule match
+        _enrich_parsed_tx(raw_payload['parsed_tx'], data['body'], data['sender'], data['timestamp'])
 
         msg, created = SmsMessage.objects.get_or_create(
             household=api_key.household,
