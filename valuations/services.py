@@ -104,7 +104,7 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
 
         # Fall back to net invested from transactions
         if value is None:
-            from transactions.models import Transaction
+            from ledger.models import Transaction
             from django.db.models import Sum
             txs = Transaction.objects.filter(instrument=instrument, tx_date__lte=as_of)
             inflow = txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
@@ -130,7 +130,7 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
             needs_manual.append({'name': instrument.name, 'type': instrument.instrument_type})
 
     # --- Accounts: carry forward last balance, else compute from opening_balance + transactions ---
-    from transactions.models import Transaction
+    from ledger.models import Transaction
     from django.db.models import Sum
 
     accounts = Account.objects.filter(household_id=household_id, is_active=True)
