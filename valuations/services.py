@@ -102,6 +102,18 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
                     carried_forward.append({'name': instrument.name, 'type': instrument.instrument_type, 'value': float(last.market_value)})
                     continue
 
+        # Fall back to net invested from transactions
+        if value is None:
+            from transactions.models import Transaction
+            from django.db.models import Sum
+            txs = Transaction.objects.filter(instrument=instrument, tx_date__lte=as_of)
+            inflow = txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
+            outflow = txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
+            net = Decimal(str(inflow)) - Decimal(str(outflow))
+            if net > ZERO:
+                value = net
+                method = 'transactions'
+
         if value is not None:
             ValuationSnapshot.objects.create(
                 household_id=household_id,
@@ -109,7 +121,7 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
                 valuation_date=as_of,
                 market_value=value,
                 source=ValuationSnapshot.SourceType.API,
-                notes='Auto-computed' if method == 'formula' else '',
+                notes='Auto-computed' if method == 'formula' else ('Net invested from transactions' if method == 'transactions' else ''),
             )
             (auto_computed if method == 'formula' else carried_forward).append(
                 {'name': instrument.name, 'type': instrument.instrument_type, 'value': float(value)}
@@ -117,7 +129,10 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
         else:
             needs_manual.append({'name': instrument.name, 'type': instrument.instrument_type})
 
-    # --- Accounts: carry forward last balance ---
+    # --- Accounts: carry forward last balance, else compute from opening_balance + transactions ---
+    from transactions.models import Transaction
+    from django.db.models import Sum
+
     accounts = Account.objects.filter(household_id=household_id, is_active=True)
     for account in accounts:
         last = (
@@ -127,17 +142,30 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
             .first()
         )
         if last is not None:
-            ValuationSnapshot.objects.create(
-                household_id=household_id,
-                account=account,
-                valuation_date=as_of,
-                balance=last.balance,
-                source=ValuationSnapshot.SourceType.API,
-                notes=f'Carried forward from {last.valuation_date}',
-            )
-            carried_forward.append({'name': account.name, 'type': account.account_type, 'value': float(last.balance)})
+            balance = last.balance
+            note = f'Carried forward from {last.valuation_date}'
+            bucket = carried_forward
         else:
-            needs_manual.append({'name': account.name, 'type': account.account_type})
+            # Compute from opening balance + all transactions up to as_of
+            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of)
+            inflow = txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
+            outflow = txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
+            if account.account_type == 'credit_card':
+                balance = max(Decimal(str(outflow)) - Decimal(str(inflow)), ZERO)
+            else:
+                balance = Decimal(str(account.opening_balance)) + Decimal(str(inflow)) - Decimal(str(outflow))
+            note = 'Computed from opening balance + transactions'
+            bucket = auto_computed
+
+        ValuationSnapshot.objects.create(
+            household_id=household_id,
+            account=account,
+            valuation_date=as_of,
+            balance=balance,
+            source=ValuationSnapshot.SourceType.API,
+            notes=note,
+        )
+        bucket.append({'name': account.name, 'type': account.account_type, 'value': float(balance)})
 
     # Compute and store total net worth
     from insights.services import compute_networth

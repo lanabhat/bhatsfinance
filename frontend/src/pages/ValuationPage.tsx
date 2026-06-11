@@ -214,14 +214,27 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
                 </div>
               )}
               {snapshotResult.needs_manual.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-amber-700 mb-1">⚠ Needs manual entry ({snapshotResult.needs_manual.length})</p>
+                <div className="grid gap-2">
+                  <p className="text-xs font-medium text-amber-700">⚠ Needs manual entry ({snapshotResult.needs_manual.length})</p>
                   <div className="flex flex-wrap gap-1">
                     {snapshotResult.needs_manual.map((x, i) => (
                       <span key={i} className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
                         {x.name}
                       </span>
                     ))}
+                  </div>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 grid gap-1.5">
+                    <p className="text-xs font-semibold text-amber-800">Why does this happen?</p>
+                    <p className="text-[11px] text-amber-700 leading-relaxed">
+                      These items have no transactions, no opening balance, and no prior snapshot — so there's nothing to compute from.
+                    </p>
+                    <p className="text-xs font-semibold text-amber-800 mt-1">How to fix</p>
+                    <ol className="text-[11px] text-amber-700 leading-relaxed list-decimal list-inside space-y-1">
+                      <li>Click <strong>+ Add Valuation</strong> above.</li>
+                      <li>Select the account or instrument.</li>
+                      <li>Enter the current balance or market value.</li>
+                      <li>Save — future snapshots will use this as the starting point automatically.</li>
+                    </ol>
                   </div>
                 </div>
               )}
