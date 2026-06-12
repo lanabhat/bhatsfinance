@@ -406,14 +406,23 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
 
     # Breakdown: by spend_category when filtering to spend; by classification otherwise
     if classification == 'spend':
+        from expenses.models import ExpenseCategory
+        cat_labels = dict(
+            ExpenseCategory.objects.filter(household_id=household_id).values_list('key', 'label')
+        )
         by_category_rows = (
             qs.values('spend_category')
             .annotate(amount=Sum('amount'))
             .order_by('-amount')
         )
         by_category = [
-            {'category': row['spend_category'], 'label': row['spend_category'], 'amount': float(row['amount'] or 0)}
+            {
+                'category': row['spend_category'] or '',
+                'label': cat_labels.get(row['spend_category'] or '', row['spend_category'] or 'Uncategorised'),
+                'amount': float(row['amount'] or 0),
+            }
             for row in by_category_rows
+            if row['spend_category'] and len(row['spend_category']) > 1  # skip corrupt single-char keys
         ]
     else:
         cls_labels = {'spend': 'Spend', 'income': 'Income', 'internal_transfer': 'Transfer', 'tracking': 'Tracking', '': 'Uncategorised'}
