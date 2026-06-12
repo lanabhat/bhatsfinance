@@ -108,6 +108,8 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
         tx_date: payload.tx_date,
         classification: payload.classification as SmsApprovalOverrides['classification'],
         spend_category: payload.spend_category ?? '',
+        description: payload.description ?? '',
+        notes: payload.notes ?? '',
         external_reference: '',
       }
       const result = await smsApi.approveStaged(message.id, overrides)

@@ -472,7 +472,7 @@ class SmsStagedActionView(APIView):
         tx_row = dict(msg.raw_payload.get('parsed_tx') or {})
         for field in ('account', 'member', 'direction', 'amount', 'transaction_type', 'tx_date', 'currency',
                       'fees', 'taxes', 'external_reference', 'classification', 'spend_category',
-                      'instrument', 'quantity'):
+                      'description', 'notes', 'merchant', 'instrument', 'quantity'):
             if field in overrides:
                 tx_row[field] = overrides[field]
 
@@ -524,7 +524,8 @@ class SmsStagedActionView(APIView):
                 fees=Decimal(tx_row.get('fees') or '0'),
                 taxes=Decimal(tx_row.get('taxes') or '0'),
                 external_reference=tx_row.get('external_reference', ''),
-                description=tx_row.get('merchant', '') or '',
+                description=tx_row.get('description') or tx_row.get('merchant', '') or '',
+                notes=tx_row.get('notes', '') or '',
                 source='api',
                 metadata={'sms_message_id': msg.pk, 'sms_sender': msg.sender},
                 classification=classification,
