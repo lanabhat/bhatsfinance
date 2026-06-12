@@ -386,6 +386,7 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
         year -= 1
     window_start = _date(year, month_idx, 1)
 
+
     qs = Transaction.objects.filter(
         household_id=household_id,
         tx_date__gte=window_start,
@@ -393,12 +394,28 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
     if classification:
         qs = qs.filter(classification=classification)
 
-    by_month_rows = (
-        qs.annotate(m=TruncMonth('tx_date'))
-        .values('m')
-        .annotate(amount=Sum('amount'))
-        .order_by('m')
-    )
+    # Only count outflow legs (spend/tracking/transfer debit side) and inflow legs (income/transfer credit side).
+    # Using outflow-only for spend keeps correction reversals from cancelling the original amount.
+    outflow_qs = qs.filter(direction='outflow')
+    inflow_qs = qs.filter(direction='inflow')
+
+    def _month_amounts(queryset):
+        return (
+            queryset.annotate(m=TruncMonth('tx_date'))
+            .values('m')
+            .annotate(amount=Sum('amount'))
+            .order_by('m')
+        )
+
+    if classification == 'income':
+        amount_qs = inflow_qs
+    elif classification in ('spend', 'tracking', None):
+        # For "all", aggregate per-classification correctly via by_month_category below
+        amount_qs = outflow_qs if classification else qs
+    else:
+        amount_qs = outflow_qs
+
+    by_month_rows = _month_amounts(outflow_qs if not classification else amount_qs)
     by_month = [
         {'month': row['m'].strftime('%Y-%m'), 'amount': float(row['amount'] or 0)}
         for row in by_month_rows
@@ -411,7 +428,7 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
             ExpenseCategory.objects.filter(household_id=household_id).values_list('key', 'label')
         )
         by_category_rows = (
-            qs.values('spend_category')
+            outflow_qs.values('spend_category')
             .annotate(amount=Sum('amount'))
             .order_by('-amount')
         )
@@ -424,24 +441,40 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
             for row in by_category_rows
             if row['spend_category'] and len(row['spend_category']) > 1  # skip corrupt single-char keys
         ]
-    else:
-        cls_labels = {'spend': 'Spend', 'income': 'Income', 'internal_transfer': 'Transfer', 'tracking': 'Tracking', '': 'Uncategorised'}
+    elif classification == 'income':
+        cls_labels = {'income': 'Income'}
         by_category_rows = (
-            qs.values('classification')
+            inflow_qs.values('classification')
             .annotate(amount=Sum('amount'))
             .order_by('-amount')
         )
         by_category = [
             {
                 'category': row['classification'] or '',
-                'label': cls_labels.get(row['classification'] or '', row['classification'] or 'Other'),
+                'label': cls_labels.get(row['classification'] or '', 'Other'),
                 'amount': float(row['amount'] or 0),
             }
             for row in by_category_rows
         ]
+    else:
+        # "All" mode: group by classification, use outflow for spend/tracking/transfer, inflow for income
+        cls_labels = {'spend': 'Spend', 'income': 'Income', 'internal_transfer': 'Transfer', 'tracking': 'Tracking', '': 'Uncategorised'}
+        cls_amounts: dict[str, float] = {}
+        for row in outflow_qs.values('classification').annotate(s=Sum('amount')):
+            if row['classification'] != 'income':
+                cls_amounts[row['classification'] or ''] = float(row['s'] or 0)
+        for row in inflow_qs.filter(classification='income').values('classification').annotate(s=Sum('amount')):
+            cls_amounts['income'] = float(row['s'] or 0)
+        by_category = [
+            {'category': k, 'label': cls_labels.get(k, k or 'Other'), 'amount': v}
+            for k, v in sorted(cls_amounts.items(), key=lambda x: -x[1])
+            if v > 0
+        ]
 
+    # By member: outflow for spend/tracking, inflow for income, outflow for all
+    member_qs = inflow_qs if classification == 'income' else outflow_qs
     by_member_rows = (
-        qs.values('member_id', 'member__full_name')
+        member_qs.values('member_id', 'member__full_name')
         .annotate(amount=Sum('amount'))
         .order_by('-amount')
     )
@@ -454,23 +487,55 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
         for row in by_member_rows
     ]
 
+    # by_month_category: for "all", break out each classification with correct direction
     group_field = 'spend_category' if classification == 'spend' else 'classification'
-    by_month_category_rows = (
-        qs.annotate(m=TruncMonth('tx_date'))
-        .values('m', group_field)
-        .annotate(amount=Sum('amount'))
-        .order_by('m', group_field)
-    )
-    by_month_category = [
-        {
-            'month': row['m'].strftime('%Y-%m'),
-            'category': row[group_field] or '',
-            'amount': float(row['amount'] or 0),
-        }
-        for row in by_month_category_rows
-    ]
+    if not classification:
+        # Build per-classification monthly amounts with correct direction per classification
+        mc_rows = []
+        for row in (
+            outflow_qs.exclude(classification='income')
+            .annotate(m=TruncMonth('tx_date'))
+            .values('m', 'classification')
+            .annotate(amount=Sum('amount'))
+            .order_by('m', 'classification')
+        ):
+            mc_rows.append({
+                'month': row['m'].strftime('%Y-%m'),
+                'category': row['classification'] or '',
+                'amount': float(row['amount'] or 0),
+            })
+        for row in (
+            inflow_qs.filter(classification='income')
+            .annotate(m=TruncMonth('tx_date'))
+            .values('m', 'classification')
+            .annotate(amount=Sum('amount'))
+            .order_by('m', 'classification')
+        ):
+            mc_rows.append({
+                'month': row['m'].strftime('%Y-%m'),
+                'category': 'income',
+                'amount': float(row['amount'] or 0),
+            })
+        by_month_category = mc_rows
+    else:
+        direction_qs = inflow_qs if classification == 'income' else outflow_qs
+        by_month_category_rows = (
+            direction_qs.annotate(m=TruncMonth('tx_date'))
+            .values('m', group_field)
+            .annotate(amount=Sum('amount'))
+            .order_by('m', group_field)
+        )
+        by_month_category = [
+            {
+                'month': row['m'].strftime('%Y-%m'),
+                'category': row[group_field] or '',
+                'amount': float(row['amount'] or 0),
+            }
+            for row in by_month_category_rows
+        ]
 
-    total = float(qs.aggregate(s=Sum('amount'))['s'] or 0)
+    total_qs = inflow_qs if classification == 'income' else outflow_qs
+    total = float(total_qs.aggregate(s=Sum('amount'))['s'] or 0)
 
     return {
         'by_month': by_month,
