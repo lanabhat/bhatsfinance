@@ -435,11 +435,11 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
         by_category = [
             {
                 'category': row['spend_category'] or '',
-                'label': cat_labels.get(row['spend_category'] or '', row['spend_category'] or 'Uncategorised'),
+                'label': cat_labels.get(row['spend_category'] or '', 'Uncategorised'),
                 'amount': float(row['amount'] or 0),
             }
             for row in by_category_rows
-            if row['spend_category'] and len(row['spend_category']) > 1  # skip corrupt single-char keys
+            if not row['spend_category'] or len(row['spend_category']) > 1  # keep empty/uncategorised, skip corrupt single-char
         ]
     elif classification == 'income':
         cls_labels = {'income': 'Income'}
