@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { ImportWizard } from './ImportWizard'
+import { useTerms } from '../context/TermsContext'
 import type { OptionItem } from '../types/domain'
 
 const ENTITY_LABELS: Array<{ key: DeleteEntity; label: string; warning?: string }> = [
@@ -17,7 +18,7 @@ const ENTITY_LABELS: Array<{ key: DeleteEntity; label: string; warning?: string 
   { key: 'tax_projection', label: 'Tax Projections' },
 ]
 
-type Tab = 'delete' | 'import'
+type Tab = 'display' | 'delete' | 'import'
 
 type Props = {
   deleteConfig: Record<DeleteEntity, boolean>
@@ -29,7 +30,8 @@ type Props = {
 }
 
 export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOptions, accountOptions, instrumentOptions }: Props) {
-  const [tab, setTab] = useState<Tab>('delete')
+  const [tab, setTab] = useState<Tab>('display')
+  const { mode, setMode } = useTerms()
 
   const tabCls = (t: Tab) =>
     `px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === t ? 'bg-primary-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`
@@ -37,9 +39,40 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
   return (
     <section className="grid single-col">
       <div className="mb-4 flex gap-2">
+        <button className={tabCls('display')} onClick={() => setTab('display')}>Display</button>
         <button className={tabCls('delete')} onClick={() => setTab('delete')}>Delete Permissions</button>
         <button className={tabCls('import')} onClick={() => setTab('import')}>Import Data</button>
       </div>
+
+      {tab === 'display' && (
+        <article className="panel">
+          <h2>Display Mode</h2>
+          <p style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Choose how menu labels and terminology appear throughout the app.
+          </p>
+          <div className="grid grid-cols-2 gap-3 max-w-sm">
+            {([
+              { value: 'simple', emoji: '🌱', label: 'Simple', desc: 'Easy language, beginner-friendly' },
+              { value: 'advanced', emoji: '📊', label: 'Advanced', desc: 'Financial terms, detailed analytics' },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setMode(opt.value)}
+                className={`flex flex-col items-center gap-2 rounded-xl border-2 p-5 text-center transition-all ${
+                  mode === opt.value
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-primary-300 hover:bg-slate-50'
+                }`}
+              >
+                <span className="text-3xl">{opt.emoji}</span>
+                <span className="font-semibold">{opt.label}</span>
+                <span className="text-xs text-slate-500">{opt.desc}</span>
+              </button>
+            ))}
+          </div>
+        </article>
+      )}
 
       {tab === 'import' && (
         <ImportWizard

@@ -17,15 +17,6 @@ type Props = {
   onCancel: () => void
 }
 
-const CLASSIFICATIONS = [
-  { value: '', label: '— none —' },
-  { value: 'spend', label: 'Spend' },
-  { value: 'income', label: 'Income' },
-  { value: 'internal_transfer', label: 'Internal Transfer' },
-  { value: 'tracking', label: 'Tracking Only' },
-]
-
-const TX_TYPES = ['other', 'deposit', 'withdrawal', 'buy', 'sell', 'dividend', 'interest', 'salary', 'emi', 'premium', 'cc_bill_payment']
 
 function ConfidencePill({ value }: { value: number | null }) {
   if (value === null) return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-400">No match</span>
@@ -61,10 +52,10 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
   const [member, setMember] = useState(tx.member ?? (message.owner ? String(message.owner) : ''))
   const [direction, setDirection] = useState<'inflow' | 'outflow'>(tx.direction || 'outflow')
   const [amount, setAmount] = useState(tx.amount ?? '')
-  const [txType, setTxType] = useState(tx.transaction_type || 'other')
-  const [classification, setClassification] = useState(tx.classification ?? '')
+  const [classification, setClassification] = useState<'' | 'spend' | 'income' | 'internal_transfer' | 'tracking'>(
+    (tx.classification as '' | 'spend' | 'income' | 'internal_transfer' | 'tracking') ?? ''
+  )
   const [spendCategory, setSpendCategory] = useState(tx.spend_category ?? '')
-  const [extRef, setExtRef] = useState(tx.external_reference ?? '')
   const [merchant, setMerchant] = useState(tx.merchant ?? '')
 
   // Balance fields
@@ -157,11 +148,11 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
           member: member || undefined,
           direction: direction as 'inflow' | 'outflow',
           amount,
-          transaction_type: txType,
+          transaction_type: classification === 'income' ? 'deposit' : classification === 'internal_transfer' ? 'withdrawal' : 'other',
           tx_date: txDate,
           classification: classification as SmsApprovalOverrides['classification'],
           spend_category: classification === 'spend' ? spendCategory : '',
-          external_reference: extRef,
+          external_reference: '',
           merchant,
         })
         onApproved(result.transaction_id)
@@ -315,12 +306,12 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
           <div>
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400 block mb-1.5">What kind of transaction?</span>
             <div className="grid grid-cols-2 gap-2">
-              {[
+              {([
                 { value: 'spend', label: '🛍 Spend', dir: 'outflow' as const },
                 { value: 'income', label: '💰 Income', dir: 'inflow' as const },
                 { value: 'internal_transfer', label: '🔄 Transfer', dir: 'outflow' as const },
                 { value: 'tracking', label: '👁 Tracking Only', dir: 'outflow' as const },
-              ].map((opt) => (
+              ] as { value: '' | 'spend' | 'income' | 'internal_transfer' | 'tracking'; label: string; dir: 'inflow' | 'outflow' }[]).map((opt) => (
                 <button
                   key={opt.value}
                   type="button"

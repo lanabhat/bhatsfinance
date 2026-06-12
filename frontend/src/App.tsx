@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AppLayout } from './components/layout/AppLayout'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { PrivacyProvider } from './context/PrivacyContext'
-import { TermsProvider, hasModePreference } from './context/TermsContext'
+import { TermsProvider } from './context/TermsContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './components/ui/Toast'
-import type { Mode } from './lib/terms'
 import { AlertsPage } from './pages/AlertsPage'
 import { AssetsPage } from './pages/AssetsPage'
 import { HoldingsPage } from './pages/HoldingsPage'
@@ -150,40 +149,6 @@ function AppInner() {
   )
 }
 
-function OnboardingModal({ onSelect }: { onSelect: (m: Mode) => void }) {
-  return (
-    <>
-      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" aria-hidden="true" />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-        <div className="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-8 text-center shadow-[var(--shadow-modal)]">
-          <p className="mb-1 text-2xl font-bold text-[var(--text)]">How do you want to use this app?</p>
-          <p className="mb-8 text-sm text-[var(--text-muted)]">You can change this any time in Settings.</p>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => onSelect('simple')}
-              className="flex flex-col items-center gap-2 rounded-xl border-2 border-[var(--border)] p-5 text-center transition-all hover:border-primary-500 hover:bg-[var(--surface-2)]"
-            >
-              <span className="text-3xl">🌱</span>
-              <span className="font-semibold text-[var(--text)]">Simple</span>
-              <span className="text-xs text-[var(--text-muted)]">Easy language, beginner-friendly</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onSelect('advanced')}
-              className="flex flex-col items-center gap-2 rounded-xl border-2 border-[var(--border)] p-5 text-center transition-all hover:border-primary-500 hover:bg-[var(--surface-2)]"
-            >
-              <span className="text-3xl">📊</span>
-              <span className="font-semibold text-[var(--text)]">Advanced</span>
-              <span className="text-xs text-[var(--text-muted)]">Financial terms, detailed analytics</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  )
-}
-
 function AuthGate() {
   const { user } = useAuth()
   if (user.authenticated === false && user.loading) {
@@ -203,24 +168,6 @@ function AuthGate() {
   )
 }
 
-function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const [showOnboarding, setShowOnboarding] = useState(() => !hasModePreference())
-  const [, forceUpdate] = useState(0)
-
-  const handleSelect = (m: Mode) => {
-    localStorage.setItem('ui:mode', m)
-    setShowOnboarding(false)
-    forceUpdate(n => n + 1)
-  }
-
-  return (
-    <>
-      {children}
-      {showOnboarding && <OnboardingModal onSelect={handleSelect} />}
-    </>
-  )
-}
-
 function App() {
   return (
     <ThemeProvider>
@@ -228,9 +175,7 @@ function App() {
         <ToastProvider>
           <PrivacyProvider>
             <AuthProvider>
-              <OnboardingGate>
-                <AuthGate />
-              </OnboardingGate>
+              <AuthGate />
             </AuthProvider>
           </PrivacyProvider>
         </ToastProvider>
