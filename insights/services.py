@@ -391,7 +391,11 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
         household_id=household_id,
         tx_date__gte=window_start,
     )
-    if classification:
+    if classification == 'spend':
+        # Include blank-classification outflows that have a spend_category — they're effectively spends
+        from django.db.models import Q
+        qs = qs.filter(Q(classification='spend') | Q(classification='', direction='outflow', spend_category__gt=''))
+    elif classification:
         qs = qs.filter(classification=classification)
 
     # Only count outflow legs (spend/tracking/transfer debit side) and inflow legs (income/transfer credit side).
@@ -435,7 +439,8 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
         by_category = [
             {
                 'category': row['spend_category'] or '',
-                'label': cat_labels.get(row['spend_category'] or '', 'Uncategorised'),
+                # Use DB label; fall back to the raw key so custom/unmapped categories are visible
+                'label': cat_labels.get(row['spend_category'] or '') or row['spend_category'] or 'Uncategorised',
                 'amount': float(row['amount'] or 0),
             }
             for row in by_category_rows
