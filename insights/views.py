@@ -94,7 +94,8 @@ class SpendAnalyticsView(APIView):
         if not household_id:
             return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
         months = int(request.query_params.get('months', 12))
-        return Response(compute_spend_analytics(int(household_id), months))
+        classification = request.query_params.get('classification') or None
+        return Response(compute_spend_analytics(int(household_id), months, classification))
 
 
 class MembersNetWorthView(APIView):

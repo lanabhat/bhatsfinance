@@ -10,23 +10,27 @@ type Props = { householdId: number }
 
 const WINDOW_OPTIONS = [3, 6, 12, 24]
 
+const CLASSIFICATION_TABS = [
+  { value: '',                   label: 'All',      color: '#6366f1' },
+  { value: 'spend',              label: 'Spend',    color: '#f43f5e' },
+  { value: 'income',             label: 'Income',   color: '#10b981' },
+  { value: 'internal_transfer',  label: 'Transfer', color: '#f59e0b' },
+  { value: 'tracking',           label: 'Tracking', color: '#64748b' },
+]
+
 const CATEGORY_COLORS: Record<string, string> = {
-  food: '#f43f5e',
-  transport: '#f59e0b',
-  utilities: '#0ea5e9',
-  entertainment: '#a855f7',
-  health: '#10b981',
-  shopping: '#ec4899',
-  education: '#6366f1',
-  rent: '#8b5cf6',
-  emi: '#ef4444',
-  other: '#64748b',
+  food: '#f43f5e', transport: '#f59e0b', utilities: '#0ea5e9',
+  entertainment: '#a855f7', health: '#10b981', shopping: '#ec4899',
+  education: '#6366f1', rent: '#8b5cf6', emi: '#ef4444', other: '#64748b',
+  spend: '#f43f5e', income: '#10b981', internal_transfer: '#f59e0b',
+  tracking: '#64748b', '': '#94a3b8',
 }
 
 export function SpendTrendsPage({ householdId }: Props) {
   const fmtINR = useMaskedFmt()
   const { hidden } = usePrivacy()
   const [months, setMonths] = useState(12)
+  const [classification, setClassification] = useState('')
   const [data, setData] = useState<SpendAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -35,12 +39,12 @@ export function SpendTrendsPage({ householdId }: Props) {
     let active = true
     setLoading(true)
     setError('')
-    expenseApi.fetchSpendAnalytics(householdId, months)
+    expenseApi.fetchSpendAnalytics(householdId, months, classification || undefined)
       .then((res) => { if (active) setData(res) })
       .catch((e) => { if (active) setError(normalizeApiError(e)) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [householdId, months])
+  }, [householdId, months, classification])
 
   const monthlyAvg = useMemo(() => {
     if (!data || data.by_month.length === 0) return 0
@@ -53,13 +57,39 @@ export function SpendTrendsPage({ householdId }: Props) {
   }, [data])
 
   const total = data?.total ?? 0
+  const activeTab = CLASSIFICATION_TABS.find(t => t.value === classification) ?? CLASSIFICATION_TABS[0]
+  const barColor = activeTab.color
+
+  const totalLabel = classification === 'income' ? 'Total Income'
+    : classification === 'spend' ? 'Total Spend'
+    : classification === 'internal_transfer' ? 'Total Transfers'
+    : classification === 'tracking' ? 'Total Tracked'
+    : 'Total Volume'
 
   return (
     <>
-      {/* Header / window selector */}
+      {/* Classification filter tabs */}
+      <div className="flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1">
+        {CLASSIFICATION_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            onClick={() => setClassification(tab.value)}
+            className={`flex-1 min-w-[4rem] rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+              classification === tab.value
+                ? 'bg-[var(--surface)] shadow-sm text-[var(--text)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Summary cards */}
       <section className="cards">
         <article className="card">
-          <h2>Total Spend</h2>
+          <h2>{totalLabel}</h2>
           <strong>{fmtINR(total)}</strong>
           <span className="muted" style={{ fontSize: '0.78rem' }}>last {months} months</span>
         </article>
@@ -86,11 +116,11 @@ export function SpendTrendsPage({ householdId }: Props) {
 
       {/* Monthly trend chart */}
       <article className="panel">
-        <h3>Monthly Spend Trend</h3>
+        <h3>Monthly Trend — {activeTab.label}</h3>
         {loading ? (
           <p className="muted">Loading…</p>
         ) : !data || data.by_month.length === 0 ? (
-          <p className="muted">No expenses recorded in this window.</p>
+          <p className="muted">No transactions in this window.</p>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={data.by_month} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
@@ -98,19 +128,19 @@ export function SpendTrendsPage({ householdId }: Props) {
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => hidden ? '••' : `₹${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v) => fmtINR(Number(v))} />
-              <Bar dataKey="amount" name="Spend" fill="#f43f5e" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="amount" name={activeTab.label} fill={barColor} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}
       </article>
 
-      {/* By category */}
+      {/* Breakdown */}
       <article className="panel">
-        <h3>By Category</h3>
+        <h3>{classification === 'spend' ? 'By Category' : 'By Classification'}</h3>
         {loading ? (
           <p className="muted">Loading…</p>
         ) : !data || data.by_category.length === 0 ? (
-          <p className="muted">No category data.</p>
+          <p className="muted">No data.</p>
         ) : (
           <ul className="simple-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {data.by_category.map((row) => {
@@ -137,7 +167,7 @@ export function SpendTrendsPage({ householdId }: Props) {
 
       {/* By member */}
       <article className="panel">
-        <h3>By Member (Paid By)</h3>
+        <h3>By Member</h3>
         {loading ? (
           <p className="muted">Loading…</p>
         ) : !data || data.by_member.length === 0 ? (
@@ -156,7 +186,7 @@ export function SpendTrendsPage({ householdId }: Props) {
                     </span>
                   </div>
                   <div style={{ height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: '#4f46e5' }} />
+                    <div style={{ width: `${pct}%`, height: '100%', background: barColor }} />
                   </div>
                 </li>
               )

@@ -364,8 +364,14 @@ def compute_cashflow(household_id: int, year: int, month: int | None = None) -> 
     return result
 
 
-def compute_spend_analytics(household_id: int, months: int = 12) -> dict:
-    """Return spend analytics for the trailing `months` months (inclusive of current)."""
+def compute_spend_analytics(household_id: int, months: int = 12, classification: str | None = None) -> dict:
+    """Return transaction analytics for the trailing `months` months.
+
+    When `classification` is given (e.g. 'spend', 'income') only that type
+    is included. When None, all classifications are included.
+    The by_category breakdown groups by spend_category for spend-only queries,
+    and by classification for all-transactions queries.
+    """
     from datetime import date as _date
     from django.db.models import Sum
     from django.db.models.functions import TruncMonth
@@ -382,9 +388,10 @@ def compute_spend_analytics(household_id: int, months: int = 12) -> dict:
 
     qs = Transaction.objects.filter(
         household_id=household_id,
-        classification=Transaction.Classification.SPEND,
         tx_date__gte=window_start,
     )
+    if classification:
+        qs = qs.filter(classification=classification)
 
     by_month_rows = (
         qs.annotate(m=TruncMonth('tx_date'))
@@ -397,19 +404,32 @@ def compute_spend_analytics(household_id: int, months: int = 12) -> dict:
         for row in by_month_rows
     ]
 
-    by_category_rows = (
-        qs.values('spend_category')
-        .annotate(amount=Sum('amount'))
-        .order_by('-amount')
-    )
-    by_category = [
-        {
-            'category': row['spend_category'],
-            'label': row['spend_category'],
-            'amount': float(row['amount'] or 0),
-        }
-        for row in by_category_rows
-    ]
+    # Breakdown: by spend_category when filtering to spend; by classification otherwise
+    if classification == 'spend':
+        by_category_rows = (
+            qs.values('spend_category')
+            .annotate(amount=Sum('amount'))
+            .order_by('-amount')
+        )
+        by_category = [
+            {'category': row['spend_category'], 'label': row['spend_category'], 'amount': float(row['amount'] or 0)}
+            for row in by_category_rows
+        ]
+    else:
+        cls_labels = {'spend': 'Spend', 'income': 'Income', 'internal_transfer': 'Transfer', 'tracking': 'Tracking', '': 'Uncategorised'}
+        by_category_rows = (
+            qs.values('classification')
+            .annotate(amount=Sum('amount'))
+            .order_by('-amount')
+        )
+        by_category = [
+            {
+                'category': row['classification'] or '',
+                'label': cls_labels.get(row['classification'] or '', row['classification'] or 'Other'),
+                'amount': float(row['amount'] or 0),
+            }
+            for row in by_category_rows
+        ]
 
     by_member_rows = (
         qs.values('member_id', 'member__full_name')
@@ -425,16 +445,17 @@ def compute_spend_analytics(household_id: int, months: int = 12) -> dict:
         for row in by_member_rows
     ]
 
+    group_field = 'spend_category' if classification == 'spend' else 'classification'
     by_month_category_rows = (
         qs.annotate(m=TruncMonth('tx_date'))
-        .values('m', 'spend_category')
+        .values('m', group_field)
         .annotate(amount=Sum('amount'))
-        .order_by('m', 'spend_category')
+        .order_by('m', group_field)
     )
     by_month_category = [
         {
             'month': row['m'].strftime('%Y-%m'),
-            'category': row['spend_category'],
+            'category': row[group_field] or '',
             'amount': float(row['amount'] or 0),
         }
         for row in by_month_category_rows
@@ -448,6 +469,7 @@ def compute_spend_analytics(household_id: int, months: int = 12) -> dict:
         'by_member': by_member,
         'by_month_category': by_month_category,
         'total': total,
+        'classification': classification or 'all',
         'window': {
             'start': window_start.isoformat(),
             'end': today.isoformat(),

@@ -35,8 +35,8 @@ export const expenseApi = {
   createRecorded: (data: RecordTransactionPayload) =>
     postJson<Transaction>('/api/transactions/', data),
 
-  fetchSpendAnalytics: (householdId: number, months: number = 12) =>
-    getJson<SpendAnalytics>(`/api/spend-analytics?${toQueryString({ household_id: householdId, months })}`),
+  fetchSpendAnalytics: (householdId: number, months: number = 12, classification?: string) =>
+    getJson<SpendAnalytics>(`/api/spend-analytics?${toQueryString({ household_id: householdId, months, ...(classification ? { classification } : {}) })}`),
 
   listCategories: (householdId: number) =>
     getJson<ExpenseCategory[]>(`/api/expense-categories/?${toQueryString({ household: householdId })}`).then(unwrapList),
