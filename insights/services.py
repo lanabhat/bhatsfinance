@@ -439,12 +439,10 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
         by_category = [
             {
                 'category': row['spend_category'] or '',
-                # Use DB label; fall back to the raw key so custom/unmapped categories are visible
                 'label': cat_labels.get(row['spend_category'] or '') or row['spend_category'] or 'Uncategorised',
                 'amount': float(row['amount'] or 0),
             }
             for row in by_category_rows
-            if not row['spend_category'] or len(row['spend_category']) > 1  # keep empty/uncategorised, skip corrupt single-char
         ]
     elif classification == 'income':
         cls_labels = {'income': 'Income'}
