@@ -576,22 +576,20 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
         )}
       </Drawer>
 
-      <Drawer open={approving !== null} onClose={() => setApproving(null)} title="Approve SMS → Add to Ledger" width="w-full max-w-lg">
-        {approving && (
-          <SmsApprovalForm
-            message={approving}
-            accountOptions={accountOptions}
-            memberOptions={memberOptions}
-            instrumentOptions={instrumentOptions}
-            onApproved={() => {
-              setApproving(null)
-              setSelected(null)
-              load()
-            }}
-            onCancel={() => setApproving(null)}
-          />
-        )}
-      </Drawer>
+      {approving && (
+        <SmsApprovalForm
+          message={approving}
+          accountOptions={accountOptions}
+          memberOptions={memberOptions}
+          instrumentOptions={instrumentOptions}
+          onApproved={() => {
+            setApproving(null)
+            setSelected(null)
+            load()
+          }}
+          onCancel={() => setApproving(null)}
+        />
+      )}
     </div>
   )
 }
