@@ -50,9 +50,9 @@ export function EditSpendDialog({ open, transaction, categories, memberOptions, 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-xl">
-        <h2 className="mb-1 text-base font-semibold text-[var(--text)]">Edit spend</h2>
+        <h2 className="mb-1 text-base font-semibold text-[var(--text)]">Edit transaction</h2>
         <p className="mb-4 text-xs text-[var(--text-muted)]">
-          Transactions are immutable — saving will reverse the original entry and record a corrected replacement.
+          Changing amount or account creates a corrected replacement. Other fields update in place.
         </p>
 
         <div className="space-y-3">

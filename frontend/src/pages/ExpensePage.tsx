@@ -104,22 +104,36 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
     setEditSaving(true)
     setEditError('')
     try {
-      await ledgerApi.correctTransaction({
-        originalTransactionId: editingTx.id,
-        corrected: {
-          household: householdId,
-          member: patch.member,
-          account: patch.account,
+      const amountChanged = patch.amount !== editingTx.amount
+      const accountChanged = patch.account !== editingTx.account
+      if (amountChanged || accountChanged) {
+        // Financial fields changed — use correction flow (reversal + replacement)
+        await ledgerApi.correctTransaction({
+          originalTransactionId: editingTx.id,
+          corrected: {
+            household: householdId,
+            member: patch.member,
+            account: patch.account,
+            tx_date: patch.tx_date,
+            amount: patch.amount,
+            direction: editingTx.direction,
+            transaction_type: editingTx.transaction_type,
+            classification: editingTx.classification,
+            spend_category: patch.spend_category,
+            description: patch.description,
+            notes: patch.notes,
+          },
+        })
+      } else {
+        // Metadata-only change — direct update, no reversal needed
+        await ledgerApi.updateTransaction(editingTx.id, {
           tx_date: patch.tx_date,
-          amount: patch.amount,
-          direction: editingTx.direction,
-          transaction_type: editingTx.transaction_type,
-          classification: editingTx.classification,
+          member: patch.member,
           spend_category: patch.spend_category,
           description: patch.description,
           notes: patch.notes,
-        },
-      })
+        })
+      }
       setEditingTx(null)
       await loadData()
     } catch (e) {
@@ -195,7 +209,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-[var(--text)]">Spending</h1>
+          <h1 className="text-lg font-semibold text-[var(--text)]">Transactions</h1>
           <p className="text-sm text-[var(--text-muted)]">{thisMonth}</p>
         </div>
         <div className="flex items-center gap-2">

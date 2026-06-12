@@ -45,7 +45,7 @@ const TABS: Tab[] = [
   },
   {
     key: 'expenses',
-    label: 'Spending',
+    label: 'Transactions',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5">
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75l-2.489-2.489m0 0a3.375 3.375 0 10-4.773-4.773 3.375 3.375 0 004.774 4.774zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -97,7 +97,7 @@ const SECONDARY_KEYS = new Set(['instruments', 'ledger', 'cashflow', 'alerts', '
 const MOBILE_SECONDARY_KEYS = new Set([...SECONDARY_KEYS, 'spend-trends'])
 
 const PAGE_TITLES: Record<string, string> = {
-  home: 'Home', holdings: 'Investments', accounts: 'Accounts', expenses: 'Spending', settings: 'Settings',
+  home: 'Home', holdings: 'Investments', accounts: 'Accounts', expenses: 'Transactions', settings: 'Settings',
   instruments: 'Instruments', ledger: 'Ledger', cashflow: 'Cash Flow', 'spend-trends': 'Spend Trends', alerts: 'Alerts', tax: 'Tax',
   valuation: 'Valuation', insurance: 'Insurance', household: 'Household & Members', maintenance: 'Maintenance',
   'manage-instruments': 'Manage Instruments', 'manage-accounts': 'Manage Accounts',
@@ -156,7 +156,7 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
     const map: Record<string, string> = {
       holdings: isSimple ? t('holdings') : 'Investments',
       accounts: isSimple ? t('accounts') : 'Accounts',
-      expenses: isSimple ? t('expense') : 'Spending',
+      expenses: isSimple ? t('expense') : 'Transactions',
       home: 'Home',
       'spend-trends': isSimple ? t('spend_trends') : 'Trends',
       settings: 'Settings',

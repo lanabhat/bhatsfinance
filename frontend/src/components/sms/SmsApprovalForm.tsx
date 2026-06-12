@@ -309,54 +309,82 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
           </p>
         </div>
       ) : (
-        /* Transaction mode */
-        <div className="grid grid-cols-2 gap-3 min-w-0">
-          <label className="flex min-w-0 flex-col gap-1">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Member</span>
-            <select value={member} onChange={(e) => setMember(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
-              <option value="">— unassigned —</option>
-              {memberOptions.map((m) => <option key={m.id} value={String(m.id)}>{m.label}</option>)}
-            </select>
-          </label>
-          <label className="flex min-w-0 flex-col gap-1">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Direction *</span>
-            <select value={direction} onChange={(e) => setDirection(e.target.value as 'inflow' | 'outflow')} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
-              <option value="outflow">Outflow (Debit)</option>
-              <option value="inflow">Inflow (Credit)</option>
-            </select>
-          </label>
-          <label className="flex min-w-0 flex-col gap-1">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Amount (INR) *</span>
-            <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
-          </label>
-          <label className="flex min-w-0 flex-col gap-1">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Type</span>
-            <select value={txType} onChange={(e) => setTxType(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
-              {TX_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </label>
-          <label className="flex min-w-0 flex-col gap-1">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Classification</span>
-            <select value={classification} onChange={(e) => setClassification(e.target.value as typeof classification)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
-              {CLASSIFICATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          </label>
-          {classification === 'spend' ? (
-            <label className="flex min-w-0 flex-col gap-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Spend Category</span>
-              <select value={spendCategory} onChange={(e) => setSpendCategory(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
-                <option value="">— select —</option>
-                {spendCategories.map((c) => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
+        /* Transaction mode — same structure as QuickExpenseForm */
+        <div className="grid gap-3 min-w-0">
+          {/* Classification — first choice, drives everything else */}
+          <div>
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400 block mb-1.5">What kind of transaction?</span>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: 'spend', label: '🛍 Spend', dir: 'outflow' as const },
+                { value: 'income', label: '💰 Income', dir: 'inflow' as const },
+                { value: 'internal_transfer', label: '🔄 Transfer', dir: 'outflow' as const },
+                { value: 'tracking', label: '👁 Tracking Only', dir: 'outflow' as const },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => { setClassification(opt.value); setDirection(opt.dir) }}
+                  className={`rounded-lg border px-3 py-2 text-xs font-medium text-left transition-colors ${
+                    classification === opt.value
+                      ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Amount + Member */}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Amount (INR) *</span>
+              <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Member</span>
+              <select value={member} onChange={(e) => setMember(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+                <option value="">— unassigned —</option>
+                {memberOptions.map((m) => <option key={m.id} value={String(m.id)}>{m.label}</option>)}
               </select>
             </label>
-          ) : <div />}
-          <label className="flex min-w-0 flex-col gap-1">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Merchant / Payee</span>
-            <input type="text" value={merchant} onChange={(e) => setMerchant(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
-          </label>
-          <label className="flex min-w-0 flex-col gap-1">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Reference</span>
-            <input type="text" value={extRef} onChange={(e) => setExtRef(e.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
+          </div>
+
+          {/* Category — only for spend */}
+          {classification === 'spend' && (
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Category</span>
+              <div className="flex flex-wrap gap-1.5">
+                {spendCategories.map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => setSpendCategory(c.key)}
+                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                      spendCategory === c.key
+                        ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {c.icon} {c.label}
+                  </button>
+                ))}
+              </div>
+            </label>
+          )}
+
+          {/* Description / Merchant */}
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Description</span>
+            <input
+              type="text"
+              value={merchant}
+              onChange={(e) => setMerchant(e.target.value)}
+              placeholder={classification === 'income' ? 'e.g. Salary, Freelance' : 'e.g. Merchant name or note'}
+              className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+            />
           </label>
         </div>
       )}
