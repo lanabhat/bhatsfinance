@@ -6,6 +6,7 @@ import { DeleteButton } from '../components/common/DeleteButton'
 import { QuickExpenseForm } from '../components/expenses/QuickExpenseForm'
 import { ReassignDialog } from '../components/expenses/ReassignDialog'
 import { EditSpendDialog } from '../components/expenses/EditSpendDialog'
+import { EmojiPicker } from '../components/expenses/EmojiPicker'
 import { Drawer } from '../components/ui/Drawer'
 import { useAuth } from '../context/AuthContext'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
@@ -42,6 +43,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   const [newKey, setNewKey] = useState('')
   const [showNewForm, setShowNewForm] = useState(false)
   const [reassignTarget, setReassignTarget] = useState<ExpenseCategory | null>(null)
+  const [pickerFor, setPickerFor] = useState<'edit' | 'new' | null>(null)
 
   // Edit spend state
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
@@ -398,12 +400,17 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
             <div key={cat.key} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]">
               {editingCat?.id === cat.id ? (
                 <div className="flex items-center gap-2 p-3">
-                  <input
-                    className="w-12 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-center text-base focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    value={editIcon}
-                    onChange={e => setEditIcon(e.target.value)}
-                    maxLength={4}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setPickerFor('edit')}
+                    className="w-12 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xl flex items-center justify-center hover:bg-[var(--surface-2)] transition-colors"
+                    title="Choose icon"
+                  >
+                    {editIcon || '📌'}
+                  </button>
+                  {pickerFor === 'edit' && (
+                    <EmojiPicker value={editIcon} onChange={setEditIcon} onClose={() => setPickerFor(null)} />
+                  )}
                   <input
                     className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                     value={editLabel}
@@ -453,13 +460,17 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
             <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
               <p className="mb-2 text-xs font-semibold text-[var(--text-2)]">New Category</p>
               <div className="flex gap-2">
-                <input
-                  className="w-12 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-center text-base focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="📌"
-                  value={newIcon}
-                  onChange={e => setNewIcon(e.target.value)}
-                  maxLength={4}
-                />
+                <button
+                  type="button"
+                  onClick={() => setPickerFor('new')}
+                  className="w-12 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xl flex items-center justify-center hover:bg-[var(--surface-2)] transition-colors"
+                  title="Choose icon"
+                >
+                  {newIcon || '📌'}
+                </button>
+                {pickerFor === 'new' && (
+                  <EmojiPicker value={newIcon} onChange={setNewIcon} onClose={() => setPickerFor(null)} />
+                )}
                 <input
                   className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="Label (e.g. Travel)"
