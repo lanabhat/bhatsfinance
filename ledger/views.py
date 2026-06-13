@@ -7,10 +7,35 @@ from ledger.models import Transaction
 from ledger.serializers import TransactionSerializer
 
 
+MUTABLE_FIELDS = {'tx_date', 'member', 'spend_category', 'description', 'notes', 'classification'}
+
+
 class TransactionViewSet(viewsets.ModelViewSet):
     queryset = Transaction.objects.select_related('household', 'account', 'instrument', 'member').all()
     serializer_class = TransactionSerializer
     filterset_fields = ['household', 'account', 'instrument', 'member', 'source', 'transaction_type', 'classification']
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        unknown = set(request.data.keys()) - MUTABLE_FIELDS
+        if unknown:
+            return Response({'detail': f'Fields not editable in-place: {", ".join(sorted(unknown))}'}, status=400)
+        update_kwargs = {}
+        if 'tx_date' in request.data:
+            update_kwargs['tx_date'] = request.data['tx_date']
+        if 'member' in request.data:
+            update_kwargs['member_id'] = request.data['member']
+        if 'spend_category' in request.data:
+            update_kwargs['spend_category'] = request.data['spend_category']
+        if 'description' in request.data:
+            update_kwargs['description'] = request.data['description']
+        if 'notes' in request.data:
+            update_kwargs['notes'] = request.data['notes']
+        if 'classification' in request.data:
+            update_kwargs['classification'] = request.data['classification']
+        Transaction.objects.filter(pk=instance.pk).update(**update_kwargs)
+        instance.refresh_from_db()
+        return Response(TransactionSerializer(instance).data)
 
 
 class CashWithdrawalView(APIView):
