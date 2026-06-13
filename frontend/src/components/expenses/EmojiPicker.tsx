@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 type Props = {
   value: string
@@ -84,13 +85,13 @@ export function EmojiPicker({ value, onChange, onClose }: Props) {
       })
     : null
 
-  return (
+  return createPortal(
     <>
       {/* backdrop */}
-      <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
       {/* panel */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
         <div className="relative w-full max-w-sm rounded-2xl bg-[var(--surface)] shadow-xl overflow-hidden">
           {/* header */}
           <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3">
@@ -135,7 +136,8 @@ export function EmojiPicker({ value, onChange, onClose }: Props) {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   )
 }
 
