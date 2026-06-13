@@ -15,7 +15,12 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         hid = self.request.query_params.get('household')
-        return ExpenseCategory.objects.filter(household_id=hid) if hid else ExpenseCategory.objects.none()
+        if hid:
+            return ExpenseCategory.objects.filter(household_id=hid)
+        # Detail actions (retrieve/update/delete) use pk — return all so get_object() can find by pk
+        if self.action in ('retrieve', 'update', 'partial_update', 'destroy'):
+            return ExpenseCategory.objects.all()
+        return ExpenseCategory.objects.none()
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
