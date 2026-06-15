@@ -135,7 +135,7 @@ function LeafEditor({
       <select
         value={leaf.field}
         onChange={(e) => onChange(path, { ...leaf, field: e.target.value as 'sender' | 'body' })}
-        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+        className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs"
       >
         <option value="sender">sender</option>
         <option value="body">body</option>
@@ -143,7 +143,7 @@ function LeafEditor({
       <select
         value={leaf.op}
         onChange={(e) => onChange(path, { ...leaf, op: e.target.value as ConditionLeaf['op'] })}
-        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+        className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs"
       >
         {LEAF_OPS.map((op) => <option key={op} value={op}>{LEAF_OP_LABELS[op]}</option>)}
       </select>
@@ -151,7 +151,7 @@ function LeafEditor({
         value={leaf.value}
         onChange={(e) => onChange(path, { ...leaf, value: e.target.value })}
         placeholder="value"
-        className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-mono"
+        className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs font-mono"
       />
       <button
         type="button"
@@ -185,7 +185,7 @@ function GroupEditor({
   onUngroup: (path: Path) => void
 }) {
   const isRoot = path.length === 0
-  const indent = depth > 0 ? 'ml-4 border-l-2 border-slate-200 pl-3' : ''
+  const indent = depth > 0 ? 'ml-4 border-l-2 border-[var(--border)] pl-3' : ''
 
   return (
     <div className={`grid gap-1.5 ${indent}`}>
@@ -208,7 +208,7 @@ function GroupEditor({
             <button
               type="button"
               onClick={() => onUngroup(path)}
-              className="text-[11px] text-slate-400 hover:text-slate-700"
+              className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-2)]"
               title="Promote children to parent"
             >
               ungroup
@@ -255,14 +255,14 @@ function GroupEditor({
         <button
           type="button"
           onClick={() => onAddLeaf(path)}
-          className="rounded-md border border-dashed border-slate-300 px-2 py-1 text-[11px] text-slate-500 hover:border-slate-400 hover:text-slate-700"
+          className="rounded-md border border-dashed border-[var(--border-2)] px-2 py-1 text-[11px] text-[var(--text-muted)] hover:border-[var(--border-2)] hover:text-[var(--text-2)]"
         >
           + Condition
         </button>
         <button
           type="button"
           onClick={() => onAddGroup(path)}
-          className="rounded-md border border-dashed border-slate-300 px-2 py-1 text-[11px] text-slate-500 hover:border-slate-400 hover:text-slate-700"
+          className="rounded-md border border-dashed border-[var(--border-2)] px-2 py-1 text-[11px] text-[var(--text-muted)] hover:border-[var(--border-2)] hover:text-[var(--text-2)]"
         >
           + Sub-group
         </button>
@@ -306,19 +306,19 @@ function RegexField({
 
   return (
     <div className="grid gap-1">
-      <span className="text-[11px] font-medium text-slate-600">{label}</span>
+      <span className="text-[11px] font-medium text-[var(--text-2)]">{label}</span>
       <div className="flex gap-1.5">
         <input
           value={value}
           onChange={(e) => { onChange(e.target.value); setResult(null) }}
           placeholder={`e.g. (?:Rs\\.?|INR)\\s*([\\d,]+\\.?\\d*)`}
-          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-mono"
+          className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-mono"
           spellCheck={false}
         />
         <button
           type="button"
           onClick={testInline}
-          className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] text-slate-600 hover:bg-slate-50"
+          className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] text-[var(--text-2)] hover:bg-[var(--surface-2)]"
           title="Test regex against sample body below"
         >
           ▶ Test
@@ -476,28 +476,28 @@ function RuleEditor({
       <section className="grid gap-3">
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="sm:col-span-2">
-            <label className="text-xs font-medium text-slate-700">
+            <label className="text-xs font-medium text-[var(--text-2)]">
               Rule name *
               <input
                 value={draft.name}
                 onChange={(e) => set('name', e.target.value)}
                 placeholder="e.g. HDFC debit card spend"
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
               />
             </label>
           </div>
-          <label className="text-xs font-medium text-slate-700">
+          <label className="text-xs font-medium text-[var(--text-2)]">
             Priority
             <input
               type="number"
               value={draft.priority}
               onChange={(e) => set('priority', parseInt(e.target.value) || 0)}
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
             />
-            <p className="mt-0.5 text-[11px] text-slate-400">Lower = evaluated first</p>
+            <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Lower = evaluated first</p>
           </label>
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+        <label className="flex items-center gap-2 text-sm text-[var(--text-2)] cursor-pointer select-none">
           <input
             type="checkbox"
             checked={draft.is_active}
@@ -510,8 +510,8 @@ function RuleEditor({
 
       {/* Conditions */}
       <section>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Conditions</h4>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Conditions</h4>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
           <GroupEditor
             group={draft.conditions}
             path={[]}
@@ -527,26 +527,26 @@ function RuleEditor({
 
       {/* Field mapping */}
       <section>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Field Mapping</h4>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Field Mapping</h4>
         <div className="grid gap-3">
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs font-medium text-slate-700">
+            <label className="text-xs font-medium text-[var(--text-2)]">
               Account
               <select
                 value={String(draft.account ?? '')}
                 onChange={(e) => set('account', e.target.value ? Number(e.target.value) : null)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
               >
                 <option value="">— no override —</option>
                 {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
               </select>
             </label>
-            <label className="text-xs font-medium text-slate-700">
+            <label className="text-xs font-medium text-[var(--text-2)]">
               Member
               <select
                 value={String(draft.member ?? '')}
                 onChange={(e) => set('member', e.target.value ? Number(e.target.value) : null)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
               >
                 <option value="">— no override —</option>
                 {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
@@ -554,24 +554,24 @@ function RuleEditor({
             </label>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs font-medium text-slate-700">
+            <label className="text-xs font-medium text-[var(--text-2)]">
               Direction
               <select
                 value={draft.direction}
                 onChange={(e) => set('direction', e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
               >
                 <option value="">— no override —</option>
                 <option value="outflow">Outflow (expense)</option>
                 <option value="inflow">Inflow (income)</option>
               </select>
             </label>
-            <label className="text-xs font-medium text-slate-700">
+            <label className="text-xs font-medium text-[var(--text-2)]">
               Transaction type
               <select
                 value={draft.transaction_type}
                 onChange={(e) => set('transaction_type', e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
               >
                 <option value="">— no override —</option>
                 {TX_TYPES.filter(Boolean).map((t) => <option key={t} value={t}>{t}</option>)}
@@ -579,23 +579,23 @@ function RuleEditor({
             </label>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs font-medium text-slate-700">
+            <label className="text-xs font-medium text-[var(--text-2)]">
               Classification
               <select
                 value={draft.classification}
                 onChange={(e) => set('classification', e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
               >
                 {CLASSIFICATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </label>
             {showSpendCategory && (
-              <label className="text-xs font-medium text-slate-700">
+              <label className="text-xs font-medium text-[var(--text-2)]">
                 Spend category
                 <select
                   value={draft.spend_category}
                   onChange={(e) => set('spend_category', e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
                 >
                   <option value="">— no override —</option>
                   {SPEND_CATEGORIES.filter(Boolean).map((c) => <option key={c} value={c}>{c}</option>)}
@@ -608,9 +608,9 @@ function RuleEditor({
 
       {/* Regex extractors */}
       <section>
-        <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Regex Extractors</h4>
-        <p className="mb-3 text-[11px] text-slate-400">
-          Use a capture group to extract the value — either <code className="rounded bg-slate-100 px-1">(?P&lt;value&gt;...)</code> (named) or a plain <code className="rounded bg-slate-100 px-1">(...)</code> group.
+        <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Regex Extractors</h4>
+        <p className="mb-3 text-[11px] text-[var(--text-muted)]">
+          Use a capture group to extract the value — either <code className="rounded bg-[var(--surface-2)] px-1">(?P&lt;value&gt;...)</code> (named) or a plain <code className="rounded bg-[var(--surface-2)] px-1">(...)</code> group.
           Click ▶ Test to check against the sample body below.
         </p>
         <div className="grid gap-3">
@@ -623,25 +623,25 @@ function RuleEditor({
 
       {/* Live test panel */}
       <section>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Live Test</h4>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 grid gap-2">
-          <label className="text-xs font-medium text-slate-700">
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Live Test</h4>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3 grid gap-2">
+          <label className="text-xs font-medium text-[var(--text-2)]">
             Sender
             <input
               value={testSender}
               onChange={(e) => setTestSender(e.target.value)}
               placeholder="e.g. HDFCBK"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs"
+              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs"
             />
           </label>
-          <label className="text-xs font-medium text-slate-700">
+          <label className="text-xs font-medium text-[var(--text-2)]">
             Body
             <textarea
               value={testBody}
               onChange={(e) => setTestBody(e.target.value)}
               rows={3}
               placeholder="Paste a sample SMS body here"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-mono resize-none"
+              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-mono resize-none"
             />
           </label>
           <div className="flex items-center gap-3">
@@ -676,7 +676,7 @@ function RuleEditor({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {/* Footer actions */}
-      <div className="flex gap-2 border-t border-slate-100 pt-4">
+      <div className="flex gap-2 border-t border-[var(--border)] pt-4">
         <button
           type="button"
           onClick={handleSave}
@@ -688,7 +688,7 @@ function RuleEditor({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]"
         >
           Cancel
         </button>
@@ -732,22 +732,22 @@ function RuleRow({
   const summary = conditionSummary(rule.conditions ?? emptyConditions())
 
   return (
-    <div className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3">
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
       <div className="min-w-0 flex-1 grid gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium text-sm text-slate-800 truncate">{rule.name}</span>
+          <span className="font-medium text-sm text-[var(--text)] truncate">{rule.name}</span>
           <span className={`rounded-full px-2 py-0.5 text-[11px] border ${
             rule.is_active
               ? 'bg-green-50 border-green-200 text-green-700'
-              : 'bg-slate-100 border-slate-200 text-slate-400'
+              : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text-muted)]'
           }`}>
             {rule.is_active ? 'active' : 'inactive'}
           </span>
-          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
+          <span className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--text-muted)]">
             priority {rule.priority}
           </span>
         </div>
-        <p className="text-[11px] text-slate-400 font-mono truncate">{summary}</p>
+        <p className="text-[11px] text-[var(--text-muted)] font-mono truncate">{summary}</p>
         <div className="flex flex-wrap gap-1.5 mt-0.5">
           {rule.account_name && (
             <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] text-primary-700">
@@ -755,7 +755,7 @@ function RuleRow({
             </span>
           )}
           {rule.member_name && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+            <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text-2)]">
               {rule.member_name}
             </span>
           )}
@@ -777,7 +777,7 @@ function RuleRow({
         <button
           type="button"
           onClick={onToggle}
-          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+          className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]"
           title={rule.is_active ? 'Disable rule' : 'Enable rule'}
         >
           {rule.is_active ? 'Disable' : 'Enable'}
@@ -785,7 +785,7 @@ function RuleRow({
         <button
           type="button"
           onClick={onDuplicate}
-          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+          className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]"
           title="Duplicate rule"
         >
           Copy
@@ -793,7 +793,7 @@ function RuleRow({
         <button
           type="button"
           onClick={onEdit}
-          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+          className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]"
         >
           Edit
         </button>
@@ -828,7 +828,7 @@ function SuggestionCard({
     ? 'bg-red-50 text-red-600'
     : suggestion.direction === 'inflow'
       ? 'bg-green-50 text-green-600'
-      : 'bg-slate-100 text-slate-500'
+      : 'bg-[var(--surface-2)] text-[var(--text-muted)]'
 
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 grid gap-2.5">
@@ -840,7 +840,7 @@ function SuggestionCard({
               {suggestion.observation_count} approval{suggestion.observation_count === 1 ? '' : 's'}
             </span>
           </div>
-          <p className="mt-0.5 text-sm font-medium text-slate-800 font-mono truncate">
+          <p className="mt-0.5 text-sm font-medium text-[var(--text)] font-mono truncate">
             sender: {suggestion.sender}
           </p>
         </div>
@@ -862,7 +862,7 @@ function SuggestionCard({
           </span>
         )}
         {suggestion.member_name && (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+          <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text-2)]">
             {suggestion.member_name}
           </span>
         )}
@@ -885,10 +885,10 @@ function SuggestionCard({
 
       {/* Body samples */}
       {suggestion.body_samples.length > 0 && (
-        <div className="rounded-lg bg-white border border-amber-100 px-3 py-2 grid gap-1">
-          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Sample SMS</p>
+        <div className="rounded-lg bg-[var(--surface)] border border-amber-100 px-3 py-2 grid gap-1">
+          <p className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wide">Sample SMS</p>
           {suggestion.body_samples.slice(0, 2).map((s, i) => (
-            <p key={i} className="text-[11px] font-mono text-slate-600 truncate">{s}</p>
+            <p key={i} className="text-[11px] font-mono text-[var(--text-2)] truncate">{s}</p>
           ))}
         </div>
       )}
@@ -1017,16 +1017,16 @@ function RulesImportDrawer({
     <Drawer open={open} onClose={handleClose} title="Import Rules" width="w-full max-w-2xl">
       <div className="grid gap-5 pb-4">
         <div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[var(--text-muted)]">
             Upload a rules JSON file (exported from this page). Review each rule, then import selected or all at once.
             Account and member are matched by name — they'll be blank if no match is found in this household.
           </p>
         </div>
 
         {rows.length === 0 && (
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 px-6 py-10 hover:border-primary-300">
-            <span className="text-sm font-medium text-slate-600">Choose a JSON file</span>
-            <span className="text-xs text-slate-400">sms_rules.json</span>
+          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--border)] px-6 py-10 hover:border-primary-300">
+            <span className="text-sm font-medium text-[var(--text-2)]">Choose a JSON file</span>
+            <span className="text-xs text-[var(--text-muted)]">sms_rules.json</span>
             <input ref={fileRef} type="file" accept=".json" className="sr-only" onChange={handleFile} />
           </label>
         )}
@@ -1036,19 +1036,19 @@ function RulesImportDrawer({
         {rows.length > 0 && (
           <>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-slate-500">{rows.length} rule{rows.length === 1 ? '' : 's'} found — {pendingCount} selected for import</p>
+              <p className="text-xs text-[var(--text-muted)]">{rows.length} rule{rows.length === 1 ? '' : 's'} found — {pendingCount} selected for import</p>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setRowState(rows.map(() => 'pending'))}
-                  className="text-xs text-slate-500 hover:text-slate-700"
+                  className="text-xs text-[var(--text-muted)] hover:text-[var(--text-2)]"
                 >
                   Select all
                 </button>
                 <button
                   type="button"
                   onClick={() => setRowState(rows.map(() => 'skipped'))}
-                  className="text-xs text-slate-500 hover:text-slate-700"
+                  className="text-xs text-[var(--text-muted)] hover:text-[var(--text-2)]"
                 >
                   Deselect all
                 </button>
@@ -1065,18 +1065,18 @@ function RulesImportDrawer({
                       state === 'imported'
                         ? 'border-green-200 bg-green-50 opacity-60'
                         : state === 'skipped'
-                          ? 'border-slate-200 bg-slate-50 opacity-50'
-                          : 'border-slate-200 bg-white'
+                          ? 'border-[var(--border)] bg-[var(--surface-2)] opacity-50'
+                          : 'border-[var(--border)] bg-[var(--surface)]'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 grid gap-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-medium text-slate-800">{row.name}</span>
+                          <span className="text-sm font-medium text-[var(--text)]">{row.name}</span>
                           {!row.is_active && (
-                            <span className="rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[11px] text-slate-400">inactive</span>
+                            <span className="rounded-full bg-[var(--surface-2)] border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]">inactive</span>
                           )}
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">priority {row.priority}</span>
+                          <span className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--text-muted)]">priority {row.priority}</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {row.account_name && (
@@ -1102,7 +1102,7 @@ function RulesImportDrawer({
                             className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
                               state === 'pending'
                                 ? 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
-                                : 'border-slate-200 text-slate-400 hover:bg-slate-50'
+                                : 'border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
                             }`}
                           >
                             {state === 'pending' ? 'Import' : 'Skip'}
@@ -1127,7 +1127,7 @@ function RulesImportDrawer({
               </div>
             )}
 
-            <div className="flex gap-2 border-t border-slate-100 pt-4">
+            <div className="flex gap-2 border-t border-[var(--border)] pt-4">
               <button
                 type="button"
                 onClick={importSelected}
@@ -1139,7 +1139,7 @@ function RulesImportDrawer({
               <button
                 type="button"
                 onClick={handleClose}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]"
               >
                 Done
               </button>
@@ -1188,31 +1188,31 @@ function TestDetectionPanel({ householdId }: { householdId: number }) {
   return (
     <div className="grid gap-5 max-w-2xl">
       <div>
-        <h3 className="text-sm font-semibold text-slate-800">Test SMS Detection</h3>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <h3 className="text-sm font-semibold text-[var(--text)]">Test SMS Detection</h3>
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
           Paste a sample SMS to see which rule matches and what fields get extracted.
           No data is saved — this is a dry run.
         </p>
       </div>
 
       <div className="grid gap-3">
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Sender
           <input
             value={sender}
             onChange={(e) => setSender(e.target.value)}
             placeholder="e.g. HDFCBK"
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
           />
         </label>
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Message body
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={5}
             placeholder="Paste the full SMS text here…"
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-mono resize-y"
+            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-mono resize-y"
           />
         </label>
         <button
@@ -1233,26 +1233,26 @@ function TestDetectionPanel({ householdId }: { householdId: number }) {
           <div className={`rounded-xl border px-4 py-3 ${
             result.matched_rule
               ? 'border-green-200 bg-green-50'
-              : 'border-slate-200 bg-slate-50'
+              : 'border-[var(--border)] bg-[var(--surface-2)]'
           }`}>
             {result.matched_rule ? (
               <p className="text-sm font-medium text-green-800">
                 ✓ Matched: <span className="font-semibold">{result.matched_rule.name}</span>
               </p>
             ) : (
-              <p className="text-sm font-medium text-slate-600">✗ No rule matched — form will be blank</p>
+              <p className="text-sm font-medium text-[var(--text-2)]">✗ No rule matched — form will be blank</p>
             )}
           </div>
 
           {/* Extracted parsed_tx fields */}
           {parsedEntries.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Extracted Fields</p>
-              <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Extracted Fields</p>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] divide-y divide-[var(--border)]">
                 {parsedEntries.map(([k, v]) => (
                   <div key={k} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                    <span className="w-36 shrink-0 text-xs text-slate-400">{k}</span>
-                    <span className="font-mono text-slate-800">{v}</span>
+                    <span className="w-36 shrink-0 text-xs text-[var(--text-muted)]">{k}</span>
+                    <span className="font-mono text-[var(--text)]">{v}</span>
                   </div>
                 ))}
               </div>
@@ -1262,14 +1262,14 @@ function TestDetectionPanel({ householdId }: { householdId: number }) {
           {/* All rules evaluation */}
           {result.all_rules.length > 0 && (
             <details>
-              <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600 select-none">
+              <summary className="cursor-pointer text-xs text-[var(--text-muted)] hover:text-[var(--text-2)] select-none">
                 Show all {result.all_rules.length} rule{result.all_rules.length === 1 ? '' : 's'} evaluated
               </summary>
               <div className="mt-2 grid gap-1">
                 {result.all_rules.map((r) => (
                   <div key={r.id} className="flex items-center gap-2 text-xs">
-                    <span className={`w-3 h-3 rounded-full shrink-0 ${r.matched ? 'bg-green-400' : 'bg-slate-200'}`} />
-                    <span className={r.matched ? 'font-medium text-slate-800' : 'text-slate-400'}>{r.name}</span>
+                    <span className={`w-3 h-3 rounded-full shrink-0 ${r.matched ? 'bg-green-400' : 'bg-[var(--surface-3)]'}`} />
+                    <span className={r.matched ? 'font-medium text-[var(--text)]' : 'text-[var(--text-muted)]'}>{r.name}</span>
                     {r.matched && <span className="text-green-600">matched</span>}
                   </div>
                 ))}
@@ -1278,7 +1278,7 @@ function TestDetectionPanel({ householdId }: { householdId: number }) {
           )}
 
           {result.all_rules.length === 0 && (
-            <p className="text-xs text-slate-400">No active rules configured yet.</p>
+            <p className="text-xs text-[var(--text-muted)]">No active rules configured yet.</p>
           )}
         </div>
       )}
@@ -1415,15 +1415,15 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
     }
   }
 
-  if (loading) return <p className="text-sm text-slate-400">Loading…</p>
+  if (loading) return <p className="text-sm text-[var(--text-muted)]">Loading…</p>
 
   return (
     <div className="grid gap-6 max-w-3xl">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">SMS Rules</h2>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <h2 className="text-lg font-semibold text-[var(--text)]">SMS Rules</h2>
+          <p className="text-sm text-[var(--text-muted)] mt-0.5">
             Rules match incoming SMS messages and pre-fill the approval form with mapped fields.
             First matching rule wins — use the Test tab to verify before saving.
           </p>
@@ -1434,14 +1434,14 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
               href={smsRulesApi.exportUrl(householdId)}
               target="_blank"
               rel="noreferrer"
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+              className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]"
             >
               Export rules
             </a>
             <button
               type="button"
               onClick={() => setImportOpen(true)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+              className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]"
             >
               Import rules
             </button>
@@ -1457,7 +1457,7 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-200">
+      <div className="flex gap-1 border-b border-[var(--border)]">
         {(['rules', 'test'] as PageTab[]).map((t) => (
           <button
             key={t}
@@ -1466,7 +1466,7 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t
                 ? 'border-primary-600 text-primary-700'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-2)]'
             }`}
           >
             {t === 'rules' ? `Rules (${rules.length})` : 'Test Detection'}
@@ -1499,9 +1499,9 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
           )}
 
           {rules.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-10 text-center">
-              <p className="text-sm font-medium text-slate-600">No rules yet</p>
-              <p className="mt-1 text-xs text-slate-400">
+            <div className="rounded-2xl border border-dashed border-[var(--border)] px-6 py-10 text-center">
+              <p className="text-sm font-medium text-[var(--text-2)]">No rules yet</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
                 Create a rule to automatically map an SMS sender + body pattern to an account, direction, and classification.
               </p>
             </div>
@@ -1521,7 +1521,7 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
           )}
 
           {rules.length > 0 && (
-            <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-xs text-[var(--text-muted)]">
               Rules are evaluated in priority order (lower number first). Use the Test Detection tab to verify rules against sample SMS bodies.
             </div>
           )}

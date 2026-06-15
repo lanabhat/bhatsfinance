@@ -18,7 +18,7 @@ export function CategoryBreakdownCard({ items }: Props) {
 
   return (
     <div>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Breakdown</h2>
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Breakdown</h2>
       <div className="grid gap-2">
         {items.map((item) => (
           <SectionCard

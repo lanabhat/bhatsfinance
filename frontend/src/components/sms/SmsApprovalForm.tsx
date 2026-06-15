@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { InstrumentOption, OptionItem, SmsMessage } from '../../types/domain'
 import { smsApi } from '../../api/smsApi'
 import type { SmsApprovalOverrides } from '../../api/smsApi'
@@ -17,12 +18,19 @@ type Props = {
   instrumentOptions: InstrumentOption[]
   onApproved: (transactionId: number | undefined) => void
   onCancel: () => void
+  /** Optional queue navigation — lets the user move between pending messages without closing. */
+  position?: { current: number; total: number }
+  hasPrev?: boolean
+  hasNext?: boolean
+  onPrev?: () => void
+  onNext?: () => void
+  onReject?: () => void
 }
 
 type ApprovalMode = 'transaction' | 'balance' | 'investment'
 
 function ConfidencePill({ value }: { value: number | null }) {
-  if (value === null) return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-400">No match</span>
+  if (value === null) return <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]">No match</span>
   const pct = Math.round(value * 100)
   const color = value >= 0.7 ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
     : value >= 0.4 ? 'bg-amber-50 border-amber-300 text-amber-700'
@@ -36,7 +44,7 @@ function ConfidencePill({ value }: { value: number | null }) {
 
 const INP = 'w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-500'
 
-export function SmsApprovalForm({ message, accountOptions, memberOptions, instrumentOptions, onApproved, onCancel }: Props) {
+export function SmsApprovalForm({ message, accountOptions, memberOptions, instrumentOptions, onApproved, onCancel, position, hasPrev, hasNext, onPrev, onNext, onReject }: Props) {
   const { householdId } = useApp()
   const tx = message.parsed_tx ?? {}
 
@@ -69,6 +77,36 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Keyboard arrow navigation between queued messages (desktop)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Ignore when typing in a field
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+      if (e.key === 'ArrowRight' && hasNext) onNext?.()
+      if (e.key === 'ArrowLeft' && hasPrev) onPrev?.()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [hasNext, hasPrev, onNext, onPrev])
+
+  // Swipe navigation (mobile): swipe left → next, swipe right → prev
+  const swipeStart = useRef<{ x: number; y: number } | null>(null)
+  const onTouchStart = (e: React.TouchEvent) => {
+    swipeStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (!swipeStart.current) return
+    const dx = e.changedTouches[0].clientX - swipeStart.current.x
+    const dy = e.changedTouches[0].clientY - swipeStart.current.y
+    swipeStart.current = null
+    // Horizontal swipe, ignore mostly-vertical drags
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < 0 && hasNext) onNext?.()
+      else if (dx > 0 && hasPrev) onPrev?.()
+    }
+  }
 
   // Instrument filtering for investment mode
   const linkedInstruments = investAccount
@@ -168,22 +206,54 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
     }
   }
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" onClick={onCancel} aria-hidden="true" />
+      <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm" onClick={onCancel} aria-hidden="true" />
 
       {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
-        <div className="relative w-full max-w-lg rounded-2xl bg-[var(--surface)] shadow-[var(--shadow-modal)] my-auto">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+        <div
+          className="relative w-full max-w-lg rounded-2xl bg-[var(--surface)] shadow-[var(--shadow-modal)] my-auto"
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+        >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
-            <div>
-              <p className="text-sm font-semibold text-[var(--text)]">Approve SMS</p>
-              <p className="text-xs text-[var(--text-muted)]">{message.sender} · {message.received_at.slice(0, 10)}</p>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--text)]">
+                Approve SMS
+                {position && (
+                  <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">{position.current} of {position.total}</span>
+                )}
+              </p>
+              <p className="truncate text-xs text-[var(--text-muted)]">{message.sender} · {message.received_at.slice(0, 10)}</p>
             </div>
             <div className="flex items-center gap-2">
               <ConfidencePill value={message.confidence} />
+              {/* Queue navigation */}
+              {(onPrev || onNext) && (
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={onPrev}
+                    disabled={!hasPrev}
+                    title="Previous (←)"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] disabled:opacity-30"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onNext}
+                    disabled={!hasNext}
+                    title="Next (→)"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] disabled:opacity-30"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                  </button>
+                </div>
+              )}
               <button type="button" onClick={onCancel} className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]">✕</button>
             </div>
           </div>
@@ -193,6 +263,30 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
               <p className="whitespace-pre-wrap text-xs text-[var(--text-muted)]">{message.body}</p>
             </div>
+
+            {/* Quick queue actions: reject / skip to next */}
+            {(onReject || onNext) && (
+              <div className="flex items-center justify-between gap-2">
+                {onReject ? (
+                  <button
+                    type="button"
+                    onClick={onReject}
+                    className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:border-rose-800/40 dark:text-rose-400 dark:hover:bg-rose-900/20"
+                  >
+                    ✕ Reject &amp; next
+                  </button>
+                ) : <span />}
+                {onNext && hasNext && (
+                  <button
+                    type="button"
+                    onClick={onNext}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+                  >
+                    Skip →
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Mode toggle */}
             <div className="flex gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1">
@@ -338,6 +432,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }

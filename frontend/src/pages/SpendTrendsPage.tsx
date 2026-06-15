@@ -4,6 +4,7 @@ import { expenseApi } from '../api/expenseApi'
 import { normalizeApiError } from '../hooks/errorUtils'
 import { useMaskedFmt } from '../components/common/Money'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useChartTheme, ChartTooltip } from '../components/charts/chartTheme'
 import type { SpendAnalytics } from '../types/domain'
 
 type Props = { householdId: number }
@@ -28,6 +29,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 export function SpendTrendsPage({ householdId }: Props) {
   const fmtINR = useMaskedFmt()
   const { hidden } = usePrivacy()
+  const ct = useChartTheme()
   const [months, setMonths] = useState(12)
   const [data, setData] = useState<SpendAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -47,11 +49,9 @@ export function SpendTrendsPage({ householdId }: Props) {
   // Build chart rows: one entry per month, columns for each classification series
   const chartRows = useMemo(() => {
     if (!data) return []
-    // Collect all months in order
     const monthSet = new Set(data.by_month_category.map(r => r.month))
     data.by_month.forEach(r => monthSet.add(r.month))
     const allMonths = Array.from(monthSet).sort()
-
     return allMonths.map(month => {
       const row: Record<string, number | string> = { month }
       SERIES.forEach(s => {
@@ -62,7 +62,6 @@ export function SpendTrendsPage({ householdId }: Props) {
     })
   }, [data])
 
-  // Summary per classification from by_category
   const summaryByCls = useMemo(() => {
     if (!data) return {}
     const map: Record<string, number> = {}
@@ -72,10 +71,18 @@ export function SpendTrendsPage({ householdId }: Props) {
 
   const totalIncome = summaryByCls['income'] ?? 0
   const totalSpend = summaryByCls['spend'] ?? 0
+  const totalTransfer = summaryByCls['internal_transfer'] ?? 0
   const netFlow = totalIncome - totalSpend
 
+  const cards = [
+    { label: 'Income', value: totalIncome, color: '#10b981' },
+    { label: 'Spend', value: totalSpend, color: '#f43f5e' },
+    { label: 'Net Flow', value: netFlow, color: netFlow >= 0 ? '#10b981' : '#f43f5e' },
+    { label: 'Transfers', value: totalTransfer, color: '#f59e0b' },
+  ]
+
   return (
-    <>
+    <div className="grid gap-4">
       {/* Window selector */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm text-[var(--text-muted)]">Window:</span>
@@ -85,7 +92,7 @@ export function SpendTrendsPage({ householdId }: Props) {
               key={m}
               type="button"
               onClick={() => setMonths(m)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`tap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 months === m
                   ? 'bg-[var(--surface)] shadow-sm text-[var(--text)]'
                   : 'text-[var(--text-muted)] hover:text-[var(--text)]'
@@ -97,87 +104,64 @@ export function SpendTrendsPage({ householdId }: Props) {
         </div>
       </div>
 
-      {/* Summary cards */}
-      <section className="cards">
-        <article className="card">
-          <h2>Income</h2>
-          <strong style={{ color: '#10b981' }}>{fmtINR(totalIncome)}</strong>
-        </article>
-        <article className="card">
-          <h2>Spend</h2>
-          <strong style={{ color: '#f43f5e' }}>{fmtINR(totalSpend)}</strong>
-        </article>
-        <article className="card">
-          <h2>Net Flow</h2>
-          <strong style={{ color: netFlow >= 0 ? '#10b981' : '#f43f5e' }}>{fmtINR(netFlow)}</strong>
-        </article>
-        <article className="card">
-          <h2>Transfers</h2>
-          <strong style={{ color: '#f59e0b' }}>{fmtINR(summaryByCls['internal_transfer'] ?? 0)}</strong>
-        </article>
+      {/* Summary KPI cards */}
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {cards.map((c) => (
+          <div key={c.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">{c.label}</p>
+            <p className="mt-1.5 text-2xl font-bold leading-none" style={{ color: c.color }}>
+              {fmtINR(c.value)}
+            </p>
+          </div>
+        ))}
       </section>
 
       {error && <p className="error">{error}</p>}
 
       {/* Grouped bar chart — all series */}
-      <article className="panel">
-        <h3>Monthly Breakdown</h3>
+      <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
+        <h3 className="mb-3 text-base font-semibold text-[var(--text)]">Monthly Breakdown</h3>
         {loading ? (
-          <p className="muted">Loading…</p>
+          <p className="text-sm text-[var(--text-muted)]">Loading…</p>
         ) : chartRows.length === 0 ? (
-          <p className="muted">No transactions in this window.</p>
+          <p className="text-sm text-[var(--text-muted)]">No transactions in this window.</p>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={chartRows} margin={{ top: 10, right: 10, left: 10, bottom: 0 }} barCategoryGap="20%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => hidden ? '••' : `₹${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v, name) => [fmtINR(Number(v)), name]} />
+              <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
+              <XAxis dataKey="month" tick={{ fontSize: 11, fill: ct.axis }} stroke={ct.grid} />
+              <YAxis tick={{ fontSize: 11, fill: ct.axis }} stroke={ct.grid} tickFormatter={(v) => hidden ? '••' : `₹${(v / 1000).toFixed(0)}k`} />
+              <Tooltip cursor={{ fill: ct.grid, opacity: 0.3 }} content={(p) => <ChartTooltip {...p} fmt={fmtINR} />} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               {SERIES.map(s => (
-                <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[3, 3, 0, 0]} />
+                <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[4, 4, 0, 0]} />
               ))}
             </BarChart>
           </ResponsiveContainer>
         )}
       </article>
 
-      {/* Spend category breakdown */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-        {SERIES.map(s => {
-          const sTotal = summaryByCls[s.key] ?? 0
-          if (sTotal === 0) return null
-
-          return (
-            <article key={s.key} className="panel" style={{ marginBottom: 0 }}>
-              <h3 style={{ color: s.color }}>{s.label}</h3>
-              <p style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0.25rem 0 0.75rem' }}>{fmtINR(sTotal)}</p>
-            </article>
-          )
-        })}
-      </div>
-
-      {/* Spend drill-down by category (separate fetch only when useful) */}
+      {/* Spend drill-down by category */}
       <SpendCategoryBreakdown householdId={householdId} months={months} fmtINR={fmtINR} />
 
       {/* By member */}
       {data && data.by_member.length > 0 && (
-        <article className="panel">
-          <h3>By Member</h3>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+        <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
+          <h3 className="mb-3 text-base font-semibold text-[var(--text)]">By Member</h3>
+          <ul className="grid gap-2.5">
             {data.by_member.map((row) => {
               const pct = data.total > 0 ? (row.amount / data.total) * 100 : 0
               return (
-                <li key={row.member_id ?? 'unassigned'} style={{ marginBottom: '0.6rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', marginBottom: '0.2rem' }}>
-                    <span style={{ fontWeight: 500 }}>{row.name}</span>
+                <li key={row.member_id ?? 'unassigned'}>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="font-medium text-[var(--text)]">{row.name}</span>
                     <span>
-                      <strong>{fmtINR(row.amount)}</strong>
-                      <span className="muted" style={{ marginLeft: '0.5rem' }}>{pct.toFixed(1)}%</span>
+                      <strong className="text-[var(--text)]">{fmtINR(row.amount)}</strong>
+                      <span className="ml-2 text-xs text-[var(--text-muted)]">{pct.toFixed(1)}%</span>
                     </span>
                   </div>
-                  <div style={{ height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: '#6366f1' }} />
+                  <div className="fill-bar">
+                    <div className="fill-bar-inner bg-primary-500" style={{ width: `${pct}%` }} />
                   </div>
                 </li>
               )
@@ -185,7 +169,7 @@ export function SpendTrendsPage({ householdId }: Props) {
           </ul>
         </article>
       )}
-    </>
+    </div>
   )
 }
 
@@ -203,27 +187,26 @@ function SpendCategoryBreakdown({
   }, [householdId, months])
 
   if (!data || data.by_category.length === 0) return null
-
   const total = data.total
 
   return (
-    <article className="panel">
-      <h3>Spend by Category</h3>
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+    <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
+      <h3 className="mb-3 text-base font-semibold text-[var(--text)]">Spend by Category</h3>
+      <ul className="grid gap-2.5">
         {data.by_category.map(row => {
           const pct = total > 0 ? (row.amount / total) * 100 : 0
           const color = CATEGORY_COLORS[row.category] || '#64748b'
           return (
-            <li key={row.category} style={{ marginBottom: '0.6rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', marginBottom: '0.2rem' }}>
-                <span style={{ fontWeight: 500 }}>{row.label || row.category || 'Uncategorised'}</span>
+            <li key={row.category}>
+              <div className="mb-1 flex items-center justify-between text-sm">
+                <span className="font-medium text-[var(--text)]">{row.label || row.category || 'Uncategorised'}</span>
                 <span>
-                  <strong>{fmtINR(row.amount)}</strong>
-                  <span className="muted" style={{ marginLeft: '0.5rem' }}>{pct.toFixed(1)}%</span>
+                  <strong className="text-[var(--text)]">{fmtINR(row.amount)}</strong>
+                  <span className="ml-2 text-xs text-[var(--text-muted)]">{pct.toFixed(1)}%</span>
                 </span>
               </div>
-              <div style={{ height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: color }} />
+              <div className="fill-bar">
+                <div className="fill-bar-inner" style={{ width: `${pct}%`, background: color }} />
               </div>
             </li>
           )

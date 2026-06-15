@@ -44,15 +44,15 @@ function InstrumentOwnershipRow({
   }
 
   return (
-    <div className="flex items-center gap-3 border-b border-slate-100 py-2.5 last:border-0">
+    <div className="flex items-center gap-3 border-b border-[var(--border)] py-2.5 last:border-0">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-slate-900">{instrument.name}</p>
-        <p className="text-xs text-slate-400 capitalize">{instrument.instrument_type.replace(/_/g, ' ')}</p>
+        <p className="truncate text-sm font-medium text-[var(--text)]">{instrument.name}</p>
+        <p className="text-xs text-[var(--text-muted)] capitalize">{instrument.instrument_type.replace(/_/g, ' ')}</p>
       </div>
       <select
         value={memberId}
         onChange={(e) => setMemberId(e.target.value)}
-        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-2)] focus:outline-none focus:ring-2 focus:ring-indigo-500"
       >
         <option value="">— Unassigned —</option>
         {memberOptions.map((m) => (
@@ -113,15 +113,15 @@ function AccountOwnershipRow({
   }
 
   return (
-    <div className="flex items-center gap-3 border-b border-slate-100 py-2.5 last:border-0">
+    <div className="flex items-center gap-3 border-b border-[var(--border)] py-2.5 last:border-0">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-slate-900">{account.name}</p>
-        <p className="text-xs text-slate-400 capitalize">{account.account_type.replace(/_/g, ' ')}</p>
+        <p className="truncate text-sm font-medium text-[var(--text)]">{account.name}</p>
+        <p className="text-xs text-[var(--text-muted)] capitalize">{account.account_type.replace(/_/g, ' ')}</p>
       </div>
       <select
         value={memberId}
         onChange={(e) => setMemberId(e.target.value)}
-        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-2)] focus:outline-none focus:ring-2 focus:ring-indigo-500"
       >
         <option value="">— Unassigned —</option>
         {memberOptions.map((m) => (
@@ -183,22 +183,22 @@ export function MaintenancePage({ section: initSection }: { section?: Section } 
   return (
     <div className="grid gap-5">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">{pageTitle}</h1>
-        <p className="mt-0.5 text-xs text-slate-500">Assign ownership to family members — drives per-member net worth</p>
+        <h1 className="text-xl font-bold text-[var(--text)]">{pageTitle}</h1>
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">Assign ownership to family members — drives per-member net worth</p>
       </div>
 
       {/* Ownership Mapping card */}
-      <div className="rounded-xl border border-slate-100 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <p className="text-sm font-semibold text-slate-900">Ownership Mapping</p>
-          <p className="mt-0.5 text-xs text-slate-500">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+        <div className="border-b border-[var(--border)] px-4 py-3">
+          <p className="text-sm font-semibold text-[var(--text)]">Ownership Mapping</p>
+          <p className="mt-0.5 text-xs text-[var(--text-muted)]">
             Assign each instrument or account to the family member who owns it. This drives per-member net worth on the home screen.
           </p>
         </div>
 
         {/* sub-tab switcher — hidden when accessed as a dedicated page */}
         {!initSection && (
-          <div className="flex gap-1 border-b border-slate-100 px-4 pt-3 pb-0">
+          <div className="flex gap-1 border-b border-[var(--border)] px-4 pt-3 pb-0">
             {(['instruments', 'accounts'] as Section[]).map((s) => (
               <button
                 key={s}
@@ -207,7 +207,7 @@ export function MaintenancePage({ section: initSection }: { section?: Section } 
                 className={`px-3 pb-2.5 text-sm font-medium capitalize border-b-2 transition-colors ${
                   section === s
                     ? 'border-indigo-600 text-indigo-700'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                    : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-2)]'
                 }`}
               >
                 {s}
@@ -218,10 +218,10 @@ export function MaintenancePage({ section: initSection }: { section?: Section } 
 
         <div className="px-4 py-1">
           {loading ? (
-            <p className="py-6 text-center text-xs text-slate-400">Loading…</p>
+            <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
           ) : section === 'instruments' ? (
             instruments.length === 0 ? (
-              <p className="py-6 text-center text-xs text-slate-400">No instruments yet.</p>
+              <p className="py-6 text-center text-xs text-[var(--text-muted)]">No instruments yet.</p>
             ) : (
               instruments.map((inst) => (
                 <InstrumentOwnershipRow
@@ -235,7 +235,7 @@ export function MaintenancePage({ section: initSection }: { section?: Section } 
             )
           ) : (
             accounts.length === 0 ? (
-              <p className="py-6 text-center text-xs text-slate-400">No accounts yet.</p>
+              <p className="py-6 text-center text-xs text-[var(--text-muted)]">No accounts yet.</p>
             ) : (
               accounts.map((acct) => (
                 <AccountOwnershipRow

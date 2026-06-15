@@ -4,18 +4,18 @@ export function LoginPage() {
   const loginHref = `${backendOrigin}/api/auth/login/google-oauth2/`
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-100">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--surface-2)] px-4">
+      <div className="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-8 shadow-lg ring-1 ring-[var(--border)]">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-600">
             <span className="text-2xl font-bold text-white">W</span>
           </div>
-          <h1 className="text-xl font-semibold text-slate-900">Family Wealth</h1>
-          <p className="mt-1 text-sm text-slate-500">Sign in to manage your finances</p>
+          <h1 className="text-xl font-semibold text-[var(--text)]">Family Wealth</h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">Sign in to manage your finances</p>
         </div>
         <a
           href={loginHref}
-          className="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:border-slate-300"
+          className="flex w-full items-center justify-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm font-medium text-[var(--text-2)] shadow-sm transition-colors hover:bg-[var(--surface-2)] hover:border-[var(--border-2)]"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />

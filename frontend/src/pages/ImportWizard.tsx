@@ -156,7 +156,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
     if (field.type === 'fk_account' || field.type === 'fk_member' || field.type === 'fk_instrument') {
       const opts = fkOptions(field.type)
       return (
-        <select className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={val} onChange={(e) => set(e.target.value)}>
+        <select className="h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm" value={val} onChange={(e) => set(e.target.value)}>
           <option value="">— select —</option>
           {opts.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
         </select>
@@ -164,7 +164,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
     }
     if (field.type === 'choice' && field.choices) {
       return (
-        <select className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={val} onChange={(e) => set(e.target.value)}>
+        <select className="h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm" value={val} onChange={(e) => set(e.target.value)}>
           <option value="">— select —</option>
           {field.choices.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
@@ -173,7 +173,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
     return (
       <input
         type={field.type === 'date' ? 'date' : 'text'}
-        className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm w-40"
+        className="h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm w-40"
         value={val}
         onChange={(e) => set(e.target.value)}
         placeholder={`default ${field.label}`}
@@ -186,14 +186,14 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
     const usingDefault = !col
 
     return (
-      <tr key={field.key} className="border-b border-slate-100">
-        <td className="py-2 pr-3 text-sm font-medium text-slate-700">
+      <tr key={field.key} className="border-b border-[var(--border)]">
+        <td className="py-2 pr-3 text-sm font-medium text-[var(--text-2)]">
           {field.label}
-          {field.note ? <span className="ml-1 text-xs text-slate-400">({field.note})</span> : null}
+          {field.note ? <span className="ml-1 text-xs text-[var(--text-muted)]">({field.note})</span> : null}
         </td>
         <td className="py-2 pr-3">
           <select
-            className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"
+            className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm"
             value={col}
             onChange={(e) => setMapping((p) => ({ ...p, [field.key]: e.target.value }))}
           >
@@ -203,7 +203,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
         </td>
         <td className="py-2">
           {usingDefault ? renderDefaultInput(field) : (
-            <span className="text-xs text-slate-400">← from file</span>
+            <span className="text-xs text-[var(--text-muted)]">← from file</span>
           )}
         </td>
       </tr>
@@ -241,9 +241,9 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
         {/* Step indicators */}
         <div className="mb-5 flex items-center gap-2 text-xs font-medium">
           {(['upload', 'map', 'result'] as Step[]).map((s, i) => (
-            <span key={s} className={`flex items-center gap-2 ${step === s ? 'text-primary-600' : 'text-slate-400'}`}>
+            <span key={s} className={`flex items-center gap-2 ${step === s ? 'text-primary-600' : 'text-[var(--text-muted)]'}`}>
               {i > 0 && <span className="text-slate-200">›</span>}
-              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step === s ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i + 1}</span>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step === s ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>{i + 1}</span>
               {s === 'upload' ? 'Upload' : s === 'map' ? 'Map Columns' : 'Results'}
             </span>
           ))}
@@ -255,9 +255,9 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
         {step === 'upload' && (
           <div className="space-y-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">What are you importing?</label>
+              <label className="mb-1 block text-sm font-medium text-[var(--text-2)]">What are you importing?</label>
               <select
-                className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
                 value={importType}
                 onChange={(e) => setImportType(e.target.value)}
               >
@@ -267,18 +267,18 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
             </div>
 
             <div
-              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center transition-colors hover:border-primary-400 hover:bg-primary-50"
+              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)] p-8 text-center transition-colors hover:border-primary-400 hover:bg-primary-50"
               onClick={() => fileRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
             >
-              <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-8 w-8 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
               </svg>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-[var(--text-2)]">
                 {uploading ? 'Parsing file…' : 'Drag & drop or click to select'}
               </p>
-              <p className="text-xs text-slate-400">CSV, Excel (.xlsx), JSON, PDF</p>
+              <p className="text-xs text-[var(--text-muted)]">CSV, Excel (.xlsx), JSON, PDF</p>
               {file && !uploading && <p className="text-xs font-medium text-primary-600">{file.name}</p>}
               <input
                 ref={fileRef}
@@ -291,7 +291,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
 
             {columns.length > 0 && (
               <>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-[var(--text-2)]">
                   Found <strong>{totalRows}</strong> rows with <strong>{columns.length}</strong> columns.
                 </p>
                 <div className="overflow-x-auto">
@@ -319,7 +319,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
         {/* ── Step 2: Map columns ── */}
         {step === 'map' && schema && (
           <div className="space-y-5">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-[var(--text-2)]">
               Map each app field to a column from your file, or set a default value.
             </p>
 
@@ -333,7 +333,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
                   </tr>
                 </thead>
                 <tbody>
-                  <tr><td colSpan={3} className="pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Required</td></tr>
+                  <tr><td colSpan={3} className="pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Required</td></tr>
                   {schema.required.map(renderFieldRow)}
 
                   {schema.optional.length > 0 && (
@@ -351,7 +351,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
                       </tr>
                       {showOptional && (
                         <>
-                          <tr><td colSpan={3} className="pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Optional</td></tr>
+                          <tr><td colSpan={3} className="pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Optional</td></tr>
                           {schema.optional.map(renderFieldRow)}
                         </>
                       )}
@@ -364,7 +364,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
             {/* Live preview */}
             {previewResolved.length > 0 && (
               <div>
-                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Preview (resolved values)</h4>
+                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Preview (resolved values)</h4>
                 <div className="overflow-x-auto">
                   <table>
                     <thead>
@@ -378,7 +378,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
                       {previewResolved.map((row, i) => (
                         <tr key={i}>
                           {[...schema.required, ...(showOptional ? schema.optional : [])].map((f) => (
-                            <td key={f.key}>{row[f.key] || <span className="text-slate-300">—</span>}</td>
+                            <td key={f.key}>{row[f.key] || <span className="text-[var(--text-faint)]">—</span>}</td>
                           ))}
                         </tr>
                       ))}
@@ -410,13 +410,13 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
                 <p className="text-2xl font-bold text-emerald-700">{result.created}</p>
                 <p className="text-xs text-emerald-600">Created</p>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
-                <p className="text-2xl font-bold text-slate-600">{result.skipped}</p>
-                <p className="text-xs text-slate-500">Skipped (already exists)</p>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4 text-center">
+                <p className="text-2xl font-bold text-[var(--text-2)]">{result.skipped}</p>
+                <p className="text-xs text-[var(--text-muted)]">Skipped (already exists)</p>
               </div>
-              <div className={`rounded-xl border p-4 text-center ${result.errors.length ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
-                <p className={`text-2xl font-bold ${result.errors.length ? 'text-red-600' : 'text-slate-600'}`}>{result.errors.length}</p>
-                <p className={`text-xs ${result.errors.length ? 'text-red-500' : 'text-slate-500'}`}>Errors</p>
+              <div className={`rounded-xl border p-4 text-center ${result.errors.length ? 'border-red-200 bg-red-50' : 'border-[var(--border)] bg-[var(--surface-2)]'}`}>
+                <p className={`text-2xl font-bold ${result.errors.length ? 'text-red-600' : 'text-[var(--text-2)]'}`}>{result.errors.length}</p>
+                <p className={`text-xs ${result.errors.length ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>Errors</p>
               </div>
             </div>
 

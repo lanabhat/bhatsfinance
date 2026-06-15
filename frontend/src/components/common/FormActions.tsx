@@ -11,7 +11,7 @@ type Props = {
 
 export function FormActions({ onSubmit, onReset, saving, submitLabel = 'Save', disabled, resetDisabled }: Props) {
   return (
-    <div className="mt-2 flex gap-2 border-t border-slate-100 pt-2">
+    <div className="mt-2 flex gap-2 border-t border-[var(--border)] pt-2">
       <Button type="button" variant="primary" size="md" loading={saving} disabled={disabled} onClick={onSubmit}>
         {submitLabel}
       </Button>

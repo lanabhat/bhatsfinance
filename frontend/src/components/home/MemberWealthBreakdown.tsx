@@ -106,7 +106,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
   return (
     <div className="grid gap-3">
       {/* Stacked bar */}
-      <div className="overflow-hidden rounded-lg h-3 flex gap-px bg-slate-100">
+      <div className="overflow-hidden rounded-lg h-3 flex gap-px bg-[var(--surface-2)]">
         {buckets.filter((b) => b.value > 0).map((b) => {
           const pct = positiveTotal > 0 ? (b.value / positiveTotal) * 100 : 0
           return (
@@ -127,52 +127,52 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
           const pctOfHousehold = householdTotal > 0 ? (b.value / householdTotal) * 100 : 0
           const isNeg = b.value < 0
           return (
-            <details key={b.key} className="group rounded-lg border border-slate-100 bg-white overflow-hidden">
-              <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-slate-50 list-none">
+            <details key={b.key} className="group rounded-lg border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+              <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-[var(--surface-2)] list-none">
                 {/* colour dot */}
                 <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: b.color }} />
-                <span className="flex-1 text-xs font-medium text-slate-700 capitalize">{b.label}</span>
+                <span className="flex-1 text-xs font-medium text-[var(--text-2)] capitalize">{b.label}</span>
                 {/* % of member */}
-                <span className="text-[11px] tabular-nums text-slate-500 w-10 text-right">{Math.abs(pctOfMember).toFixed(1)}%</span>
+                <span className="text-[11px] tabular-nums text-[var(--text-muted)] w-10 text-right">{Math.abs(pctOfMember).toFixed(1)}%</span>
                 {/* mini bar of member share */}
-                <div className="w-16 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div className="w-16 h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
                   <div
                     className="h-full rounded-full"
                     style={{ width: `${Math.min(Math.abs(pctOfMember), 100)}%`, backgroundColor: b.color }}
                   />
                 </div>
                 {/* % of household */}
-                <span className="text-[11px] tabular-nums text-slate-400 w-12 text-right hidden sm:block">
+                <span className="text-[11px] tabular-nums text-[var(--text-muted)] w-12 text-right hidden sm:block">
                   {Math.abs(pctOfHousehold).toFixed(1)}% HH
                 </span>
                 {/* value */}
-                <span className={`text-xs font-semibold tabular-nums w-24 text-right ${isNeg ? 'text-red-600' : 'text-slate-800'}`}>
+                <span className={`text-xs font-semibold tabular-nums w-24 text-right ${isNeg ? 'text-red-600' : 'text-[var(--text)]'}`}>
                   {fmt(b.value)}
                 </span>
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3 w-3 shrink-0 text-slate-300 group-open:rotate-90 transition-transform">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3 w-3 shrink-0 text-[var(--text-faint)] group-open:rotate-90 transition-transform">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 4l4 4-4 4" />
                 </svg>
               </summary>
               {/* Individual items */}
-              <div className="border-t border-slate-50">
+              <div className="border-t border-[var(--border)]">
                 {b.items.map((item, i) => {
                   const pctOfCat = b.value !== 0 ? (item.value / Math.abs(b.value)) * 100 : 0
                   const pctOfHH = householdTotal > 0 ? (item.value / householdTotal) * 100 : 0
                   return (
-                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-50 last:border-0 bg-slate-50/50">
+                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 border-b border-[var(--border)] last:border-0 bg-[var(--surface-2)]/50">
                       <span className="w-2.5 shrink-0" />
-                      <span className="flex-1 text-[11px] text-slate-600 truncate">{item.name}</span>
-                      <span className="text-[10px] tabular-nums text-slate-400 w-10 text-right">{pctOfCat.toFixed(1)}%</span>
-                      <div className="w-16 h-1 rounded-full bg-slate-100 overflow-hidden">
+                      <span className="flex-1 text-[11px] text-[var(--text-2)] truncate">{item.name}</span>
+                      <span className="text-[10px] tabular-nums text-[var(--text-muted)] w-10 text-right">{pctOfCat.toFixed(1)}%</span>
+                      <div className="w-16 h-1 rounded-full bg-[var(--surface-2)] overflow-hidden">
                         <div
                           className="h-full rounded-full opacity-60"
                           style={{ width: `${Math.min(Math.abs(pctOfCat), 100)}%`, backgroundColor: b.color }}
                         />
                       </div>
-                      <span className="text-[10px] tabular-nums text-slate-400 w-12 text-right hidden sm:block">
+                      <span className="text-[10px] tabular-nums text-[var(--text-muted)] w-12 text-right hidden sm:block">
                         {Math.abs(pctOfHH).toFixed(1)}% HH
                       </span>
-                      <span className="text-[11px] tabular-nums text-slate-600 w-24 text-right">{fmt(item.value)}</span>
+                      <span className="text-[11px] tabular-nums text-[var(--text-2)] w-24 text-right">{fmt(item.value)}</span>
                       <span className="w-3 shrink-0" />
                     </div>
                   )
@@ -184,7 +184,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
       </div>
 
       {/* Legend line */}
-      <p className="text-[10px] text-slate-400">% = share of {memberName}'s wealth · HH% = share of household total</p>
+      <p className="text-[10px] text-[var(--text-muted)]">% = share of {memberName}'s wealth · HH% = share of household total</p>
     </div>
   )
 }

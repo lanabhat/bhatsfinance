@@ -486,12 +486,26 @@ main {
   to   { transform: translateX(0);    opacity: 1; }
 }
 
-/* Bottom-sheet entrance (mobile drawer) — slides up.
-   On desktop the drawer is repositioned to the right, so a vertical
-   entrance is acceptable and unobtrusive. */
+/* Bottom-sheet entrance (mobile) — slides up. */
 @keyframes sheet-in {
   from { transform: translateY(100%); opacity: 0.6; }
   to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* Centered-dialog entrance (desktop) — fade + subtle scale. */
+@keyframes dialog-in {
+  from { transform: scale(0.97); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+/* Dialog panel: slide-up on mobile, scale-fade on desktop */
+.dialog-panel {
+  animation: sheet-in 0.24s ease-out;
+}
+@media (min-width: 768px) {
+  .dialog-panel {
+    animation: dialog-in 0.18s ease-out;
+  }
 }
 
 /* Give the sheet body clearance from the home indicator on mobile */

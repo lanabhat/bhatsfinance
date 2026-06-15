@@ -16,7 +16,7 @@ const TYPE_COLOR: Record<string, { bg: string; border: string; icon: string }> =
   loan:        { bg: 'bg-orange-50', border: 'border-l-orange-400', icon: '🏛' },
   cash:        { bg: 'bg-yellow-50', border: 'border-l-yellow-400', icon: '💵' },
   insurance:   { bg: 'bg-sky-50',    border: 'border-l-sky-400',    icon: '☂️' },
-  other:       { bg: 'bg-slate-50',  border: 'border-l-slate-300',  icon: '💼' },
+  other:       { bg: 'bg-[var(--surface-2)]',  border: 'border-l-slate-300',  icon: '💼' },
 }
 
 
@@ -44,12 +44,12 @@ export function AccountCard({ account, onClick }: Props) {
       <span className="icon-badge bg-white/60 text-lg">{style.icon}</span>
       <div className="min-w-0 flex-1 overflow-hidden">
         <div className="flex items-center gap-2">
-          <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">{account.name}</p>
-          <p className={`shrink-0 text-sm font-bold ${isCC ? 'text-rose-600' : 'text-slate-900'}`}>
+          <p className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--text)]">{account.name}</p>
+          <p className={`shrink-0 text-sm font-bold ${isCC ? 'text-rose-600' : 'text-[var(--text)]'}`}>
             {displayValue}
           </p>
         </div>
-        <p className="mt-0.5 truncate text-xs text-slate-500">
+        <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
           {account.institution_name || account.account_type.replace('_', ' ')}
           {isCC && balance?.credit_limit ? ` · Limit ${fmtINR(balance.credit_limit)}` : ''}
           {isCC && (balance?.outstanding ?? 0) > 0 ? ' · due' : ''}

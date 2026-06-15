@@ -91,6 +91,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
   const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: unknown[] } | null>(null)
   const [importing, setImporting] = useState(false)
   const importFileRef = useRef<HTMLInputElement>(null)
+  const selectedSwipe = useRef<number | null>(null)
 
   const filters = {
     status: statusFilter,
@@ -131,8 +132,22 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [householdId, statusFilter, categoryFilter, search, sender, dateFrom, dateTo, ordering, page, pageSize])
 
+  // Arrow-key navigation while the detail viewer is open
+  useEffect(() => {
+    if (!selected) return
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+      if (e.key === 'ArrowRight') navSelected(1)
+      if (e.key === 'ArrowLeft') navSelected(-1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, messages])
+
   if (!householdId) {
-    return <p className="text-sm text-slate-500">Select a household to view SMS messages.</p>
+    return <p className="text-sm text-[var(--text-muted)]">Select a household to view SMS messages.</p>
   }
 
   const totalPages = Math.max(1, Math.ceil(count / pageSize))
@@ -165,6 +180,46 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
     try {
       await smsApi.rejectStaged(id)
       setSelected(null)
+      load()
+    } catch (e) {
+      setError(normalizeApiError(e))
+    }
+  }
+
+  // ── Approval queue navigation ──
+  // Messages on the current page that can still be approved (not already approved).
+  const approvableQueue = messages.filter((m) => m.status !== 'approved')
+  const approvingIndex = approving ? approvableQueue.findIndex((m) => m.id === approving.id) : -1
+
+  // Advance to the next approvable message after an action; close if none left.
+  const goToNextApprovable = (afterId: number) => {
+    const remaining = approvableQueue.filter((m) => m.id !== afterId)
+    const fromIdx = approvableQueue.findIndex((m) => m.id === afterId)
+    // Prefer the message that was *after* the acted-on one
+    const next = approvableQueue.slice(fromIdx + 1).find((m) => m.id !== afterId) ?? remaining[0] ?? null
+    setApproving(next)
+    if (!next) setSelected(null)
+  }
+
+  const navApproving = (dir: 1 | -1) => {
+    if (approvingIndex < 0) return
+    const target = approvingIndex + dir
+    if (target >= 0 && target < approvableQueue.length) setApproving(approvableQueue[target])
+  }
+
+  // ── Detail viewer navigation (browse all messages on the page) ──
+  const selectedIndex = selected ? messages.findIndex((m) => m.id === selected.id) : -1
+  const navSelected = (dir: 1 | -1) => {
+    if (selectedIndex < 0) return
+    const target = selectedIndex + dir
+    if (target >= 0 && target < messages.length) setSelected(messages[target])
+  }
+
+  const rejectFromApproval = async (id: number) => {
+    setError('')
+    try {
+      await smsApi.rejectStaged(id)
+      goToNextApprovable(id)
       load()
     } catch (e) {
       setError(normalizeApiError(e))
@@ -261,8 +316,8 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
   return (
     <div className="grid gap-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">SMS Messages</h2>
-        <p className="text-sm text-slate-500 mt-0.5">
+        <h2 className="text-lg font-semibold text-[var(--text)]">SMS Messages</h2>
+        <p className="text-sm text-[var(--text-muted)] mt-0.5">
           Browse staged messages forwarded from registered devices. Categories are auto-detected
           from the message body — use them to quickly find transaction alerts, OTPs, SIP reminders, and promotions.
         </p>
@@ -273,51 +328,51 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
         <Tabs tabs={STATUS_TABS} active={statusFilter} onChange={setStatusFilter} size="sm" />
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <label className="flex flex-col gap-1 flex-1 min-w-[200px]">
-          <span className="text-xs font-medium text-slate-500">Search</span>
+      <div className="grid grid-cols-2 items-end gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:grid-cols-3 lg:grid-cols-6">
+        <label className="col-span-2 flex flex-col gap-1 sm:col-span-3 lg:col-span-1">
+          <span className="text-xs font-medium text-[var(--text-muted)]">Search</span>
           <input
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search body or sender…"
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
           />
         </label>
-        <label className="flex flex-col gap-1 min-w-[140px]">
-          <span className="text-xs font-medium text-slate-500">Sender</span>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-[var(--text-muted)]">Sender</span>
           <input
             type="text"
             value={sender}
             onChange={(e) => setSender(e.target.value)}
             placeholder="e.g. HDFCBK"
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-slate-500">From</span>
+          <span className="text-xs font-medium text-[var(--text-muted)]">From</span>
           <input
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-slate-500">To</span>
+          <span className="text-xs font-medium text-[var(--text-muted)]">To</span>
           <input
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-slate-500">Sort</span>
+          <span className="text-xs font-medium text-[var(--text-muted)]">Sort</span>
           <select
             value={ordering}
             onChange={(e) => setOrdering(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
           >
             <option value="-received_at">Newest first</option>
             <option value="received_at">Oldest first</option>
@@ -326,35 +381,35 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
           </select>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-slate-500">Per page</span>
+          <span className="text-xs font-medium text-[var(--text-muted)]">Per page</span>
           <select
             value={pageSize}
             onChange={(e) => setPageSize(Number(e.target.value))}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
           >
             {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
       {importResult && (
-        <div className={`rounded-xl border px-4 py-3 text-sm ${importResult.errors.length > 0 ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`}>
-          <p className={importResult.errors.length > 0 ? 'text-amber-800' : 'text-green-800'}>
+        <div className={`rounded-xl border px-4 py-3 text-sm ${importResult.errors.length > 0 ? 'border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/20' : 'border-green-200 bg-green-50 dark:border-green-800/40 dark:bg-green-900/20'}`}>
+          <p className={importResult.errors.length > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-green-800 dark:text-green-300'}>
             Import complete — <strong>{importResult.created}</strong> created, <strong>{importResult.skipped}</strong> skipped (duplicates)
             {importResult.errors.length > 0 && `, ${importResult.errors.length} error${importResult.errors.length === 1 ? '' : 's'}`}.
           </p>
-          <button type="button" onClick={() => setImportResult(null)} className="mt-1 text-xs text-slate-500 hover:text-slate-700">Dismiss</button>
+          <button type="button" onClick={() => setImportResult(null)} className="mt-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-2)]">Dismiss</button>
         </div>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-[var(--text-muted)]">
           {count === 0 ? 'No messages' : `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, count)} of ${count}`}
         </p>
         <div className="flex items-center gap-2 flex-wrap">
           {reapplyResult && (
-            <span className="text-xs text-green-600">{reapplyResult}</span>
+            <span className="text-xs text-emerald-600 dark:text-emerald-400">{reapplyResult}</span>
           )}
           {/* Export */}
           <Button size="sm" variant="secondary" onClick={exportMessages}>
@@ -362,7 +417,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
           </Button>
           {/* Import */}
           <label className="cursor-pointer">
-            <span className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+            <span className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]">
               {importing ? 'Importing…' : 'Import JSON'}
             </span>
             <input
@@ -382,7 +437,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
           {checked.size > 0 && canDelete('sms_message') && (
             confirmingBulkDelete ? (
               <span className="flex items-center gap-2 text-xs">
-                <span className="text-slate-600">Delete {checked.size} selected message{checked.size === 1 ? '' : 's'}?</span>
+                <span className="text-[var(--text-2)]">Delete {checked.size} selected message{checked.size === 1 ? '' : 's'}?</span>
                 <Button size="sm" variant="danger" loading={bulkBusy} onClick={deleteSelected}>Confirm</Button>
                 <Button size="sm" variant="secondary" onClick={() => setConfirmingBulkDelete(false)}>Cancel</Button>
               </span>
@@ -411,16 +466,16 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400">Loading…</p>
+        <p className="text-sm text-[var(--text-muted)]">Loading…</p>
       ) : messages.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-10 text-center">
-          <p className="text-sm font-medium text-slate-600">No messages found</p>
-          <p className="mt-1 text-xs text-slate-400">
+        <div className="rounded-2xl border border-dashed border-[var(--border)] px-6 py-10 text-center">
+          <p className="text-sm font-medium text-[var(--text-2)]">No messages found</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
             Try a different filter, or send a test message from the SMS Test Sender page.
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
           <table className="w-full text-sm table-fixed">
             <colgroup>
               {canDelete('sms_message') && <col className="w-8" />}
@@ -432,7 +487,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
               <col className="w-44" />
               {canDelete('sms_message') && <col className="w-20" />}
             </colgroup>
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <thead className="bg-[var(--surface-2)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
               <tr>
                 {canDelete('sms_message') && (
                   <th className="px-4 py-2.5">
@@ -452,7 +507,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
               {messages.map((msg) => (
                 <tr
                   key={msg.id}
-                  className="cursor-pointer border-t border-slate-100 align-top hover:bg-slate-50"
+                  className="cursor-pointer border-t border-[var(--border)] align-top hover:bg-[var(--surface-2)]"
                   onClick={() => setSelected(msg)}
                 >
                   {canDelete('sms_message') && (
@@ -460,9 +515,9 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
                       <input type="checkbox" checked={checked.has(msg.id)} onChange={() => toggleOne(msg.id)} aria-label={`Select message from ${msg.sender}`} />
                     </td>
                   )}
-                  <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">{formatDateTime(msg.received_at)}</td>
-                  <td className="px-4 py-2.5 font-medium text-slate-800 whitespace-nowrap truncate">{msg.sender}</td>
-                  <td className="px-4 py-2.5 text-slate-600 truncate" title={msg.body}>{msg.body}</td>
+                  <td className="px-4 py-2.5 text-xs text-[var(--text-muted)] whitespace-nowrap">{formatDateTime(msg.received_at)}</td>
+                  <td className="px-4 py-2.5 font-medium text-[var(--text)] whitespace-nowrap truncate">{msg.sender}</td>
+                  <td className="px-4 py-2.5 text-[var(--text-2)] truncate" title={msg.body}>{msg.body}</td>
                   <td className="px-4 py-2.5">
                     <span className="flex flex-wrap gap-1">
                       {msg.categories.length === 0
@@ -499,7 +554,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
 
       {count > 0 && (
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-slate-500">Page {page} of {totalPages}</p>
+          <p className="text-xs text-[var(--text-muted)]">Page {page} of {totalPages}</p>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
               Previous
@@ -513,21 +568,54 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
 
       <Drawer open={selected !== null} onClose={() => setSelected(null)} title="SMS Message" width="w-full max-w-lg">
         {selected && (
-          <div className="grid gap-4 text-sm">
+          <div
+            className="grid gap-4 text-sm"
+            onTouchStart={(e) => { selectedSwipe.current = e.touches[0].clientX }}
+            onTouchEnd={(e) => {
+              if (selectedSwipe.current === null) return
+              const dx = e.changedTouches[0].clientX - selectedSwipe.current
+              selectedSwipe.current = null
+              if (Math.abs(dx) > 60) navSelected(dx < 0 ? 1 : -1)
+            }}
+          >
+            {/* Prev / next navigation */}
+            {selectedIndex >= 0 && messages.length > 1 && (
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => navSelected(-1)}
+                  disabled={selectedIndex <= 0}
+                  className="tap flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-30"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                  Prev
+                </button>
+                <span className="text-xs text-[var(--text-muted)]">{selectedIndex + 1} of {messages.length}</span>
+                <button
+                  type="button"
+                  onClick={() => navSelected(1)}
+                  disabled={selectedIndex >= messages.length - 1}
+                  className="tap flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-30"
+                >
+                  Next
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                </button>
+              </div>
+            )}
             <div>
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Sender</span>
-              <p className="mt-0.5 font-medium text-slate-800">{selected.sender}</p>
+              <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Sender</span>
+              <p className="mt-0.5 font-medium text-[var(--text)]">{selected.sender}</p>
             </div>
             <div>
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Received</span>
-              <p className="mt-0.5 text-slate-700">{formatDateTime(selected.received_at)}</p>
+              <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Received</span>
+              <p className="mt-0.5 text-[var(--text-2)]">{formatDateTime(selected.received_at)}</p>
             </div>
             <div>
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Message</span>
-              <p className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-100 bg-slate-50 p-3 text-slate-700">{selected.body}</p>
+              <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Message</span>
+              <p className="mt-1 whitespace-pre-wrap rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3 text-[var(--text-2)]">{selected.body}</p>
             </div>
             <div>
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Categories</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Categories</span>
               <div className="mt-1 flex flex-wrap gap-1">
                 {selected.categories.length === 0
                   ? <Badge label="Uncategorised" color="slate" />
@@ -537,14 +625,14 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
               </div>
             </div>
             <div>
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Status</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Status</span>
               <div className="mt-1 flex items-center gap-2">
                 <Badge label={selected.status} color={STATUS_COLOR[selected.status]} />
               </div>
             </div>
             {selected.status !== 'approved' && (
               <div className="flex gap-2">
-                <Button onClick={() => setApproving(selected)}>Approve…</Button>
+                <Button onClick={() => { const m = selected; setSelected(null); setApproving(m) }}>Approve…</Button>
                 {selected.status !== 'rejected' && (
                   <Button variant="secondary" onClick={() => rejectOne(selected.id)}>Reject</Button>
                 )}
@@ -552,13 +640,13 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
             )}
             {selected.imported_transaction_id && (
               <div>
-                <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Imported transaction</span>
-                <p className="mt-0.5 text-slate-700">#{selected.imported_transaction_id}</p>
+                <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Imported transaction</span>
+                <p className="mt-0.5 text-[var(--text-2)]">#{selected.imported_transaction_id}</p>
               </div>
             )}
             <div>
-              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Logged at</span>
-              <p className="mt-0.5 text-slate-700">{formatDateTime(selected.created_at)}</p>
+              <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Logged at</span>
+              <p className="mt-0.5 text-[var(--text-2)]">{formatDateTime(selected.created_at)}</p>
             </div>
             {canDelete('sms_message') && (
               <div className="flex justify-end">
@@ -578,13 +666,19 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
 
       {approving && (
         <SmsApprovalForm
+          key={approving.id}
           message={approving}
           accountOptions={accountOptions}
           memberOptions={memberOptions}
           instrumentOptions={instrumentOptions}
+          position={approvingIndex >= 0 ? { current: approvingIndex + 1, total: approvableQueue.length } : undefined}
+          hasPrev={approvingIndex > 0}
+          hasNext={approvingIndex >= 0 && approvingIndex < approvableQueue.length - 1}
+          onPrev={() => navApproving(-1)}
+          onNext={() => navApproving(1)}
+          onReject={() => rejectFromApproval(approving.id)}
           onApproved={() => {
-            setApproving(null)
-            setSelected(null)
+            goToNextApprovable(approving.id)
             load()
           }}
           onCancel={() => setApproving(null)}

@@ -45,22 +45,22 @@ export function MarkSipPaidSheet({ alert, accountOptions, onClose, onPaid }: Pro
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
-      <div className="w-full max-w-md rounded-t-2xl bg-white shadow-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between border-b border-slate-100 px-5 py-4">
+      <div className="w-full max-w-md rounded-t-2xl bg-[var(--surface)] shadow-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between border-b border-[var(--border)] px-5 py-4">
           <div>
-            <p className="text-base font-semibold text-slate-900">Mark SIP as Paid</p>
-            <p className="mt-0.5 text-xs text-slate-500">{alert.instrument} · due {alert.due_date}</p>
+            <p className="text-base font-semibold text-[var(--text)]">Mark SIP as Paid</p>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">{alert.instrument} · due {alert.due_date}</p>
           </div>
-          <button type="button" onClick={onClose} className="text-xl text-slate-400 hover:text-slate-600">&times;</button>
+          <button type="button" onClick={onClose} className="text-xl text-[var(--text-muted)] hover:text-[var(--text-2)]">&times;</button>
         </div>
         <div className="space-y-3 px-5 py-4">
           <DateField label="Paid On" value={paidOn} onChange={setPaidOn} />
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2 text-sm text-[var(--text-2)]">
             <input
               type="checkbox"
               checked={deduct}
               onChange={(e) => setDeduct(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+              className="h-4 w-4 rounded border-[var(--border-2)] text-primary-600 focus:ring-primary-500"
             />
             <span>Deduct amount from a tracked account</span>
           </label>
@@ -73,12 +73,12 @@ export function MarkSipPaidSheet({ alert, accountOptions, onClose, onPaid }: Pro
                 options={accountOptions}
               />
               <MoneyInput label="Amount" value={amount} onChange={setAmount} />
-              <label className="flex items-center gap-2 text-sm text-slate-700">
+              <label className="flex items-center gap-2 text-sm text-[var(--text-2)]">
                 <input
                   type="checkbox"
                   checked={updateHolding}
                   onChange={(e) => setUpdateHolding(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                  className="h-4 w-4 rounded border-[var(--border-2)] text-primary-600 focus:ring-primary-500"
                 />
                 <span>Update holding (add units to investment)</span>
               </label>
@@ -95,17 +95,17 @@ export function MarkSipPaidSheet({ alert, accountOptions, onClose, onPaid }: Pro
             </>
           )}
           {!deduct && (
-            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            <p className="rounded-lg bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--text-muted)]">
               The alert will clear without recording a transaction. No effect on net worth or account balances.
             </p>
           )}
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-        <div className="flex gap-2 border-t border-slate-100 px-5 py-4">
+        <div className="flex gap-2 border-t border-[var(--border)] px-5 py-4">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
           >
             Cancel
           </button>

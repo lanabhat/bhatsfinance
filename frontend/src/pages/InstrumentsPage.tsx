@@ -5,39 +5,10 @@ import { portfolioApi } from '../api/portfolioApi'
 import { AssetCategoryForm } from '../components/assets/AssetCategoryForm'
 import { InstrumentForm } from '../components/assets/InstrumentForm'
 import { InstrumentRow } from '../components/assets/InstrumentRow'
+import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import type { ApiListResponse, AssetCategory, Instrument, InstrumentOwnership, Transaction, ValuationSnapshot } from '../types/domain'
-
-function Sheet({ title, onClose, children, tall }: { title: string; onClose: () => void; children: React.ReactNode; tall?: boolean }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div
-        className={`w-full max-w-lg rounded-t-2xl bg-white shadow-xl ${tall ? 'max-h-[90vh] flex flex-col' : 'p-6'}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {tall ? (
-          <>
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 shrink-0">
-              <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-              <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-            <div className="flex-1 overflow-y-auto">{children}</div>
-          </>
-        ) : (
-          <>
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-              <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-            {children}
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
 
 // ── instrument delete cascade sheet ──────────────────────────────────────────
 function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }: {
@@ -92,12 +63,12 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
         <p className="mt-0.5 text-xs text-red-500">Remove all connected data below before deleting the instrument.</p>
       </div>
 
-      {loading ? <p className="py-4 text-center text-xs text-slate-400">Loading connected data…</p> : (
+      {loading ? <p className="py-4 text-center text-xs text-[var(--text-muted)]">Loading connected data…</p> : (
         <>
           {/* Transactions */}
-          <div className="rounded-xl border border-slate-100 bg-white">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-              <p className="text-xs font-semibold text-slate-700">Transactions ({txs.length})</p>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2.5">
+              <p className="text-xs font-semibold text-[var(--text-2)]">Transactions ({txs.length})</p>
               {txs.length > 0 && (
                 <button type="button" disabled={deleting} onClick={() => deleteAll('txs')}
                   className="rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-50">
@@ -109,19 +80,19 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
               <p className="px-4 py-2.5 text-xs text-emerald-600">✓ Clear</p>
             ) : (
               txs.slice(0, 5).map((t) => (
-                <div key={t.id} className="flex items-center justify-between border-b border-slate-50 px-4 py-2 last:border-0">
-                  <p className="text-xs text-slate-600">{t.tx_date} · {t.transaction_type}</p>
-                  <p className="text-xs font-medium text-slate-700">{fmt(t.amount)}</p>
+                <div key={t.id} className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 last:border-0">
+                  <p className="text-xs text-[var(--text-2)]">{t.tx_date} · {t.transaction_type}</p>
+                  <p className="text-xs font-medium text-[var(--text-2)]">{fmt(t.amount)}</p>
                 </div>
               ))
             )}
-            {txs.length > 5 && <p className="px-4 py-2 text-xs text-slate-400">…and {txs.length - 5} more</p>}
+            {txs.length > 5 && <p className="px-4 py-2 text-xs text-[var(--text-muted)]">…and {txs.length - 5} more</p>}
           </div>
 
           {/* Valuations */}
-          <div className="rounded-xl border border-slate-100 bg-white">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-              <p className="text-xs font-semibold text-slate-700">Valuations ({valuations.length})</p>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2.5">
+              <p className="text-xs font-semibold text-[var(--text-2)]">Valuations ({valuations.length})</p>
               {valuations.length > 0 && (
                 <button type="button" disabled={deleting} onClick={() => deleteAll('valuations')}
                   className="rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-50">
@@ -133,19 +104,19 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
               <p className="px-4 py-2.5 text-xs text-emerald-600">✓ Clear</p>
             ) : (
               valuations.slice(0, 5).map((v) => (
-                <div key={v.id} className="flex items-center justify-between border-b border-slate-50 px-4 py-2 last:border-0">
-                  <p className="text-xs text-slate-600">{v.valuation_date}</p>
-                  <p className="text-xs font-medium text-slate-700">{v.market_value ? fmt(v.market_value) : v.unit_price ? `@ ${v.unit_price}` : '—'}</p>
+                <div key={v.id} className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 last:border-0">
+                  <p className="text-xs text-[var(--text-2)]">{v.valuation_date}</p>
+                  <p className="text-xs font-medium text-[var(--text-2)]">{v.market_value ? fmt(v.market_value) : v.unit_price ? `@ ${v.unit_price}` : '—'}</p>
                 </div>
               ))
             )}
-            {valuations.length > 5 && <p className="px-4 py-2 text-xs text-slate-400">…and {valuations.length - 5} more</p>}
+            {valuations.length > 5 && <p className="px-4 py-2 text-xs text-[var(--text-muted)]">…and {valuations.length - 5} more</p>}
           </div>
 
           {/* Ownerships */}
-          <div className="rounded-xl border border-slate-100 bg-white">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-              <p className="text-xs font-semibold text-slate-700">Ownerships ({ownerships.length})</p>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2.5">
+              <p className="text-xs font-semibold text-[var(--text-2)]">Ownerships ({ownerships.length})</p>
               {ownerships.length > 0 && (
                 <button type="button" disabled={deleting} onClick={() => deleteAll('ownerships')}
                   className="rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-50">
@@ -157,9 +128,9 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
               <p className="px-4 py-2.5 text-xs text-emerald-600">✓ Clear</p>
             ) : (
               ownerships.map((o) => (
-                <div key={o.id} className="flex items-center justify-between border-b border-slate-50 px-4 py-2 last:border-0">
-                  <p className="text-xs text-slate-600">{members.find((m) => m.id === o.member)?.label ?? `Member #${o.member}`}</p>
-                  <p className="text-xs text-slate-400">{o.allocation_percent}%</p>
+                <div key={o.id} className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 last:border-0">
+                  <p className="text-xs text-[var(--text-2)]">{members.find((m) => m.id === o.member)?.label ?? `Member #${o.member}`}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{o.allocation_percent}%</p>
                 </div>
               ))
             )}
@@ -168,7 +139,7 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
           {error && <p className="text-xs text-red-500 text-center">{error}</p>}
 
           <div className="flex gap-2 pb-2">
-            <button type="button" onClick={onCancel} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={onCancel} className="flex-1 rounded-xl border border-[var(--border)] py-2.5 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
             <button type="button" disabled={!allClear || deleting} onClick={deleteInstrument}
               className="flex-1 rounded-xl py-2.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 bg-red-500 hover:bg-red-600">
               {allClear ? 'Delete Instrument' : 'Clear all first'}
@@ -250,10 +221,10 @@ export function InstrumentsPage() {
   return (
     <div className="grid gap-3">
       <div className="flex items-center gap-1">
-        <span className="mr-1 text-xs text-slate-400">Group:</span>
+        <span className="mr-1 text-xs text-[var(--text-muted)]">Group:</span>
         {GROUP_OPTS.map((o) => (
           <button key={o.value} type="button" onClick={() => setGroupBy(o.value)}
-            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${groupBy === o.value ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${groupBy === o.value ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`}>
             {o.label}
           </button>
         ))}
@@ -264,12 +235,12 @@ export function InstrumentsPage() {
       </div>
 
       {loading ? (
-        <p className="py-6 text-center text-xs text-slate-400">Loading…</p>
+        <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
       ) : instruments.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center">
+        <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
           <p className="text-3xl">📋</p>
-          <p className="mt-2 text-sm font-medium text-slate-700">No instruments yet</p>
-          <p className="mt-1 text-xs text-slate-400">Tap + to add your first instrument.</p>
+          <p className="mt-2 text-sm font-medium text-[var(--text-2)]">No instruments yet</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first instrument.</p>
         </div>
       ) : groupBy === 'none' ? (
         <div className="grid gap-2">{instruments.map(renderRow)}</div>
@@ -279,7 +250,7 @@ export function InstrumentsPage() {
             <div key={label}>
               <div className="mt-3 flex items-center gap-2 first:mt-0">
                 {color && <span className="h-2 w-2 rounded-full" style={{ background: color }} />}
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
               </div>
               {items.map(renderRow)}
             </div>
@@ -288,20 +259,20 @@ export function InstrumentsPage() {
       )}
 
       {/* Categories section */}
-      <div className="mt-2 rounded-xl border border-slate-100 bg-white p-4">
+      <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Categories</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Categories</p>
           <button type="button" onClick={() => setSheet({ type: 'category' })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 disabled:opacity-50">+ Add</button>
         </div>
         {categories.length === 0 ? (
-          <p className="text-xs text-slate-400">No categories yet.</p>
+          <p className="text-xs text-[var(--text-muted)]">No categories yet.</p>
         ) : (
           <div className="grid gap-2">
             {categories.map((cat) => (
               <div key={cat.id} className="flex items-center gap-3">
                 <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: cat.color }} />
-                <p className="flex-1 text-sm text-slate-700">{cat.name}</p>
-                <p className="text-xs text-slate-400">{cat.instrument_count}</p>
+                <p className="flex-1 text-sm text-[var(--text-2)]">{cat.name}</p>
+                <p className="text-xs text-[var(--text-muted)]">{cat.instrument_count}</p>
                 <button type="button" onClick={() => setSheet({ type: 'category', item: cat })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 disabled:opacity-50">Edit</button>
               </div>
             ))}

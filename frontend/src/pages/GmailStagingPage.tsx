@@ -18,7 +18,7 @@ const CLASSIFICATIONS = [
 // ---------------------------------------------------------------------------
 
 function ConfidencePill({ value }: { value: number | null }) {
-  if (value === null) return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-400">No match</span>
+  if (value === null) return <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]">No match</span>
   const pct = Math.round(value * 100)
   const color = value >= 0.7 ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
     : value >= 0.4 ? 'bg-amber-50 border-amber-300 text-amber-700'
@@ -35,10 +35,10 @@ function ConfidencePill({ value }: { value: number | null }) {
 // ---------------------------------------------------------------------------
 
 function DirectionBadge({ direction }: { direction?: string }) {
-  if (!direction) return <span className="text-slate-300">—</span>
+  if (!direction) return <span className="text-[var(--text-faint)]">—</span>
   return direction === 'inflow'
     ? <span className="font-bold text-emerald-600">↑ In</span>
-    : <span className="font-bold text-slate-700">↓ Out</span>
+    : <span className="font-bold text-[var(--text-2)]">↓ Out</span>
 }
 
 // ---------------------------------------------------------------------------
@@ -83,56 +83,56 @@ function EditForm({ msg, accountOptions, spendCategories, onSave, onCancel }: Ed
     <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wide">Account</span>
-          <select value={account} onChange={e => setAccount(e.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Account</span>
+          <select value={account} onChange={e => setAccount(e.target.value)} className="rounded border border-[var(--border-2)] bg-[var(--surface)] px-2 py-1 text-xs">
             <option value="">— select —</option>
             {accountOptions.map(a => <option key={a.id} value={String(a.id)}>{a.label}</option>)}
           </select>
         </label>
         <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wide">Direction</span>
-          <select value={direction} onChange={e => setDirection(e.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Direction</span>
+          <select value={direction} onChange={e => setDirection(e.target.value)} className="rounded border border-[var(--border-2)] bg-[var(--surface)] px-2 py-1 text-xs">
             <option value="outflow">Outflow (Debit)</option>
             <option value="inflow">Inflow (Credit)</option>
           </select>
         </label>
         <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wide">Amount (INR)</span>
-          <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs" />
+          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Amount (INR)</span>
+          <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} className="rounded border border-[var(--border-2)] bg-[var(--surface)] px-2 py-1 text-xs" />
         </label>
         <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wide">Type</span>
-          <select value={txType} onChange={e => setTxType(e.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Type</span>
+          <select value={txType} onChange={e => setTxType(e.target.value)} className="rounded border border-[var(--border-2)] bg-[var(--surface)] px-2 py-1 text-xs">
             {TX_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </label>
         <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wide">Date</span>
-          <input type="date" value={txDate} onChange={e => setTxDate(e.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs" />
+          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Date</span>
+          <input type="date" value={txDate} onChange={e => setTxDate(e.target.value)} className="rounded border border-[var(--border-2)] bg-[var(--surface)] px-2 py-1 text-xs" />
         </label>
         <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wide">Classification</span>
-          <select value={classification} onChange={e => setClassification(e.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Classification</span>
+          <select value={classification} onChange={e => setClassification(e.target.value)} className="rounded border border-[var(--border-2)] bg-[var(--surface)] px-2 py-1 text-xs">
             {CLASSIFICATIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </label>
         {classification === 'spend' && (
           <label className="flex flex-col gap-0.5">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wide">Spend Category</span>
-            <select value={spendCategory} onChange={e => setSpendCategory(e.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+            <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Spend Category</span>
+            <select value={spendCategory} onChange={e => setSpendCategory(e.target.value)} className="rounded border border-[var(--border-2)] bg-[var(--surface)] px-2 py-1 text-xs">
               <option value="">— select —</option>
               {spendCategories.map(c => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
             </select>
           </label>
         )}
         <label className="col-span-2 flex flex-col gap-0.5 sm:col-span-3">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wide">Reference</span>
-          <input type="text" value={extRef} onChange={e => setExtRef(e.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs" />
+          <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Reference</span>
+          <input type="text" value={extRef} onChange={e => setExtRef(e.target.value)} className="rounded border border-[var(--border-2)] bg-[var(--surface)] px-2 py-1 text-xs" />
         </label>
       </div>
       <div className="flex gap-2">
         <button onClick={handleSave} className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700">Save &amp; Approve</button>
-        <button onClick={onCancel} className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button onClick={onCancel} className="rounded-lg border border-[var(--border-2)] px-3 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
       </div>
     </div>
   )
@@ -219,19 +219,19 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
   )
 
   return (
-    <div className={`rounded-xl border bg-white shadow-sm transition-all ${hasWarning ? 'border-amber-200' : 'border-slate-100'}`}>
+    <div className={`rounded-xl border bg-[var(--surface)] shadow-sm transition-all ${hasWarning ? 'border-amber-200' : 'border-[var(--border)]'}`}>
       <div className="flex flex-wrap items-start gap-3 px-4 py-3">
         {/* Date */}
-        <span className="w-20 shrink-0 pt-0.5 text-xs text-slate-500">{tx?.tx_date ?? val?.valuation_date ?? '—'}</span>
+        <span className="w-20 shrink-0 pt-0.5 text-xs text-[var(--text-muted)]">{tx?.tx_date ?? val?.valuation_date ?? '—'}</span>
 
         {/* Direction + amount */}
         <div className="w-28 shrink-0 text-right">
           {isValOnly
-            ? <span className="text-xs text-slate-400">Balance update</span>
+            ? <span className="text-xs text-[var(--text-muted)]">Balance update</span>
             : <>
                 <DirectionBadge direction={tx?.direction} />
-                <span className={`ml-1 font-semibold tabular-nums ${tx?.direction === 'inflow' ? 'text-emerald-700' : 'text-slate-900'}`}>
-                  {tx?.amount ? `₹${Number(tx.amount).toLocaleString('en-IN')}` : <span className="font-normal text-slate-300">no amount</span>}
+                <span className={`ml-1 font-semibold tabular-nums ${tx?.direction === 'inflow' ? 'text-emerald-700' : 'text-[var(--text)]'}`}>
+                  {tx?.amount ? `₹${Number(tx.amount).toLocaleString('en-IN')}` : <span className="font-normal text-[var(--text-faint)]">no amount</span>}
                 </span>
               </>
           }
@@ -239,14 +239,14 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
 
         {/* Description */}
         <div className="flex-1 min-w-0">
-          <p className="truncate text-sm font-medium text-slate-800">{merchant || '—'}</p>
-          <p className="truncate text-xs text-slate-400">{accountLabel}</p>
+          <p className="truncate text-sm font-medium text-[var(--text)]">{merchant || '—'}</p>
+          <p className="truncate text-xs text-[var(--text-muted)]">{accountLabel}</p>
         </div>
 
         {/* Template + confidence */}
         <div className="hidden sm:flex shrink-0 flex-col items-end gap-1">
           {msg.template_key && (
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{msg.template_key.replace(/_/g, ' ')}</span>
+            <span className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">{msg.template_key.replace(/_/g, ' ')}</span>
           )}
           {msg.template_classification && (
             <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-600">
@@ -272,7 +272,7 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
             <button
               onClick={() => setEditing(true)}
               disabled={busy}
-              className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-lg border border-[var(--border-2)] px-3 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50"
             >
               Edit
             </button>
@@ -299,7 +299,7 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
         {/* Delete confirmation */}
         {confirmDelete && (
           <div className="flex shrink-0 items-center gap-2">
-            <span className="text-xs text-slate-500">Delete permanently?</span>
+            <span className="text-xs text-[var(--text-muted)]">Delete permanently?</span>
             <button
               onClick={handleDelete}
               disabled={busy}
@@ -310,7 +310,7 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
             <button
               onClick={() => setConfirmDelete(false)}
               disabled={busy}
-              className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              className="rounded-lg border border-[var(--border-2)] px-3 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]"
             >
               Cancel
             </button>
@@ -331,7 +331,7 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
 
       {/* Edit form */}
       {editing && (
-        <div className="border-t border-slate-100 px-4 pb-3">
+        <div className="border-t border-[var(--border)] px-4 pb-3">
           <EditForm
             msg={msg}
             accountOptions={accountOptions}
@@ -344,12 +344,12 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
 
       {/* Email metadata */}
       {!editing && (msg.raw.from || subject) && (
-        <details className="border-t border-slate-50">
-          <summary className="cursor-pointer px-4 py-1 text-[10px] text-slate-300 hover:text-slate-500">Show email</summary>
-          <div className="px-4 pb-3 pt-1 text-xs text-slate-500 space-y-0.5">
+        <details className="border-t border-[var(--border)]">
+          <summary className="cursor-pointer px-4 py-1 text-[10px] text-[var(--text-faint)] hover:text-[var(--text-muted)]">Show email</summary>
+          <div className="px-4 pb-3 pt-1 text-xs text-[var(--text-muted)] space-y-0.5">
             {msg.raw.from && <p><strong>From:</strong> {msg.raw.from}</p>}
             {subject && <p><strong>Subject:</strong> {subject}</p>}
-            {msg.raw.snippet && <p className="text-slate-400 italic">{msg.raw.snippet}</p>}
+            {msg.raw.snippet && <p className="text-[var(--text-muted)] italic">{msg.raw.snippet}</p>}
           </div>
         </details>
       )}
@@ -472,13 +472,13 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-800">Gmail Transactions</h1>
-          <p className="text-sm text-slate-500">Review and approve transactions parsed from your emails before they enter the ledger.</p>
+          <h1 className="text-xl font-semibold text-[var(--text)]">Gmail Transactions</h1>
+          <p className="text-sm text-[var(--text-muted)]">Review and approve transactions parsed from your emails before they enter the ledger.</p>
         </div>
         <button
           onClick={() => load()}
           disabled={loading}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-lg border border-[var(--border-2)] px-3 py-1.5 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50"
         >
           {loading ? 'Loading…' : 'Refresh'}
         </button>
@@ -494,12 +494,12 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
             <button
               type="button"
               onClick={() => { setConfirmDeleteAll(true); setConfirmClearSync(false) }}
-              className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+              className="rounded-lg border border-rose-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
             >
               🗑 Delete All Transactions
             </button>
           ) : (
-            <div className="flex items-center gap-2 rounded-lg border border-rose-300 bg-white px-3 py-1.5">
+            <div className="flex items-center gap-2 rounded-lg border border-rose-300 bg-[var(--surface)] px-3 py-1.5">
               <span className="text-xs text-rose-700">Delete all {items.length} staged transactions?</span>
               <button
                 type="button"
@@ -509,7 +509,7 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
               >
                 {dangerBusy ? '…' : 'Yes, delete all'}
               </button>
-              <button type="button" onClick={() => setConfirmDeleteAll(false)} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+              <button type="button" onClick={() => setConfirmDeleteAll(false)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-2)]">Cancel</button>
             </div>
           )}
 
@@ -518,12 +518,12 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
             <button
               type="button"
               onClick={() => { setConfirmClearSync(true); setConfirmDeleteAll(false) }}
-              className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+              className="rounded-lg border border-rose-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
             >
               🔄 Clear Sync History
             </button>
           ) : (
-            <div className="flex items-center gap-2 rounded-lg border border-rose-300 bg-white px-3 py-1.5">
+            <div className="flex items-center gap-2 rounded-lg border border-rose-300 bg-[var(--surface)] px-3 py-1.5">
               <span className="text-xs text-rose-700">Reset sync checkpoint? Gmail will re-scan from scratch.</span>
               <button
                 type="button"
@@ -533,7 +533,7 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
               >
                 {dangerBusy ? '…' : 'Yes, clear'}
               </button>
-              <button type="button" onClick={() => setConfirmClearSync(false)} className="text-xs text-slate-500 hover:text-slate-700">Cancel</button>
+              <button type="button" onClick={() => setConfirmClearSync(false)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-2)]">Cancel</button>
             </div>
           )}
 
@@ -541,12 +541,12 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
       </div>
 
       {/* Status filter tabs */}
-      <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+      <div className="flex gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1">
         {(['pending', 'approved', 'rejected', 'all'] as StatusFilter[]).map(s => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
-            className={`flex-1 rounded-lg py-1.5 text-xs font-medium capitalize transition-colors ${statusFilter === s ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex-1 rounded-lg py-1.5 text-xs font-medium capitalize transition-colors ${statusFilter === s ? 'bg-[var(--surface)] shadow-sm text-[var(--text)]' : 'text-[var(--text-muted)] hover:text-[var(--text-2)]'}`}
           >
             {s}{s === 'pending' && pendingCount > 0 ? ` (${pendingCount})` : ''}
           </button>
@@ -577,14 +577,14 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
 
       {/* List */}
       {loading && items.length === 0 ? (
-        <div className="py-12 text-center text-sm text-slate-400">Loading…</div>
+        <div className="py-12 text-center text-sm text-[var(--text-muted)]">Loading…</div>
       ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 py-16 text-center">
-          <p className="text-slate-400">
+        <div className="rounded-2xl border border-dashed border-[var(--border)] py-16 text-center">
+          <p className="text-[var(--text-muted)]">
             {statusFilter === 'pending' ? 'No pending transactions — all clear!' : `No ${statusFilter} transactions.`}
           </p>
           {statusFilter === 'pending' && (
-            <p className="mt-1 text-xs text-slate-300">Run a Gmail sync to pull in new emails.</p>
+            <p className="mt-1 text-xs text-[var(--text-faint)]">Run a Gmail sync to pull in new emails.</p>
           )}
         </div>
       ) : (
@@ -604,8 +604,8 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
       )}
 
       {/* Legend */}
-      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500 space-y-1">
-        <p className="font-medium text-slate-600">Confidence score</p>
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-xs text-[var(--text-muted)] space-y-1">
+        <p className="font-medium text-[var(--text-2)]">Confidence score</p>
         <div className="flex flex-wrap gap-3">
           <span><span className="rounded-full bg-emerald-50 border border-emerald-300 px-1.5 py-0.5 text-emerald-700">≥70%</span> All template signals matched</span>
           <span><span className="rounded-full bg-amber-50 border border-amber-300 px-1.5 py-0.5 text-amber-700">40–69%</span> Partial match</span>

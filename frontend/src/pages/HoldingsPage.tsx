@@ -7,26 +7,13 @@ import { CategorySection } from '../components/assets/CategorySection'
 import { InstrumentForm } from '../components/assets/InstrumentForm'
 import { InstrumentRow } from '../components/assets/InstrumentRow'
 import { AssetCategoryForm } from '../components/assets/AssetCategoryForm'
+import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import type { AssetCategory, DashboardHolding, Instrument, InstrumentOwnership, Transaction } from '../types/domain'
 
 // ── shared helpers ────────────────────────────────────────────────────────────
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-t-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-const INP = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+const INP = 'w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
 
 // ── valuation form ────────────────────────────────────────────────────────────
 function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCancel }: {
@@ -57,16 +44,16 @@ function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCa
 
   return (
     <div className="grid gap-4">
-      <p className="text-sm text-slate-500">{instrumentName}</p>
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Date</label>
+      <p className="text-sm text-[var(--text-muted)]">{instrumentName}</p>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={INP} /></div>
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Unit Price</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Unit Price</label>
         <input type="number" min="0" step="0.000001" placeholder="e.g. 94.50" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} className={INP} /></div>
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Market Value (total)</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Market Value (total)</label>
         <input type="number" min="0" step="0.01" placeholder="e.g. 50000" value={marketValue} onChange={(e) => setMarketValue(e.target.value)} className={INP} /></div>
       {error && <p className="text-xs text-red-500">{error}</p>}
-      <div className="flex gap-2 border-t border-slate-100 pt-3">
-        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+      <div className="flex gap-2 border-t border-[var(--border)] pt-3">
+        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
         <button type="button" disabled={saving} onClick={save} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
@@ -135,7 +122,7 @@ function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
     <div className="grid gap-3 max-h-[70vh] overflow-y-auto">
       {!initId && (
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Instrument</label>
+          <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Instrument</label>
           {!showNewInst ? (
             <div className="flex gap-2">
               <select value={instrumentId} onChange={(e) => setInstrumentId(e.target.value)} className={`flex-1 ${INP}`}>
@@ -158,40 +145,40 @@ function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
               {newInstType === 'fd' && (
                 <>
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-600">Investment Start Date (Optional)</label>
+                    <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Investment Start Date (Optional)</label>
                     <input type="date" value={newInstInvestmentStartDate} onChange={(e) => setNewInstInvestmentStartDate(e.target.value)} className={INP} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-slate-600">Maturity Date (Optional)</label>
+                    <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Maturity Date (Optional)</label>
                     <input type="date" value={newInstMaturityDate} onChange={(e) => setNewInstMaturityDate(e.target.value)} className={INP} />
                   </div>
                 </>
               )}
-              <button type="button" onClick={() => setShowNewInst(false)} className="text-xs text-slate-400 hover:text-slate-600">{'<- back to existing'}</button>
+              <button type="button" onClick={() => setShowNewInst(false)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-2)]">{'<- back to existing'}</button>
             </div>
           )}
         </div>
       )}
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Owner (member)</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Owner (member)</label>
         <select value={memberId} onChange={(e) => setMemberId(e.target.value)} className={INP}>
           <option value="">— Unassigned —</option>
           {members.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
       </div>
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Purchase Date</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Purchase Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={INP} /></div>
       <div className="grid grid-cols-2 gap-2">
-        <div><label className="mb-1 block text-xs font-medium text-slate-600">Units / Qty</label>
+        <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Units / Qty</label>
           <input type="number" min="0" step="0.000001" placeholder="e.g. 10.5" value={quantity} onChange={(e) => setQuantity(e.target.value)} className={INP} /></div>
-        <div><label className="mb-1 block text-xs font-medium text-slate-600">Price per unit</label>
+        <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Price per unit</label>
           <input type="number" min="0" step="0.000001" placeholder="e.g. 94.50" value={pricePerUnit} onChange={(e) => setPricePerUnit(e.target.value)} className={INP} /></div>
       </div>
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Total amount paid (₹) *</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Total amount paid (₹) *</label>
         <input type="number" min="0" step="0.01" placeholder="e.g. 5000" value={amount} onChange={(e) => setAmount(e.target.value)} className={INP} /></div>
       {error && <p className="text-xs text-red-500">{error}</p>}
-      <div className="flex gap-2 border-t border-slate-100 pt-3">
-        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+      <div className="flex gap-2 border-t border-[var(--border)] pt-3">
+        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
         <button type="button" disabled={saving} onClick={save} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Saving…' : 'Record Buy'}</button>
       </div>
     </div>
@@ -245,36 +232,36 @@ function BuyHistoryEditor({ transaction, onSave, onCancel }: {
   }
 
   return (
-    <div className="border-t border-slate-100 px-5 py-4">
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Edit Buy Entry</p>
+    <div className="border-t border-[var(--border)] px-5 py-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Edit Buy Entry</p>
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Date</label>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Date</label>
             <input type="date" value={form.tx_date} onChange={(e) => setForm((p) => ({ ...p, tx_date: e.target.value }))} className={INP} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Amount</label>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Amount</label>
             <input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} className={INP} />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Quantity</label>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Quantity</label>
             <input type="number" min="0" step="0.000001" value={form.quantity} onChange={(e) => setForm((p) => ({ ...p, quantity: e.target.value }))} className={INP} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Price per unit</label>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Price per unit</label>
             <input type="number" min="0" step="0.000001" value={form.price_per_unit} onChange={(e) => setForm((p) => ({ ...p, price_per_unit: e.target.value }))} className={INP} />
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Reference</label>
+          <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Reference</label>
           <input value={form.external_reference} onChange={(e) => setForm((p) => ({ ...p, external_reference: e.target.value }))} className={INP} />
         </div>
         {error ? <p className="text-xs text-red-500">{error}</p> : null}
         <div className="flex gap-2">
-          <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+          <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
           <button type="button" disabled={saving} onClick={() => void save()} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
@@ -339,43 +326,43 @@ function HoldingDetailSheet({ householdId, holding, instrument, onBuy, onUpdateV
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-t-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between border-b border-slate-100 px-5 py-4">
+      <div className="w-full max-w-lg rounded-t-2xl bg-[var(--surface)] shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between border-b border-[var(--border)] px-5 py-4">
           <div>
-            <p className="text-base font-semibold text-slate-900">{instrument.name}</p>
-            <p className="mt-0.5 text-xs text-slate-400 capitalize">{instrument.instrument_type.replace(/_/g, ' ')} · {ownerLabel}</p>
+            <p className="text-base font-semibold text-[var(--text)]">{instrument.name}</p>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)] capitalize">{instrument.instrument_type.replace(/_/g, ' ')} · {ownerLabel}</p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+          <button type="button" onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-2)]">✕</button>
         </div>
-        <div className="grid grid-cols-3 gap-px bg-slate-100 border-b border-slate-100">
+        <div className="grid grid-cols-3 gap-px bg-[var(--surface-2)] border-b border-[var(--border)]">
           {[
             { label: 'Current Value', value: fmt(holding.market_value) },
             { label: 'Invested', value: fmt(holding.net_invested) },
             { label: 'Gain / Loss', value: gainPct ? `${gain >= 0 ? '+' : ''}${gainPct}%` : '—' },
           ].map((s) => (
-            <div key={s.label} className="bg-white px-4 py-3 text-center">
-              <p className={`text-sm font-bold ${s.label === 'Gain / Loss' ? (gain >= 0 ? 'text-emerald-600' : 'text-red-500') : 'text-slate-900'}`}>{s.value}</p>
-              <p className="mt-0.5 text-xs text-slate-400">{s.label}</p>
+            <div key={s.label} className="bg-[var(--surface)] px-4 py-3 text-center">
+              <p className={`text-sm font-bold ${s.label === 'Gain / Loss' ? (gain >= 0 ? 'text-emerald-600' : 'text-red-500') : 'text-[var(--text)]'}`}>{s.value}</p>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{s.label}</p>
             </div>
           ))}
         </div>
         <div className="max-h-52 overflow-y-auto px-5 py-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Buy History</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Buy History</p>
           {actionError ? <p className="mb-2 text-xs text-red-500">{actionError}</p> : null}
-          {loading ? <p className="py-3 text-center text-xs text-slate-400">Loading...</p>
-          : buys.length === 0 ? <p className="py-3 text-center text-xs text-slate-400">No buy transactions recorded.</p>
+          {loading ? <p className="py-3 text-center text-xs text-[var(--text-muted)]">Loading...</p>
+          : buys.length === 0 ? <p className="py-3 text-center text-xs text-[var(--text-muted)]">No buy transactions recorded.</p>
           : buys.map((t) => (
-            <div key={t.id} className="flex items-center justify-between border-b border-slate-50 py-2 last:border-0">
+            <div key={t.id} className="flex items-center justify-between border-b border-[var(--border)] py-2 last:border-0">
               <div>
-                <p className="text-xs font-medium text-slate-700">{t.tx_date}</p>
-                {t.quantity && <p className="text-xs text-slate-400">{parseFloat(t.quantity).toFixed(4)} units</p>}
-                {t.external_reference ? <p className="text-xs text-slate-400">{t.external_reference}</p> : null}
+                <p className="text-xs font-medium text-[var(--text-2)]">{t.tx_date}</p>
+                {t.quantity && <p className="text-xs text-[var(--text-muted)]">{parseFloat(t.quantity).toFixed(4)} units</p>}
+                {t.external_reference ? <p className="text-xs text-[var(--text-muted)]">{t.external_reference}</p> : null}
               </div>
               <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold text-slate-900">{fmt(t.amount)}</p>
+                <p className="text-xs font-semibold text-[var(--text)]">{fmt(t.amount)}</p>
                 {canWrite ? (
                   <>
-                    <button type="button" onClick={() => setEditingTx(t)} className="rounded border border-slate-200 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
+                    <button type="button" onClick={() => setEditingTx(t)} className="rounded border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-2)] hover:bg-[var(--surface-2)]">
                       Edit
                     </button>
                     <button type="button" disabled={busyTxId === t.id} onClick={() => void handleDeleteBuy(t)} className="rounded border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-50">
@@ -398,10 +385,10 @@ function HoldingDetailSheet({ householdId, holding, instrument, onBuy, onUpdateV
             onCancel={() => setEditingTx(null)}
           />
         ) : null}
-        <div className="flex gap-2 border-t border-slate-100 p-4">
+        <div className="flex gap-2 border-t border-[var(--border)] p-4">
           <button type="button" onClick={onBuy} disabled={!canWrite} className="flex-1 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">+ Buy More</button>
           <button type="button" onClick={onUpdateValue} disabled={!canWrite} className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">Update Value</button>
-          <button type="button" onClick={onEdit} disabled={!canWrite} className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50" title="Edit instrument">✏️</button>
+          <button type="button" onClick={onEdit} disabled={!canWrite} className="rounded-xl border border-[var(--border)] px-3 py-2.5 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50" title="Edit instrument">✏️</button>
         </div>
       </div>
     </div>
@@ -499,12 +486,12 @@ export function HoldingsPage() {
         {members.length > 1 && (
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => setActiveMemberId(null)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${activeMemberId === null ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${activeMemberId === null ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`}>
             All
           </button>
           {members.map((m) => (
             <button key={m.id} type="button" onClick={() => setActiveMemberId(m.id)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${activeMemberId === m.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${activeMemberId === m.id ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`}>
               {m.label}
             </button>
           ))}
@@ -517,12 +504,12 @@ export function HoldingsPage() {
       </div>
 
       {holdingsLoading ? (
-        <p className="py-6 text-center text-xs text-slate-400">Loading…</p>
+        <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
       ) : activeHoldings.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center">
+        <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
           <p className="text-3xl">📊</p>
-          <p className="mt-2 text-sm font-medium text-slate-700">{activeMemberId !== null ? 'No holdings for this member' : 'No holdings yet'}</p>
-          <p className="mt-1 text-xs text-slate-400">Tap + to add your first holding.</p>
+          <p className="mt-2 text-sm font-medium text-[var(--text-2)]">{activeMemberId !== null ? 'No holdings for this member' : 'No holdings yet'}</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first holding.</p>
         </div>
       ) : (
         <div className="grid gap-1">{holdingsSections}</div>

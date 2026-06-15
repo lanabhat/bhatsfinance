@@ -6,6 +6,7 @@ import { AssetCategoryForm } from '../components/assets/AssetCategoryForm'
 import { AccountCard } from '../components/assets/AccountCard'
 import { CategorySection } from '../components/assets/CategorySection'
 import { InstrumentRow } from '../components/assets/InstrumentRow'
+import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -21,7 +22,7 @@ function GroupHeader({ label, color }: { label: string; color?: string }) {
   return (
     <div className="mt-3 flex items-center gap-2 first:mt-0">
       {color && <span className="h-2 w-2 rounded-full" style={{ background: color }} />}
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
     </div>
   )
 }
@@ -38,7 +39,7 @@ function GroupBySelector<T extends string>({
 }) {
   return (
     <div className="flex items-center gap-1">
-      <span className="mr-1 text-xs text-slate-400">Group:</span>
+      <span className="mr-1 text-xs text-[var(--text-muted)]">Group:</span>
       {options.map((o) => (
         <button
           key={o.value}
@@ -47,7 +48,7 @@ function GroupBySelector<T extends string>({
           className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
             value === o.value
               ? 'bg-indigo-600 text-white'
-              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'
           }`}
         >
           {o.label}
@@ -58,23 +59,6 @@ function GroupBySelector<T extends string>({
 }
 
 // ── slide-up sheet ────────────────────────────────────────────────────────────
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div
-        className="w-full max-w-lg rounded-t-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-}
-
 // ── valuation form ────────────────────────────────────────────────────────────
 function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCancel }: {
   householdId: number
@@ -119,28 +103,28 @@ function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCa
 
   return (
     <div className="grid gap-4">
-      <p className="text-sm text-slate-500">{instrumentName}</p>
+      <p className="text-sm text-[var(--text-muted)]">{instrumentName}</p>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Date</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Unit Price</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Unit Price</label>
         <input type="number" min="0" step="0.000001" placeholder="e.g. 94.50" value={unitPrice}
           onChange={(e) => setUnitPrice(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Market Value (total)</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Market Value (total)</label>
         <input type="number" min="0" step="0.01" placeholder="e.g. 50000" value={marketValue}
           onChange={(e) => setMarketValue(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
       </div>
       {error && <p className="text-xs text-red-500">{error}</p>}
-      <div className="flex gap-2 border-t border-slate-100 pt-3">
+      <div className="flex gap-2 border-t border-[var(--border)] pt-3">
         <button type="button" onClick={onCancel}
-          className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+          className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]">
           Cancel
         </button>
         <button type="button" disabled={saving} onClick={save}
@@ -190,7 +174,7 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
     }
   }, [quantity, pricePerUnit])
 
-  const inp = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+  const inp = 'w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
 
   const save = async () => {
     if (!amount || parseFloat(amount) <= 0) { setError('Enter total amount paid.'); return }
@@ -259,7 +243,7 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
       {/* instrument selector */}
       {!initInstrumentId && (
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Instrument</label>
+          <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Instrument</label>
           {!showNewInst ? (
             <div className="flex gap-2">
               <select value={instrumentId} onChange={(e) => setInstrumentId(e.target.value)} className={`flex-1 ${inp}`}>
@@ -282,7 +266,7 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
                 <option value="">— No category —</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              <button type="button" onClick={() => setShowNewInst(false)} className="text-xs text-slate-400 hover:text-slate-600">← back to existing</button>
+              <button type="button" onClick={() => setShowNewInst(false)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-2)]">← back to existing</button>
             </div>
           )}
         </div>
@@ -290,7 +274,7 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
 
       {/* member */}
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Owner (member)</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Owner (member)</label>
         <select value={memberId} onChange={(e) => setMemberId(e.target.value)} className={inp}>
           <option value="">— Unassigned —</option>
           {members.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
@@ -299,19 +283,19 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
 
       {/* date */}
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Purchase Date</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Purchase Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inp} />
       </div>
 
       {/* qty + price */}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Units / Qty</label>
+          <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Units / Qty</label>
           <input type="number" min="0" step="0.000001" placeholder="e.g. 10.5" value={quantity}
             onChange={(e) => setQuantity(e.target.value)} className={inp} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Price per unit</label>
+          <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Price per unit</label>
           <input type="number" min="0" step="0.000001" placeholder="e.g. 94.50" value={pricePerUnit}
             onChange={(e) => setPricePerUnit(e.target.value)} className={inp} />
         </div>
@@ -319,15 +303,15 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
 
       {/* amount */}
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Total amount paid (₹) *</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Total amount paid (₹) *</label>
         <input type="number" min="0" step="0.01" placeholder="e.g. 5000" value={amount}
           onChange={(e) => setAmount(e.target.value)} className={inp} />
       </div>
 
       {error && <p className="text-xs text-red-500">{error}</p>}
-      <div className="flex gap-2 border-t border-slate-100 pt-3">
+      <div className="flex gap-2 border-t border-[var(--border)] pt-3">
         <button type="button" onClick={onCancel}
-          className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+          className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]">
           Cancel
         </button>
         <button type="button" disabled={saving} onClick={save}
@@ -383,52 +367,52 @@ function HoldingDetailSheet({ householdId, holding, instrument, members, onBuy, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-t-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-t-2xl bg-[var(--surface)] shadow-xl" onClick={(e) => e.stopPropagation()}>
         {/* header */}
-        <div className="flex items-start justify-between border-b border-slate-100 px-5 py-4">
+        <div className="flex items-start justify-between border-b border-[var(--border)] px-5 py-4">
           <div>
-            <p className="text-base font-semibold text-slate-900">{instrument.name}</p>
-            <p className="mt-0.5 text-xs text-slate-400 capitalize">{instrument.instrument_type.replace(/_/g, ' ')} · {ownerLabel}</p>
+            <p className="text-base font-semibold text-[var(--text)]">{instrument.name}</p>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)] capitalize">{instrument.instrument_type.replace(/_/g, ' ')} · {ownerLabel}</p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+          <button type="button" onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-2)]">✕</button>
         </div>
 
         {/* stats */}
-        <div className="grid grid-cols-3 gap-px bg-slate-100 border-b border-slate-100">
+        <div className="grid grid-cols-3 gap-px bg-[var(--surface-2)] border-b border-[var(--border)]">
           {[
             { label: 'Current Value', value: fmt(holding.market_value) },
             { label: 'Invested', value: fmt(holding.net_invested) },
             { label: 'Gain / Loss', value: gainPct ? `${gain >= 0 ? '+' : ''}${gainPct}%` : '—' },
           ].map((s) => (
-            <div key={s.label} className="bg-white px-4 py-3 text-center">
-              <p className={`text-sm font-bold ${s.label === 'Gain / Loss' ? (gain >= 0 ? 'text-emerald-600' : 'text-red-500') : 'text-slate-900'}`}>{s.value}</p>
-              <p className="mt-0.5 text-xs text-slate-400">{s.label}</p>
+            <div key={s.label} className="bg-[var(--surface)] px-4 py-3 text-center">
+              <p className={`text-sm font-bold ${s.label === 'Gain / Loss' ? (gain >= 0 ? 'text-emerald-600' : 'text-red-500') : 'text-[var(--text)]'}`}>{s.value}</p>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{s.label}</p>
             </div>
           ))}
         </div>
 
         {/* buy history */}
         <div className="max-h-52 overflow-y-auto px-5 py-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Buy History</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Buy History</p>
           {loading ? (
-            <p className="py-3 text-center text-xs text-slate-400">Loading…</p>
+            <p className="py-3 text-center text-xs text-[var(--text-muted)]">Loading…</p>
           ) : buys.length === 0 ? (
-            <p className="py-3 text-center text-xs text-slate-400">No buy transactions recorded.</p>
+            <p className="py-3 text-center text-xs text-[var(--text-muted)]">No buy transactions recorded.</p>
           ) : (
             buys.map((t) => (
-              <div key={t.id} className="flex items-center justify-between border-b border-slate-50 py-2 last:border-0">
+              <div key={t.id} className="flex items-center justify-between border-b border-[var(--border)] py-2 last:border-0">
                 <div>
-                  <p className="text-xs font-medium text-slate-700">{t.tx_date}</p>
-                  {t.quantity && <p className="text-xs text-slate-400">{parseFloat(t.quantity).toFixed(4)} units</p>}
+                  <p className="text-xs font-medium text-[var(--text-2)]">{t.tx_date}</p>
+                  {t.quantity && <p className="text-xs text-[var(--text-muted)]">{parseFloat(t.quantity).toFixed(4)} units</p>}
                 </div>
-                <p className="text-xs font-semibold text-slate-900">{fmt(t.amount)}</p>
+                <p className="text-xs font-semibold text-[var(--text)]">{fmt(t.amount)}</p>
               </div>
             ))
           )}
         </div>
 
         {/* actions */}
-        <div className="flex gap-2 border-t border-slate-100 p-4">
+        <div className="flex gap-2 border-t border-[var(--border)] p-4">
           <button type="button" onClick={onBuy}
             className="flex-1 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
             + Buy More
@@ -490,11 +474,11 @@ function AccountForm({
     }
   }
 
-  const sel = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+  const sel = 'w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
 
   const field = (label: string, node: React.ReactNode) => (
     <div>
-      <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
+      <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">{label}</label>
       {node}
     </div>
   )
@@ -502,7 +486,7 @@ function AccountForm({
   const inp = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
     <input
       {...props}
-      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
     />
   )
 
@@ -528,7 +512,7 @@ function AccountForm({
         <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           {saving ? 'Saving…' : account ? 'Update' : 'Add Account'}
         </button>
-        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
       </div>
     </form>
   )
@@ -582,10 +566,10 @@ function InstrumentForm({
   }
 
   const inp = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
-    <input {...props} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+    <input {...props} className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
   )
   const sel = (value: string, onChange: (v: string) => void, children: React.ReactNode) => (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
       {children}
     </select>
   )
@@ -593,17 +577,17 @@ function InstrumentForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Name</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Name</label>
         {inp({ value: form.name, onChange: (e) => setForm((p) => ({ ...p, name: e.target.value })), required: true })}
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Type</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Type</label>
         {sel(form.instrument_type, (v) => setForm((p) => ({ ...p, instrument_type: v as Instrument['instrument_type'] })),
           INSTRUMENT_TYPES.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)
         )}
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Category</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Category</label>
         {sel(String(form.asset_category ?? ''), (v) => setForm((p) => ({ ...p, asset_category: v ? Number(v) : null })),
           <>
             <option value="">— None —</option>
@@ -612,7 +596,7 @@ function InstrumentForm({
         )}
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Symbol / Ticker (optional)</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Symbol / Ticker (optional)</label>
         {inp({ value: form.symbol ?? '', onChange: (e) => setForm((p) => ({ ...p, symbol: e.target.value })) })}
       </div>
       {error && <p className="text-xs text-red-500">{error}</p>}
@@ -620,7 +604,7 @@ function InstrumentForm({
         <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           {saving ? 'Saving…' : instrument ? 'Update' : 'Add Instrument'}
         </button>
-        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
       </div>
     </form>
   )
@@ -771,7 +755,7 @@ export function AssetsPage() {
               type="button"
               onClick={() => setActiveMemberId(null)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                activeMemberId === null ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                activeMemberId === null ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'
               }`}
             >
               All
@@ -782,7 +766,7 @@ export function AssetsPage() {
                 type="button"
                 onClick={() => setActiveMemberId(m.id)}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  activeMemberId === m.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  activeMemberId === m.id ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'
                 }`}
               >
                 {m.label}
@@ -792,14 +776,14 @@ export function AssetsPage() {
         )}
 
         {holdingsLoading ? (
-          <p className="py-6 text-center text-xs text-slate-400">Loading…</p>
+          <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
         ) : activeHoldings.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center">
+          <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
             <p className="text-3xl">📊</p>
-            <p className="mt-2 text-sm font-medium text-slate-700">
+            <p className="mt-2 text-sm font-medium text-[var(--text-2)]">
               {activeMemberId !== null ? 'No holdings for this member' : 'No holdings yet'}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Tap + to add your first holding.</p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first holding.</p>
           </div>
         ) : (
           <div className="grid gap-1">{holdingsSections}</div>
@@ -893,14 +877,14 @@ export function AssetsPage() {
   const manageView = () => (
     <div>
       {/* sub-tabs */}
-      <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1">
+      <div className="mb-4 flex gap-1 rounded-lg bg-[var(--surface-2)] p-1">
         {(['accounts', 'instruments', 'categories'] as ManageTab[]).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setManageTab(t)}
             className={`flex-1 rounded-md py-1.5 text-xs font-medium capitalize transition-colors ${
-              manageTab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              manageTab === t ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-2)]'
             }`}
           >
             {t}
@@ -940,9 +924,9 @@ export function AssetsPage() {
             onChange={setAccountGroupBy}
           />
           {loading ? (
-            <p className="py-4 text-center text-xs text-slate-400">Loading…</p>
+            <p className="py-4 text-center text-xs text-[var(--text-muted)]">Loading…</p>
           ) : accounts.length === 0 ? (
-            <p className="py-4 text-center text-xs text-slate-400">No accounts yet.</p>
+            <p className="py-4 text-center text-xs text-[var(--text-muted)]">No accounts yet.</p>
           ) : accountGroupBy === 'none' ? (
             accounts.map((a) => (
               <AccountCard key={a.id} account={a} onClick={canWrite ? () => setSheet({ type: 'account', item: a }) : undefined} />
@@ -961,7 +945,7 @@ export function AssetsPage() {
             type="button"
             onClick={() => setSheet({ type: 'account' })}
             disabled={!canWrite}
-            className="mt-1 w-full rounded-xl border border-dashed border-slate-300 py-3 text-sm font-medium text-slate-500 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50"
+            className="mt-1 w-full rounded-xl border border-dashed border-[var(--border-2)] py-3 text-sm font-medium text-[var(--text-muted)] hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50"
           >
             + Add Account
           </button>
@@ -1010,9 +994,9 @@ export function AssetsPage() {
             onChange={setInstrumentGroupBy}
           />
           {loading ? (
-            <p className="py-4 text-center text-xs text-slate-400">Loading…</p>
+            <p className="py-4 text-center text-xs text-[var(--text-muted)]">Loading…</p>
           ) : instruments.length === 0 ? (
-            <p className="py-4 text-center text-xs text-slate-400">No instruments yet.</p>
+            <p className="py-4 text-center text-xs text-[var(--text-muted)]">No instruments yet.</p>
           ) : instrumentGroupBy === 'none' ? (
             instruments.map((inst) => {
               const cat = categories.find((c) => c.id === inst.asset_category)
@@ -1037,7 +1021,7 @@ export function AssetsPage() {
             type="button"
             onClick={() => setSheet({ type: 'instrument' })}
             disabled={!canWrite}
-            className="mt-1 w-full rounded-xl border border-dashed border-slate-300 py-3 text-sm font-medium text-slate-500 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50"
+            className="mt-1 w-full rounded-xl border border-dashed border-[var(--border-2)] py-3 text-sm font-medium text-[var(--text-muted)] hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50"
           >
             + Add Instrument
           </button>
@@ -1047,14 +1031,14 @@ export function AssetsPage() {
       {manageTab === 'categories' && (
         <div className="grid gap-2">
           {categories.length === 0 ? (
-            <p className="py-4 text-center text-xs text-slate-400">No categories yet.</p>
+            <p className="py-4 text-center text-xs text-[var(--text-muted)]">No categories yet.</p>
           ) : (
             categories.map((cat) => (
-              <div key={cat.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+              <div key={cat.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
                 <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: cat.color }} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900">{cat.name}</p>
-                  <p className="text-xs text-slate-400">{cat.instrument_count} instrument{cat.instrument_count !== 1 ? 's' : ''}</p>
+                  <p className="text-sm font-medium text-[var(--text)]">{cat.name}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{cat.instrument_count} instrument{cat.instrument_count !== 1 ? 's' : ''}</p>
                 </div>
                 <button type="button" onClick={() => setSheet({ type: 'category', item: cat })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 disabled:opacity-50">Edit</button>
                 <button type="button" onClick={() => deleteCategory(cat.id)} disabled={!canWrite} className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50">Delete</button>
@@ -1065,7 +1049,7 @@ export function AssetsPage() {
             type="button"
             onClick={() => setSheet({ type: 'category' })}
             disabled={!canWrite}
-            className="mt-1 w-full rounded-xl border border-dashed border-slate-300 py-3 text-sm font-medium text-slate-500 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50"
+            className="mt-1 w-full rounded-xl border border-dashed border-[var(--border-2)] py-3 text-sm font-medium text-[var(--text-muted)] hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50"
           >
             + Add Category
           </button>
@@ -1077,14 +1061,14 @@ export function AssetsPage() {
   return (
     <div className="grid gap-4">
       {/* main pill switcher */}
-      <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+      <div className="flex gap-1 rounded-xl bg-[var(--surface-2)] p-1">
         {(['holdings', 'manage'] as MainTab[]).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setMainTab(t)}
             className={`flex-1 rounded-lg py-2 text-sm font-medium capitalize transition-colors ${
-              mainTab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              mainTab === t ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-2)]'
             }`}
           >
             {t === 'holdings' ? 'Holdings' : 'Manage'}

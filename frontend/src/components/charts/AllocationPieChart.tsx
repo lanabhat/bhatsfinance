@@ -1,5 +1,6 @@
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { useMaskedFmt } from '../common/Money'
+import { ChartTooltip } from './chartTheme'
 import type { DashboardAllocation } from '../../types/domain'
 
 const COLORS = ['#6366f1', '#22d3ee', '#f59e0b', '#10b981', '#f43f5e', '#a78bfa', '#fb923c', '#34d399']
@@ -22,8 +23,8 @@ export function AllocationPieChart({ data }: Props) {
             <Cell key={i} fill={COLORS[i % COLORS.length]} />
           ))}
         </Pie>
-        <Tooltip formatter={(v) => fmt(Number(v))} />
-        <Legend />
+        <Tooltip content={(p) => <ChartTooltip {...p} fmt={fmt} />} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
       </PieChart>
     </ResponsiveContainer>
   )

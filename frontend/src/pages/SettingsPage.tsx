@@ -34,7 +34,7 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
   const { mode, setMode } = useTerms()
 
   const tabCls = (t: Tab) =>
-    `px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === t ? 'bg-primary-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`
+    `px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === t ? 'bg-primary-600 text-white' : 'text-[var(--text-2)] hover:bg-[var(--surface-2)]'}`
 
   return (
     <section className="grid single-col">
@@ -47,7 +47,7 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
       {tab === 'display' && (
         <article className="panel">
           <h2>Display Mode</h2>
-          <p style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
             Choose how menu labels and terminology appear throughout the app.
           </p>
           <div className="grid grid-cols-2 gap-3 max-w-sm">
@@ -62,12 +62,12 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
                 className={`flex flex-col items-center gap-2 rounded-xl border-2 p-5 text-center transition-all ${
                   mode === opt.value
                     ? 'border-primary-500 bg-primary-50 text-primary-700'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-primary-300 hover:bg-slate-50'
+                    : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-2)] hover:border-primary-300 hover:bg-[var(--surface-2)]'
                 }`}
               >
                 <span className="text-3xl">{opt.emoji}</span>
                 <span className="font-semibold">{opt.label}</span>
-                <span className="text-xs text-slate-500">{opt.desc}</span>
+                <span className="text-xs text-[var(--text-muted)]">{opt.desc}</span>
               </button>
             ))}
           </div>
@@ -85,7 +85,7 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
 
       {tab === 'delete' && <article className="panel">
         <h2>Delete Permissions</h2>
-        <p style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '1rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
           Control which entity types show delete buttons. Disable to prevent accidental deletions.
         </p>
         <table>

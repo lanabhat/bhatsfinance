@@ -35,7 +35,7 @@ export function HelpTooltip({ text }: Props) {
       {open && (
         <span
           role="tooltip"
-          className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 z-50 w-max max-w-[280px] min-w-[180px] -translate-y-1/2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-800 shadow-md max-[700px]:left-auto max-[700px]:right-[calc(100%+8px)]"
+          className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 z-50 w-max max-w-[280px] min-w-[180px] -translate-y-1/2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs leading-relaxed text-[var(--text)] shadow-md max-[700px]:left-auto max-[700px]:right-[calc(100%+8px)]"
         >
           <span className="absolute right-full top-1/2 -translate-y-1/2 border-[6px] border-transparent border-r-slate-200 max-[700px]:left-full max-[700px]:right-auto max-[700px]:border-r-transparent max-[700px]:border-l-slate-200" />
           <span className="absolute right-[calc(100%-1px)] top-1/2 -translate-y-1/2 border-[6px] border-transparent border-r-white max-[700px]:left-[calc(100%-1px)] max-[700px]:right-auto max-[700px]:border-r-transparent max-[700px]:border-l-white" />

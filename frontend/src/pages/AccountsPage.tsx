@@ -4,29 +4,13 @@ import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
 import { accountApi } from '../api/accountApi'
 import { AccountCard } from '../components/assets/AccountCard'
+import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import type { Account, AccountBalance, AccountOwnership, Transaction } from '../types/domain'
 
-function Sheet({ title, onClose, children, tall }: { title: string; onClose: () => void; children: React.ReactNode; tall?: boolean }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div
-        className={`w-full max-w-lg rounded-t-2xl bg-white shadow-xl ${tall ? 'max-h-[90vh] overflow-y-auto' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-2xl bg-white px-6 pt-6 pb-4">
-          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
-        </div>
-        <div className="px-6 pb-8">{children}</div>
-      </div>
-    </div>
-  )
-}
-
 const ACCOUNT_TYPES = ['bank', 'broker', 'pf', 'loan', 'credit_card', 'insurance', 'cash', 'other'] as const
-const INP = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+const INP = 'w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
 
 function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
   householdId: number; account?: Account
@@ -73,27 +57,27 @@ function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Name</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Name</label>
         <input className={INP} value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required /></div>
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Type</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Type</label>
         <select className={INP} value={form.account_type} onChange={(e) => setForm((p) => ({ ...p, account_type: e.target.value as Account['account_type'] }))}>
           {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
         </select></div>
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Primary Owner</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Primary Owner</label>
         <select className={INP} value={form.primary_member ?? ''} onChange={(e) => setForm((p) => ({ ...p, primary_member: e.target.value ? Number(e.target.value) : null }))}>
           <option value="">— None —</option>
           {members.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select></div>
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Institution</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Institution</label>
         <input className={INP} value={form.institution_name} onChange={(e) => setForm((p) => ({ ...p, institution_name: e.target.value }))} /></div>
       {form.account_type !== 'credit_card' && (
-        <div><label className="mb-1 block text-xs font-medium text-slate-600">Opening Balance (₹)</label>
+        <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Opening Balance (₹)</label>
           <input type="number" className={INP} value={form.opening_balance} onChange={(e) => setForm((p) => ({ ...p, opening_balance: e.target.value }))} /></div>
       )}
       {form.account_type === 'credit_card' && (<>
-        <div><label className="mb-1 block text-xs font-medium text-slate-600">Credit Limit (₹)</label>
+        <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Credit Limit (₹)</label>
           <input type="number" className={INP} value={form.credit_limit ?? ''} onChange={(e) => setForm((p) => ({ ...p, credit_limit: e.target.value || null }))} /></div>
-        <div><label className="mb-1 block text-xs font-medium text-slate-600">Statement Due Day</label>
+        <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Statement Due Day</label>
           <input type="number" min={1} max={31} className={INP} placeholder="e.g. 5 (5th of each month)"
             value={form.statement_due_day ?? ''} onChange={(e) => setForm((p) => ({ ...p, statement_due_day: e.target.value ? Number(e.target.value) : null }))} /></div>
       </>)}
@@ -102,10 +86,10 @@ function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
         <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           {saving ? 'Saving…' : account ? 'Update' : 'Add Account'}
         </button>
-        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
       </div>
       {account && onDelete && (
-        <div className="border-t border-slate-100 pt-3">
+        <div className="border-t border-[var(--border)] pt-3">
           {!confirmDelete ? (
             <button type="button" onClick={() => setConfirmDelete(true)} className="w-full rounded-lg border border-red-200 py-2 text-sm text-red-500 hover:bg-red-50">Delete Account</button>
           ) : (
@@ -113,7 +97,7 @@ function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
               <p className="mb-2 text-xs text-red-600">Delete this account and all its transaction history?</p>
               <div className="flex gap-2">
                 <button type="button" onClick={onDelete} className="flex-1 rounded-lg bg-red-500 py-1.5 text-xs font-medium text-white hover:bg-red-600">Yes, delete</button>
-                <button type="button" onClick={() => setConfirmDelete(false)} className="flex-1 rounded-lg border border-slate-200 py-1.5 text-xs text-slate-600">Cancel</button>
+                <button type="button" onClick={() => setConfirmDelete(false)} className="flex-1 rounded-lg border border-[var(--border)] py-1.5 text-xs text-[var(--text-2)]">Cancel</button>
               </div>
             </div>
           )}
@@ -165,19 +149,19 @@ function CCSpendForm({ account, householdId, onSave, onCancel, mode }: {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Date</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Date</label>
         <input type="date" className={INP} value={form.date} onChange={(e) => setForm(p => ({ ...p, date: e.target.value }))} required /></div>
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Amount (₹)</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Amount (₹)</label>
         <input type="number" step="0.01" min="0" className={INP} placeholder="0.00"
           value={form.amount} onChange={(e) => setForm(p => ({ ...p, amount: e.target.value }))} required /></div>
       {mode === 'spend' && (
-        <div><label className="mb-1 block text-xs font-medium text-slate-600">Spent by</label>
+        <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Spent by</label>
           <select className={INP} value={form.member} onChange={(e) => setForm(p => ({ ...p, member: e.target.value }))}>
             <option value="">— Anyone —</option>
             {members.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
           </select></div>
       )}
-      <div><label className="mb-1 block text-xs font-medium text-slate-600">Description</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Description</label>
         <input className={INP} placeholder={mode === 'spend' ? 'e.g. Groceries, Amazon…' : 'e.g. Bill payment'}
           value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} /></div>
       {error && <p className="text-xs text-red-500">{error}</p>}
@@ -186,7 +170,7 @@ function CCSpendForm({ account, householdId, onSave, onCancel, mode }: {
           className={`flex-1 rounded-lg py-2 text-sm font-medium text-white disabled:opacity-50 ${mode === 'spend' ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
           {saving ? 'Saving…' : mode === 'spend' ? 'Record Spend' : 'Record Payment'}
         </button>
-        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
       </div>
     </form>
   )
@@ -250,14 +234,14 @@ function CardDetailSheet({ account, householdId, onEdit, onClose }: {
       <div className="mb-4 rounded-xl bg-rose-50 p-4">
         <div className="flex items-end justify-between">
           <div>
-            <p className="text-xs text-slate-500">Outstanding</p>
+            <p className="text-xs text-[var(--text-muted)]">Outstanding</p>
             <p className="text-2xl font-black text-rose-600">{outstanding > 0 ? fmtINR(-outstanding) : '₹0'}</p>
           </div>
           {limit > 0 && (
             <div className="text-right">
-              <p className="text-xs text-slate-500">Available</p>
-              <p className="text-base font-bold text-slate-700">{available != null ? fmtVal(available) : '—'}</p>
-              <p className="text-xs text-slate-400">of {fmtVal(limit)} limit</p>
+              <p className="text-xs text-[var(--text-muted)]">Available</p>
+              <p className="text-base font-bold text-[var(--text-2)]">{available != null ? fmtVal(available) : '—'}</p>
+              <p className="text-xs text-[var(--text-muted)]">of {fmtVal(limit)} limit</p>
             </div>
           )}
         </div>
@@ -267,7 +251,7 @@ function CardDetailSheet({ account, householdId, onEdit, onClose }: {
           </div>
         )}
         {account.statement_due_day && (
-          <p className="mt-2 text-xs text-slate-500">Payment due: {account.statement_due_day}th of each month</p>
+          <p className="mt-2 text-xs text-[var(--text-muted)]">Payment due: {account.statement_due_day}th of each month</p>
         )}
       </div>
 
@@ -282,19 +266,19 @@ function CardDetailSheet({ account, householdId, onEdit, onClose }: {
           Pay Bill
         </button>
         <button type="button" onClick={onEdit} disabled={!canWrite}
-          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+          className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
           Edit
         </button>
       </div>
 
       {/* Transaction history */}
       {loading ? (
-        <p className="py-6 text-center text-xs text-slate-400">Loading…</p>
+        <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
       ) : txs.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center">
+        <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center">
           <p className="text-2xl">💳</p>
-          <p className="mt-1 text-sm text-slate-500">No transactions yet</p>
-          <p className="text-xs text-slate-400">Tap "Record Spend" to add your first entry.</p>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">No transactions yet</p>
+          <p className="text-xs text-[var(--text-muted)]">Tap "Record Spend" to add your first entry.</p>
         </div>
       ) : (
         <div className="grid gap-4">
@@ -305,7 +289,7 @@ function CardDetailSheet({ account, householdId, onEdit, onClose }: {
             return (
               <div key={month}>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
                   <div className="flex gap-2 text-xs">
                     {monthSpend > 0 && <span className="text-rose-500">{fmtINR(-monthSpend)}</span>}
                     {monthPaid > 0 && <span className="text-indigo-600">{fmtINR(monthPaid)}</span>}
@@ -313,12 +297,12 @@ function CardDetailSheet({ account, householdId, onEdit, onClose }: {
                 </div>
                 <div className="grid gap-1">
                   {monthTxs.map(tx => (
-                    <div key={tx.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 shadow-sm">
+                    <div key={tx.id} className="flex items-center justify-between rounded-lg bg-[var(--surface)] px-3 py-2.5 shadow-sm">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-slate-900">
+                        <p className="truncate text-sm text-[var(--text)]">
                           {tx.external_reference || tx.transaction_type.replace(/_/g, ' ')}
                         </p>
-                        <p className="text-xs text-slate-400">{fmtDate(tx.tx_date)}</p>
+                        <p className="text-xs text-[var(--text-muted)]">{fmtDate(tx.tx_date)}</p>
                       </div>
                       <p className={`ml-3 shrink-0 text-sm font-semibold ${tx.direction === 'outflow' ? 'text-rose-600' : 'text-indigo-600'}`}>
                         {fmtINR(tx.direction === 'outflow' ? -parseFloat(tx.amount) : parseFloat(tx.amount))}
@@ -419,10 +403,10 @@ export function AccountsPage() {
   return (
     <div className="grid gap-3">
       <div className="flex items-center gap-1">
-        <span className="mr-1 text-xs text-slate-400">Group:</span>
+        <span className="mr-1 text-xs text-[var(--text-muted)]">Group:</span>
         {GROUP_OPTS.map((o) => (
           <button key={o.value} type="button" onClick={() => setGroupBy(o.value)}
-            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${groupBy === o.value ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${groupBy === o.value ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`}>
             {o.label}
           </button>
         ))}
@@ -454,12 +438,12 @@ export function AccountsPage() {
       )}
 
       {loading ? (
-        <p className="py-6 text-center text-xs text-slate-400">Loading…</p>
+        <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
       ) : accounts.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center">
+        <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
           <p className="text-3xl">🏦</p>
-          <p className="mt-2 text-sm font-medium text-slate-700">No accounts yet</p>
-          <p className="mt-1 text-xs text-slate-400">Tap + to add your first account.</p>
+          <p className="mt-2 text-sm font-medium text-[var(--text-2)]">No accounts yet</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first account.</p>
         </div>
       ) : groupBy === 'none' ? (
         <div className="grid gap-2">{renderList(accounts)}</div>
@@ -468,7 +452,7 @@ export function AccountsPage() {
           {Array.from(grouped.entries()).map(([label, group]) => (
             <div key={label}>
               <div className="mt-3 first:mt-0">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
               </div>
               {renderList(group)}
             </div>

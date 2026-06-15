@@ -30,8 +30,8 @@ const EMPTY_FORM = (householdId: number): Omit<ValuationSnapshot, 'id'> => ({
   notes: '',
 })
 
-const INP = 'w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400'
-const LBL = 'text-[11px] font-medium uppercase tracking-wide text-slate-400'
+const INP = 'w-full rounded-lg border border-[var(--border-2)] px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400'
+const LBL = 'text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]'
 
 type GroupFilter = 'all' | 'account' | 'instrument'
 
@@ -139,14 +139,14 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+          <div className="flex gap-1 rounded-lg bg-[var(--surface-2)] p-1">
             {(['all', 'account', 'instrument'] as GroupFilter[]).map((f) => (
               <button
                 key={f}
                 type="button"
                 onClick={() => setGroupFilter(f)}
                 className={`rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors ${
-                  groupFilter === f ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  groupFilter === f ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-2)]'
                 }`}
               >
                 {f}
@@ -158,7 +158,7 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
             placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="rounded-lg border border-[var(--border-2)] px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-indigo-400"
           />
         </div>
         <div className="flex gap-2">
@@ -194,13 +194,13 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
                   { label: 'Total Assets', value: snapshotResult.total_assets },
                   { label: 'Total Liabilities', value: snapshotResult.total_liabilities },
                 ].map((s) => (
-                  <div key={s.label} className="rounded-lg bg-white border border-indigo-100 px-3 py-2">
-                    <p className="text-[11px] text-slate-400">{s.label}</p>
-                    <p className="text-base font-bold text-slate-800">{fmt(s.value)}</p>
+                  <div key={s.label} className="rounded-lg bg-[var(--surface)] border border-indigo-100 px-3 py-2">
+                    <p className="text-[11px] text-[var(--text-muted)]">{s.label}</p>
+                    <p className="text-base font-bold text-[var(--text)]">{fmt(s.value)}</p>
                   </div>
                 ))}
               </div>
-              <p className="text-[11px] text-slate-400">Snapshot saved as of {snapshotResult.as_of}</p>
+              <p className="text-[11px] text-[var(--text-muted)]">Snapshot saved as of {snapshotResult.as_of}</p>
               {snapshotResult.auto_computed.length > 0 && (
                 <div>
                   <p className="text-xs font-medium text-emerald-700 mb-1">✓ Auto-computed ({snapshotResult.auto_computed.length})</p>
@@ -256,43 +256,43 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
       )}
 
       {/* List */}
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
         {loading ? (
-          <p className="py-10 text-center text-sm text-slate-400">Loading…</p>
+          <p className="py-10 text-center text-sm text-[var(--text-muted)]">Loading…</p>
         ) : filtered.length === 0 ? (
-          <p className="py-10 text-center text-sm text-slate-400">No valuations found.</p>
+          <p className="py-10 text-center text-sm text-[var(--text-muted)]">No valuations found.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50 text-left">
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Date</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Account / Instrument</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 text-right">Market Value</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 text-right">Balance</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 text-right">Unit Price</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Source</th>
+              <tr className="border-b border-[var(--border)] bg-[var(--surface-2)] text-left">
+                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Date</th>
+                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Account / Instrument</th>
+                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] text-right">Market Value</th>
+                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] text-right">Balance</th>
+                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] text-right">Unit Price</th>
+                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Source</th>
                 <th className="px-4 py-2.5"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((x) => (
-                <tr key={x.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 text-slate-700 tabular-nums">{x.valuation_date}</td>
+                <tr key={x.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)] transition-colors">
+                  <td className="px-4 py-3 text-[var(--text-2)] tabular-nums">{x.valuation_date}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-medium text-slate-800">
+                      <span className="font-medium text-[var(--text)]">
                         {x.account ? accountLabel(x.account) : instrumentLabel(x.instrument)}
                       </span>
-                      {x.notes && <span className="text-[11px] text-slate-400 truncate max-w-[18rem]">{x.notes}</span>}
+                      {x.notes && <span className="text-[11px] text-[var(--text-muted)] truncate max-w-[18rem]">{x.notes}</span>}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                  <td className="px-4 py-3 text-right tabular-nums text-[var(--text-2)]">
                     {x.market_value ? fmt(x.market_value) : '—'}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                  <td className="px-4 py-3 text-right tabular-nums text-[var(--text-2)]">
                     {x.balance ? fmt(x.balance) : '—'}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-500 text-xs">
+                  <td className="px-4 py-3 text-right tabular-nums text-[var(--text-muted)] text-xs">
                     {x.unit_price ? fmt(x.unit_price) : '—'}
                   </td>
                   <td className="px-4 py-3">
@@ -353,7 +353,7 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
               <option value="">— None —</option>
               {instrumentOptions.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
             </select>
-            <p className="text-[11px] text-slate-400">Set exactly one of Account or Instrument.</p>
+            <p className="text-[11px] text-[var(--text-muted)]">Set exactly one of Account or Instrument.</p>
           </label>
 
           <div className="grid grid-cols-2 gap-3">

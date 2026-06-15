@@ -70,14 +70,15 @@ function txTypeLabel(id: string) { return TX_TYPES.find(x => x.id === Number(id)
 
 function directionArrow(d: string) {
   return d === 'inflow'
-    ? <span style={{ color: '#16a34a', fontWeight: 700 }}>↑</span>
-    : <span style={{ color: '#dc2626', fontWeight: 700 }}>↓</span>
+    ? <span className="font-bold text-emerald-600 dark:text-emerald-400">↑</span>
+    : <span className="font-bold text-rose-600 dark:text-rose-400">↓</span>
 }
 
+const BADGE_BASE = 'rounded text-[0.65rem] font-semibold px-1.5 py-px'
 function sourceBadge(source: string) {
-  if (source === 'api') return <span style={{ fontSize: '0.65rem', background: '#dbeafe', color: '#1d4ed8', borderRadius: '4px', padding: '1px 5px', fontWeight: 600 }}>Gmail</span>
-  if (source === 'csv') return <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#92400e', borderRadius: '4px', padding: '1px 5px', fontWeight: 600 }}>CSV</span>
-  return <span style={{ fontSize: '0.65rem', background: '#f1f5f9', color: '#475569', borderRadius: '4px', padding: '1px 5px', fontWeight: 600 }}>Manual</span>
+  if (source === 'api') return <span className={`${BADGE_BASE} bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300`}>Gmail</span>
+  if (source === 'csv') return <span className={`${BADGE_BASE} bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300`}>CSV</span>
+  return <span className={`${BADGE_BASE} bg-[var(--surface-2)] text-[var(--text-2)]`}>Manual</span>
 }
 
 function TxFormFields({ form, onChange, accountOptions, memberOptions, instrumentOptions, error, submitLabel, onSubmit, onCancel, canWrite }: {
@@ -95,7 +96,7 @@ function TxFormFields({ form, onChange, accountOptions, memberOptions, instrumen
   const set = (k: keyof TxForm) => (v: string) => onChange({ ...form, [k]: v })
   return (
     <>
-      {error && <p style={{ color: '#dc2626', fontSize: '0.8rem', marginBottom: '0.5rem' }}>{error}</p>}
+      {error && <p className="mb-2 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
       <div className="form-grid">
         <SelectField label="Member" value={form.member} onChange={set('member')} options={memberOptions} placeholder="Optional" />
         <SelectField label="Account" value={form.account} onChange={set('account')} options={accountOptions} placeholder="Optional" />
@@ -137,7 +138,7 @@ function TransactionRow({ t, accountOptions, memberOptions, instrumentOptions, a
   const amountStr = `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
   return (
-    <li style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem', marginBottom: '0.25rem' }}>
+    <li style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '0.25rem' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
         <button
           type="button"
@@ -145,28 +146,28 @@ function TransactionRow({ t, accountOptions, memberOptions, instrumentOptions, a
           style={{ flex: 1, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8', minWidth: '6rem' }}>{t.tx_date}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)', minWidth: '6rem' }}>{t.tx_date}</span>
             {directionArrow(t.direction)}
             <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{amountStr}</span>
-            <span style={{ fontSize: '0.75rem', color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '1px 6px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '4px', padding: '1px 6px' }}>
               {TX_TYPE_LABELS[t.transaction_type] ?? t.transaction_type}
             </span>
             {sourceBadge(t.source)}
-            <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>#{t.id}</span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-faint)' }}>#{t.id}</span>
           </div>
           {(accountName || memberName || instrumentName) && (
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.2rem', flexWrap: 'wrap' }}>
               {accountName && (
-                <span style={{ fontSize: '0.75rem', color: '#475569' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-2)' }}>
                   {accountFull ? `${accountName} (${ACCOUNT_TYPE_LABELS[accountFull.account_type] ?? accountFull.account_type})` : accountName}
                 </span>
               )}
-              {memberName && <span style={{ fontSize: '0.75rem', color: '#475569' }}>· {memberName}</span>}
-              {instrumentName && <span style={{ fontSize: '0.75rem', color: '#475569' }}>· {instrumentName}</span>}
+              {memberName && <span style={{ fontSize: '0.75rem', color: 'var(--text-2)' }}>· {memberName}</span>}
+              {instrumentName && <span style={{ fontSize: '0.75rem', color: 'var(--text-2)' }}>· {instrumentName}</span>}
             </div>
           )}
           {t.external_reference && (
-            <div style={{ marginTop: '0.15rem', fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '40rem' }}>
+            <div style={{ marginTop: '0.15rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '40rem' }}>
               {t.external_reference}
             </div>
           )}
@@ -177,7 +178,7 @@ function TransactionRow({ t, accountOptions, memberOptions, instrumentOptions, a
               type="button"
               onClick={onEdit}
               title="Edit transaction"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: '#64748b', fontSize: '0.8rem' }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'var(--text-muted)', fontSize: '0.8rem' }}
             >
               ✏️
             </button>
@@ -187,25 +188,25 @@ function TransactionRow({ t, accountOptions, memberOptions, instrumentOptions, a
       </div>
 
       {expanded && (
-        <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: '6px', fontSize: '0.8rem', color: '#334155' }}>
+        <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: 'var(--surface-2)', borderRadius: '6px', fontSize: '0.8rem', color: 'var(--text-2)' }}>
           {gmailMeta ? (
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <tbody>
-                {gmailMeta.from && <tr><td style={{ color: '#64748b', paddingRight: '0.75rem', whiteSpace: 'nowrap', verticalAlign: 'top' }}>From</td><td>{gmailMeta.from}</td></tr>}
-                {gmailMeta.to && <tr><td style={{ color: '#64748b', paddingRight: '0.75rem', whiteSpace: 'nowrap', verticalAlign: 'top' }}>To</td><td>{gmailMeta.to}</td></tr>}
-                {gmailMeta.subject && <tr><td style={{ color: '#64748b', paddingRight: '0.75rem', whiteSpace: 'nowrap', verticalAlign: 'top' }}>Subject</td><td>{gmailMeta.subject}</td></tr>}
-                {gmailMeta.snippet && <tr><td style={{ color: '#64748b', paddingRight: '0.75rem', whiteSpace: 'nowrap', verticalAlign: 'top' }}>Preview</td><td style={{ color: '#475569' }}>{gmailMeta.snippet}</td></tr>}
-                {gmailMeta.message_id && <tr><td style={{ color: '#64748b', paddingRight: '0.75rem', whiteSpace: 'nowrap', verticalAlign: 'top' }}>Message ID</td><td style={{ fontSize: '0.7rem', color: '#94a3b8', wordBreak: 'break-all' }}>{gmailMeta.message_id}</td></tr>}
+                {gmailMeta.from && <tr><td style={{ color: 'var(--text-muted)', paddingRight: '0.75rem', whiteSpace: 'nowrap', verticalAlign: 'top' }}>From</td><td>{gmailMeta.from}</td></tr>}
+                {gmailMeta.to && <tr><td style={{ color: 'var(--text-muted)', paddingRight: '0.75rem', whiteSpace: 'nowrap', verticalAlign: 'top' }}>To</td><td>{gmailMeta.to}</td></tr>}
+                {gmailMeta.subject && <tr><td style={{ color: 'var(--text-muted)', paddingRight: '0.75rem', whiteSpace: 'nowrap', verticalAlign: 'top' }}>Subject</td><td>{gmailMeta.subject}</td></tr>}
+                {gmailMeta.snippet && <tr><td style={{ color: 'var(--text-muted)', paddingRight: '0.75rem', whiteSpace: 'nowrap', verticalAlign: 'top' }}>Preview</td><td style={{ color: 'var(--text-2)' }}>{gmailMeta.snippet}</td></tr>}
+                {gmailMeta.message_id && <tr><td style={{ color: 'var(--text-muted)', paddingRight: '0.75rem', whiteSpace: 'nowrap', verticalAlign: 'top' }}>Message ID</td><td style={{ fontSize: '0.7rem', color: 'var(--text-faint)', wordBreak: 'break-all' }}>{gmailMeta.message_id}</td></tr>}
               </tbody>
             </table>
           ) : (
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <tbody>
-                <tr><td style={{ color: '#64748b', paddingRight: '0.75rem' }}>Source</td><td>{t.source === 'csv' ? 'Imported from CSV' : 'Manually entered'}</td></tr>
-                {accountFull && <tr><td style={{ color: '#64748b', paddingRight: '0.75rem' }}>Account type</td><td>{ACCOUNT_TYPE_LABELS[accountFull.account_type] ?? accountFull.account_type}{accountFull.institution_name ? ` · ${accountFull.institution_name}` : ''}</td></tr>}
-                {t.quantity && <tr><td style={{ color: '#64748b', paddingRight: '0.75rem' }}>Quantity</td><td>{t.quantity}{t.price_per_unit ? ` @ ₹${t.price_per_unit}` : ''}</td></tr>}
-                {(parseFloat(t.fees) > 0 || parseFloat(t.taxes) > 0) && <tr><td style={{ color: '#64748b', paddingRight: '0.75rem' }}>Fees/Taxes</td><td>₹{t.fees} / ₹{t.taxes}</td></tr>}
-                {t.idempotency_key && <tr><td style={{ color: '#64748b', paddingRight: '0.75rem' }}>Key</td><td style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{t.idempotency_key}</td></tr>}
+                <tr><td style={{ color: 'var(--text-muted)', paddingRight: '0.75rem' }}>Source</td><td>{t.source === 'csv' ? 'Imported from CSV' : 'Manually entered'}</td></tr>
+                {accountFull && <tr><td style={{ color: 'var(--text-muted)', paddingRight: '0.75rem' }}>Account type</td><td>{ACCOUNT_TYPE_LABELS[accountFull.account_type] ?? accountFull.account_type}{accountFull.institution_name ? ` · ${accountFull.institution_name}` : ''}</td></tr>}
+                {t.quantity && <tr><td style={{ color: 'var(--text-muted)', paddingRight: '0.75rem' }}>Quantity</td><td>{t.quantity}{t.price_per_unit ? ` @ ₹${t.price_per_unit}` : ''}</td></tr>}
+                {(parseFloat(t.fees) > 0 || parseFloat(t.taxes) > 0) && <tr><td style={{ color: 'var(--text-muted)', paddingRight: '0.75rem' }}>Fees/Taxes</td><td>₹{t.fees} / ₹{t.taxes}</td></tr>}
+                {t.idempotency_key && <tr><td style={{ color: 'var(--text-muted)', paddingRight: '0.75rem' }}>Key</td><td style={{ fontSize: '0.7rem', color: 'var(--text-faint)' }}>{t.idempotency_key}</td></tr>}
               </tbody>
             </table>
           )}
@@ -323,15 +324,15 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
   return (
     <>
       {snapshotPrompt && (
-        <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: '6px', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
-          <span>Net worth has changed — take a snapshot to record today's value?</span>
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-100 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-900/20">
+          <span className="text-amber-900 dark:text-amber-200">Net worth has changed — take a snapshot to record today's value?</span>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button onClick={() => { setSnapshotPrompt(false); window.location.hash = '#/valuation' }}>Go to Valuation</button>
             <button className="secondary-btn" onClick={() => setSnapshotPrompt(false)}>Dismiss</button>
           </div>
         </div>
       )}
-      {error && <p style={{ color: '#dc2626', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{error}</p>}
+      {error && <p className="mb-3 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
 
       <EntityPageLayout
         title="Transactions"
@@ -348,8 +349,8 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
             </div>
 
             {showCreate && (
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
-                <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem', color: '#334155' }}>New Transaction</p>
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
+                <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem', color: 'var(--text-2)' }}>New Transaction</p>
                 <TxFormFields
                   form={createForm} onChange={setCreateForm}
                   accountOptions={accountOptions} memberOptions={memberOptions} instrumentOptions={instrumentOptions}
@@ -361,8 +362,8 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
             )}
 
             {editingId !== null && (
-              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '1rem', marginBottom: '1rem' }}>
-                <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem', color: '#92400e' }}>Editing #{editingId}</p>
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/40 dark:bg-amber-900/20">
+                <p className="mb-2 text-sm font-semibold text-amber-800 dark:text-amber-300">Editing #{editingId}</p>
                 <TxFormFields
                   form={editForm} onChange={setEditForm}
                   accountOptions={accountOptions} memberOptions={memberOptions} instrumentOptions={instrumentOptions}

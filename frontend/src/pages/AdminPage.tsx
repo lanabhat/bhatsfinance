@@ -68,7 +68,7 @@ export function AdminPage() {
           type="button"
           onClick={() => setTab('pending')}
           className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-            tab === 'pending' ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            tab === 'pending' ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'
           }`}
         >
           Pending ({users.filter(u => u.status === 'pending').length})
@@ -77,27 +77,27 @@ export function AdminPage() {
           type="button"
           onClick={() => setTab('all')}
           className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-            tab === 'all' ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            tab === 'all' ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'
           }`}
         >
           All Users ({users.length})
         </button>
       </div>
 
-      {loading && <p className="text-sm text-slate-500">Loading…</p>}
+      {loading && <p className="text-sm text-[var(--text-muted)]">Loading…</p>}
 
       {!loading && filtered.length === 0 && (
-        <p className="text-sm text-slate-500">{tab === 'pending' ? 'No pending users.' : 'No users found.'}</p>
+        <p className="text-sm text-[var(--text-muted)]">{tab === 'pending' ? 'No pending users.' : 'No users found.'}</p>
       )}
 
       <div className="grid gap-3">
         {filtered.map(user => (
-          <div key={user.id} className="rounded-xl border border-slate-100 bg-white p-4">
+          <div key={user.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <div className="flex items-center gap-3 mb-3">
               <Avatar picture={user.google_picture} name={user.name || user.email} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-900">{user.name || '—'}</p>
-                <p className="truncate text-xs text-slate-500">{user.email}</p>
+                <p className="truncate text-sm font-medium text-[var(--text)]">{user.name || '—'}</p>
+                <p className="truncate text-xs text-[var(--text-muted)]">{user.email}</p>
               </div>
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[user.status]}`}>
                 {user.status}
@@ -106,12 +106,12 @@ export function AdminPage() {
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="mb-1 block text-xs text-slate-500">Role</label>
+                <label className="mb-1 block text-xs text-[var(--text-muted)]">Role</label>
                 <select
                   value={user.role}
                   disabled={saving === user.id}
                   onChange={e => patch(user.id, { role: e.target.value as UserProfile['role'] })}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs"
                 >
                   <option value="viewer">Viewer</option>
                   <option value="admin">Admin</option>
@@ -119,12 +119,12 @@ export function AdminPage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-slate-500">Household</label>
+                <label className="mb-1 block text-xs text-[var(--text-muted)]">Household</label>
                 <select
                   value={user.household ?? ''}
                   disabled={saving === user.id}
                   onChange={e => patch(user.id, { household: e.target.value ? Number(e.target.value) : null })}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs"
                 >
                   <option value="">— none —</option>
                   {households.map(h => (

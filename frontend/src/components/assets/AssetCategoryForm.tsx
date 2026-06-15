@@ -44,9 +44,9 @@ export function AssetCategoryForm({ householdId, category, onSave, onCancel }: P
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Name</label>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Name</label>
         <input
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Retirement, Emergency Fund"
@@ -55,7 +55,7 @@ export function AssetCategoryForm({ householdId, category, onSave, onCancel }: P
       </div>
 
       <div>
-        <label className="mb-2 block text-xs font-medium text-slate-600">Color</label>
+        <label className="mb-2 block text-xs font-medium text-[var(--text-2)]">Color</label>
         <div className="flex flex-wrap gap-2">
           {PRESET_COLORS.map((c) => (
             <button
@@ -78,7 +78,7 @@ export function AssetCategoryForm({ householdId, category, onSave, onCancel }: P
 
       {error && <p className="text-xs text-red-500">{error}</p>}
 
-      <div className="flex gap-2 border-t border-slate-100 pt-3">
+      <div className="flex gap-2 border-t border-[var(--border)] pt-3">
         <button
           type="submit"
           disabled={saving}
@@ -89,7 +89,7 @@ export function AssetCategoryForm({ householdId, category, onSave, onCancel }: P
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
         >
           Cancel
         </button>

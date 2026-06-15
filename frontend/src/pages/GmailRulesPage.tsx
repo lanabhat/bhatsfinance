@@ -88,22 +88,22 @@ function RuleForm({
     <div className="rounded-xl border border-primary-200 bg-primary-50/40 p-4 grid gap-3">
       {/* Row 1: sender + template */}
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Sender
           <input
             value={draft.sender}
             onChange={(e) => set('sender', e.target.value)}
             placeholder="e.g. @federalbank.co.in or full address"
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
           />
-          <p className="mt-0.5 text-[11px] text-slate-400">Use @domain to match any address at that domain</p>
+          <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Use @domain to match any address at that domain</p>
         </label>
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Template
           <select
             value={draft.template ?? ''}
             onChange={(e) => set('template', e.target.value || undefined)}
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
           >
             <option value="">— No template —</option>
             {templates.map((t) => (
@@ -111,19 +111,19 @@ function RuleForm({
             ))}
           </select>
           {selectedTmpl && (
-            <p className="mt-0.5 text-[11px] text-slate-400">{selectedTmpl.description}</p>
+            <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">{selectedTmpl.description}</p>
           )}
         </label>
       </div>
 
       {/* Row 2: account + keyword */}
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Account
           <select
             value={String(draft.account_id || '')}
             onChange={(e) => set('account_id', Number(e.target.value))}
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
           >
             <option value="">Select account</option>
             {accountOptions.map((a) => (
@@ -131,41 +131,41 @@ function RuleForm({
             ))}
           </select>
         </label>
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Keyword (optional)
           <input
             value={draft.keyword ?? ''}
             onChange={(e) => set('keyword', e.target.value)}
             placeholder="e.g. HDFC or specific text in email body"
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
           />
-          <p className="mt-0.5 text-[11px] text-slate-400">Only match if this word appears in subject/body</p>
+          <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Only match if this word appears in subject/body</p>
         </label>
       </div>
 
       {/* Row 3: recipient + card_suffix */}
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Recipient email (optional)
           <input
             value={draft.recipient ?? ''}
             onChange={(e) => set('recipient', e.target.value)}
             placeholder="e.g. you@gmail.com"
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
           />
-          <p className="mt-0.5 text-[11px] text-slate-400">Only match emails sent to this address (To: header)</p>
+          <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Only match emails sent to this address (To: header)</p>
         </label>
         {showCardSuffix && (
-          <label className="text-xs font-medium text-slate-700">
+          <label className="text-xs font-medium text-[var(--text-2)]">
             Card last 4 digits (optional)
             <input
               value={draft.card_suffix ?? ''}
               onChange={(e) => set('card_suffix', e.target.value.replace(/\D/g, '').slice(0, 4))}
               placeholder="e.g. 3003"
               maxLength={4}
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
             />
-            <p className="mt-0.5 text-[11px] text-slate-400">Routes to the right card when multiple cards share the same sender</p>
+            <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Routes to the right card when multiple cards share the same sender</p>
           </label>
         )}
       </div>
@@ -183,7 +183,7 @@ function RuleForm({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]"
         >
           Cancel
         </button>
@@ -217,20 +217,20 @@ function RuleRow({
   const acctLabel = accountOptions.find((a) => a.id === rule.account_id)?.label ?? `Account #${rule.account_id}`
 
   return (
-    <div className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3 text-sm">
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm">
       <div className="min-w-0 flex-1 grid gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium text-slate-800 truncate">{rule.sender}</span>
+          <span className="font-medium text-[var(--text)] truncate">{rule.sender}</span>
           {tmpl && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{tmpl.label}</span>
+            <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text-2)]">{tmpl.label}</span>
           )}
-          <span className="text-slate-400">→</span>
-          <span className="text-slate-700 truncate">{acctLabel}</span>
+          <span className="text-[var(--text-muted)]">→</span>
+          <span className="text-[var(--text-2)] truncate">{acctLabel}</span>
           {memberName && (
             <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] text-primary-700">{memberName}</span>
           )}
         </div>
-        <div className="flex flex-wrap gap-3 text-[11px] text-slate-400">
+        <div className="flex flex-wrap gap-3 text-[11px] text-[var(--text-muted)]">
           {rule.card_suffix && <span>Card: ···{rule.card_suffix}</span>}
           {rule.recipient && <span>To: {rule.recipient}</span>}
           {rule.keyword && <span>Keyword: {rule.keyword}</span>}
@@ -240,7 +240,7 @@ function RuleRow({
         <button
           type="button"
           onClick={() => onEdit(idx)}
-          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+          className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]"
         >
           Edit
         </button>
@@ -372,11 +372,11 @@ export function GmailRulesPage({ householdId, accountOptions, memberOptions }: P
   // ---------------------------------------------------------------------------
 
   if (!householdId) {
-    return <p className="text-sm text-slate-500">Select a household to manage sync rules.</p>
+    return <p className="text-sm text-[var(--text-muted)]">Select a household to manage sync rules.</p>
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-400">Loading…</p>
+    return <p className="text-sm text-[var(--text-muted)]">Loading…</p>
   }
 
   return (
@@ -384,8 +384,8 @@ export function GmailRulesPage({ householdId, accountOptions, memberOptions }: P
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Gmail Sync Rules</h2>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <h2 className="text-lg font-semibold text-[var(--text)]">Gmail Sync Rules</h2>
+          <p className="text-sm text-[var(--text-muted)] mt-0.5">
             Rules tell the sync which account to assign each email to. Grouped by transaction type and member.
           </p>
         </div>
@@ -397,7 +397,7 @@ export function GmailRulesPage({ householdId, accountOptions, memberOptions }: P
                 type="button"
                 onClick={() => setEditingIdx(-1)}
                 disabled={editingIdx !== null}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-40"
               >
                 + Add rule
               </button>
@@ -429,9 +429,9 @@ export function GmailRulesPage({ householdId, accountOptions, memberOptions }: P
 
       {/* Empty state */}
       {rules.length === 0 && editingIdx === null && (
-        <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-10 text-center">
-          <p className="text-sm font-medium text-slate-600">No rules yet</p>
-          <p className="mt-1 text-xs text-slate-400">
+        <div className="rounded-2xl border border-dashed border-[var(--border)] px-6 py-10 text-center">
+          <p className="text-sm font-medium text-[var(--text-2)]">No rules yet</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
             Rules are auto-saved when you import emails from Gmail Sync. You can also add them manually above.
           </p>
         </div>
@@ -440,12 +440,12 @@ export function GmailRulesPage({ householdId, accountOptions, memberOptions }: P
       {/* Category sections */}
       {categoryGroups.map(({ category, memberGroups }) => (
         <section key={category}>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{category}</h3>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{category}</h3>
           <div className="grid gap-4">
             {memberGroups.map(({ memberName, rules: entries }) => (
               <div key={memberName || '__no_member'}>
                 {memberName && (
-                  <p className="mb-1.5 text-xs font-medium text-slate-500 pl-1">Member: {memberName}</p>
+                  <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)] pl-1">Member: {memberName}</p>
                 )}
                 <div className="grid gap-2">
                   {entries.map(({ rule, globalIdx }) => (
@@ -481,7 +481,7 @@ export function GmailRulesPage({ householdId, accountOptions, memberOptions }: P
       {/* Other / uncategorised rules */}
       {uncategorisedCount > 0 && (
         <section>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Other</h3>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Other</h3>
           <div className="grid gap-2">
             {rules.map((rule, globalIdx) => {
               if (rule.template && TEMPLATE_CATEGORIES[rule.template]) return null
@@ -537,11 +537,11 @@ function TagInput({ values, onChange, placeholder }: { values: string[]; onChang
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5 min-h-[38px]">
+    <div className="flex flex-wrap gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 min-h-[38px]">
       {values.map((v) => (
-        <span key={v} className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
+        <span key={v} className="flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text-2)]">
           {v}
-          <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} className="text-slate-400 hover:text-red-500">✕</button>
+          <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} className="text-[var(--text-muted)] hover:text-red-500">✕</button>
         </span>
       ))}
       <input
@@ -606,7 +606,7 @@ function TemplateForm({
   return (
     <div className="rounded-xl border border-primary-200 bg-primary-50/30 p-4 grid gap-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Key
           {isNew ? (
             <>
@@ -614,55 +614,55 @@ function TemplateForm({
                 value={draft.key}
                 onChange={(e) => set('key', e.target.value.toLowerCase().replace(/[^a-z_]/g, ''))}
                 placeholder="e.g. my_template"
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-mono"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-mono"
               />
-              <p className="mt-0.5 text-[11px] text-slate-400">Lowercase letters and underscores only</p>
+              <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Lowercase letters and underscores only</p>
             </>
           ) : (
-            <p className="mt-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-mono text-slate-600">{draft.key}</p>
+            <p className="mt-1 rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm font-mono text-[var(--text-2)]">{draft.key}</p>
           )}
         </label>
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Label
-          <input value={draft.label} onChange={(e) => set('label', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" />
+          <input value={draft.label} onChange={(e) => set('label', e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm" />
         </label>
       </div>
 
-      <label className="text-xs font-medium text-slate-700">
+      <label className="text-xs font-medium text-[var(--text-2)]">
         Description
-        <input value={draft.description} onChange={(e) => set('description', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" />
+        <input value={draft.description} onChange={(e) => set('description', e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm" />
       </label>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Direction
-          <select value={draft.direction ?? 'none'} onChange={(e) => set('direction', e.target.value === 'none' ? null : e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+          <select value={draft.direction ?? 'none'} onChange={(e) => set('direction', e.target.value === 'none' ? null : e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
             {DIRECTION_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
         </label>
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Tx type
-          <select value={draft.tx_type ?? 'other'} onChange={(e) => set('tx_type', e.target.value === 'none' ? null : e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+          <select value={draft.tx_type ?? 'other'} onChange={(e) => set('tx_type', e.target.value === 'none' ? null : e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
             <option value="none">none</option>
             {TX_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </label>
-        <label className="text-xs font-medium text-slate-700">
+        <label className="text-xs font-medium text-[var(--text-2)]">
           Target
-          <select value={draft.target} onChange={(e) => set('target', e.target.value as 'account' | 'instrument')} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+          <select value={draft.target} onChange={(e) => set('target', e.target.value as 'account' | 'instrument')} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
             <option value="account">account</option>
             <option value="instrument">instrument</option>
           </select>
         </label>
       </div>
 
-      <label className="text-xs font-medium text-slate-700">
+      <label className="text-xs font-medium text-[var(--text-2)]">
         Amount regex
-        <input value={draft.amount_re ?? ''} onChange={(e) => set('amount_re', e.target.value)} placeholder="e.g. (?:₹|INR)\s*([0-9][0-9,]*\.?[0-9]*)" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-mono" />
-        <p className="mt-0.5 text-[11px] text-slate-400">First capture group is the amount value. Leave blank to use generic fallback.</p>
+        <input value={draft.amount_re ?? ''} onChange={(e) => set('amount_re', e.target.value)} placeholder="e.g. (?:₹|INR)\s*([0-9][0-9,]*\.?[0-9]*)" className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-mono" />
+        <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">First capture group is the amount value. Leave blank to use generic fallback.</p>
       </label>
 
-      <label className="text-xs font-medium text-slate-700">
+      <label className="text-xs font-medium text-[var(--text-2)]">
         Confidence signals (press Enter or comma to add)
         <div className="mt-1">
           <TagInput
@@ -671,10 +671,10 @@ function TemplateForm({
             placeholder="e.g. has been used"
           />
         </div>
-        <p className="mt-0.5 text-[11px] text-slate-400">Keywords in subject/body that increase match confidence for this template.</p>
+        <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Keywords in subject/body that increase match confidence for this template.</p>
       </label>
 
-      <label className="text-xs font-medium text-slate-700">
+      <label className="text-xs font-medium text-[var(--text-2)]">
         Negative signals (press Enter or comma to add)
         <div className="mt-1">
           <TagInput
@@ -683,7 +683,7 @@ function TemplateForm({
             placeholder="e.g. pre-approved loan"
           />
         </div>
-        <p className="mt-0.5 text-[11px] text-slate-400">Keywords that disqualify this template if found.</p>
+        <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Keywords that disqualify this template if found.</p>
       </label>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -692,7 +692,7 @@ function TemplateForm({
         <button type="button" disabled={saving} onClick={handleSave} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
           {saving ? 'Saving…' : 'Save template'}
         </button>
-        <button type="button" onClick={onCancel} className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+        <button type="button" onClick={onCancel} className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
       </div>
     </div>
   )
@@ -738,16 +738,16 @@ function TemplatesSection({
   }
 
   return (
-    <details className="rounded-2xl border border-slate-100 bg-white" open>
-      <summary className="cursor-pointer select-none px-5 py-4 text-sm font-semibold text-slate-700 list-none flex items-center justify-between">
+    <details className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]" open>
+      <summary className="cursor-pointer select-none px-5 py-4 text-sm font-semibold text-[var(--text-2)] list-none flex items-center justify-between">
         <span>Templates</span>
-        <span className="text-xs text-slate-400">{templates.length} templates · click to collapse</span>
+        <span className="text-xs text-[var(--text-muted)]">{templates.length} templates · click to collapse</span>
       </summary>
 
-      <div className="border-t border-slate-100 px-5 py-4 grid gap-4">
+      <div className="border-t border-[var(--border)] px-5 py-4 grid gap-4">
         {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
 
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-[var(--text-muted)]">
           Templates define how emails are detected and parsed. Built-in templates can be overridden; custom templates can be deleted.
           Changes apply immediately to the next Fetch &amp; Preview.
         </p>
@@ -756,7 +756,7 @@ function TemplatesSection({
           <button
             type="button"
             onClick={() => setAddingNew(true)}
-            className="self-start rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            className="self-start rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]"
           >
             + Add custom template
           </button>
@@ -776,7 +776,7 @@ function TemplatesSection({
           if (!catTemplates.length) return null
           return (
             <div key={cat}>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-2">{cat}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">{cat}</p>
               <div className="grid gap-2">
                 {catTemplates.map((t) => {
                   if (editingKey === t.key) {
@@ -791,27 +791,27 @@ function TemplatesSection({
                     )
                   }
                   return (
-                    <div key={t.key} className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3">
+                    <div key={t.key} className="flex items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                       <div className="min-w-0 flex-1 grid gap-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-mono text-slate-600">{t.key}</span>
-                          <span className="font-medium text-slate-800 text-sm">{t.label}</span>
+                          <span className="shrink-0 rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--text-2)]">{t.key}</span>
+                          <span className="font-medium text-[var(--text)] text-sm">{t.label}</span>
                           {t.direction && (
                             <span className={`rounded-full px-2 py-0.5 text-[11px] ${t.direction === 'outflow' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{t.direction}</span>
                           )}
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{t.target}</span>
+                          <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text-2)]">{t.target}</span>
                           {!t.is_builtin && (
                             <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700 border border-amber-200">custom</span>
                           )}
                         </div>
-                        {t.description && <p className="text-xs text-slate-400">{t.description}</p>}
+                        {t.description && <p className="text-xs text-[var(--text-muted)]">{t.description}</p>}
                         {t.confidence_signals && t.confidence_signals.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-0.5">
                             {t.confidence_signals.slice(0, 4).map((s) => (
-                              <span key={s} className="rounded bg-slate-50 border border-slate-200 px-1.5 py-0.5 text-[11px] text-slate-500">{s}</span>
+                              <span key={s} className="rounded bg-[var(--surface-2)] border border-[var(--border)] px-1.5 py-0.5 text-[11px] text-[var(--text-muted)]">{s}</span>
                             ))}
                             {t.confidence_signals.length > 4 && (
-                              <span className="text-[11px] text-slate-400">+{t.confidence_signals.length - 4} more</span>
+                              <span className="text-[11px] text-[var(--text-muted)]">+{t.confidence_signals.length - 4} more</span>
                             )}
                           </div>
                         )}
@@ -821,7 +821,7 @@ function TemplatesSection({
                           <button
                             type="button"
                             onClick={() => setEditingKey(t.key)}
-                            className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                            className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]"
                           >
                             {t.is_builtin ? 'Override' : 'Edit'}
                           </button>
@@ -851,7 +851,7 @@ function TemplatesSection({
           if (!trueOther.length) return null
           return (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Other / Custom</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">Other / Custom</p>
               <div className="grid gap-2">
                 {trueOther.map((t) => {
                   if (editingKey === t.key) {
@@ -860,18 +860,18 @@ function TemplatesSection({
                     )
                   }
                   return (
-                    <div key={t.key} className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3">
+                    <div key={t.key} className="flex items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                       <div className="min-w-0 flex-1 grid gap-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-mono text-slate-600">{t.key}</span>
-                          <span className="font-medium text-slate-800 text-sm">{t.label}</span>
+                          <span className="shrink-0 rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--text-2)]">{t.key}</span>
+                          <span className="font-medium text-[var(--text)] text-sm">{t.label}</span>
                           {!t.is_builtin && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700 border border-amber-200">custom</span>}
                         </div>
-                        {t.description && <p className="text-xs text-slate-400">{t.description}</p>}
+                        {t.description && <p className="text-xs text-[var(--text-muted)]">{t.description}</p>}
                       </div>
                       {canWrite && (
                         <div className="flex shrink-0 gap-1">
-                          <button type="button" onClick={() => setEditingKey(t.key)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50">Edit</button>
+                          <button type="button" onClick={() => setEditingKey(t.key)} className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]">Edit</button>
                           {!t.is_builtin && (
                             <button type="button" onClick={() => handleDelete(t.key)} className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50">✕</button>
                           )}

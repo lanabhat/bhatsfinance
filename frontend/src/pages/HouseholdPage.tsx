@@ -185,7 +185,7 @@ export function HouseholdPage({ householdId, householdOptions, onHouseholdsChang
                     {m.full_name} ({m.relation_type})
                   </button>
                   {!m.include_in_networth && (
-                    <span className="text-[10px] text-slate-400">excluded from net worth</span>
+                    <span className="text-[10px] text-[var(--text-muted)]">excluded from net worth</span>
                   )}
                   <DeleteButton disabled={!canDelete('member')} onDelete={async () => { await householdApi.deleteMember(m.id); await loadData() }} />
                 </li>

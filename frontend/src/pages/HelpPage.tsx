@@ -90,7 +90,7 @@ export function HelpPage() {
                     </span>
                   </button>
                   {openFaq === i && (
-                    <ol style={{ padding: '0.75rem 1.25rem', margin: 0, lineHeight: 1.8, fontSize: '0.87rem', background: '#fff' }}>
+                    <ol style={{ padding: '0.75rem 1.25rem', margin: 0, lineHeight: 1.8, fontSize: '0.87rem', background: 'var(--surface-2)' }}>
                       {steps.map((step, j) => (
                         <li key={j} style={{ marginBottom: '0.25rem', whiteSpace: 'pre-wrap' }}>{step}</li>
                       ))}
