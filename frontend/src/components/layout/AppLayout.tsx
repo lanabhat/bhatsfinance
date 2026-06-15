@@ -165,7 +165,9 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg)]">
+    <div className="relative min-h-screen bg-[var(--bg)]">
+      {/* Ambient gradient backdrop */}
+      <div className="ambient-bg" aria-hidden="true" />
       {/* ── Desktop sidebar ── */}
       <aside className={`fixed inset-y-0 left-0 z-30 hidden ${sidebarWidth} flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-[width] duration-200 ease-out md:flex`}>
         {/* Logo */}
@@ -253,9 +255,9 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
       </aside>
 
       {/* ── Main content ── */}
-      <div className={`transition-[margin] duration-200 ease-out ${mainOffset}`}>
+      <div className={`relative z-10 transition-[margin] duration-200 ease-out ${mainOffset}`}>
         {/* Header */}
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[var(--border)] bg-[var(--surface)]/80 px-4 backdrop-blur md:px-6">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[var(--glass-border)] bg-[var(--glass-surface)] px-4 pt-safe backdrop-blur-xl md:px-6 md:pt-0">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 text-xs font-bold text-white md:hidden">W</span>
             <h1 className="text-base font-semibold tracking-tight text-[var(--text)]">{pageTitle}</h1>
@@ -266,7 +268,7 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
               type="button"
               onClick={cycleTheme}
               title={themeTitle}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-base transition-colors hover:bg-[var(--surface-2)]"
+              className="tap flex h-10 w-10 items-center justify-center rounded-full text-base transition-colors hover:bg-[var(--surface-2)] md:h-8 md:w-8"
             >
               {themeIcon}
             </button>
@@ -276,7 +278,7 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
               onClick={togglePrivacy}
               title={hidden ? 'Show amounts' : 'Hide amounts'}
               aria-pressed={hidden}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+              className="tap flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)] md:h-8 md:w-8"
             >
               {hidden ? (
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
@@ -374,13 +376,13 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
         </header>
 
         {/* Page content */}
-        <main className="mx-auto max-w-7xl px-4 pb-28 pt-5 md:px-6 md:pb-10">
+        <main className="main-content mx-auto max-w-7xl px-4 pt-5 md:px-6">
           {children}
         </main>
       </div>
 
       {/* ── Mobile bottom nav ── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-[var(--border)] bg-[var(--surface)] md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-[var(--glass-border)] bg-[var(--glass-surface)] pb-safe backdrop-blur-xl md:hidden">
         {MOBILE_TABS.map((tab) => {
           const active = route === tab.key
           return (
@@ -388,7 +390,7 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
               key={tab.key}
               type="button"
               onClick={() => onRouteChange(tab.key)}
-              className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors ${
+              className={`tap flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
                 active ? 'text-primary-600 dark:text-primary-400' : 'text-[var(--text-faint)]'
               }`}
             >
@@ -400,7 +402,7 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
         <button
           type="button"
           onClick={() => setMoreOpen(true)}
-          className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors ${
+          className={`tap flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
             isSecondaryMobile ? 'text-primary-600 dark:text-primary-400' : 'text-[var(--text-faint)]'
           }`}
         >

@@ -8,6 +8,7 @@ import { MemberWealthBreakdown } from '../components/home/MemberWealthBreakdown'
 import { NetWorthHero } from '../components/home/NetWorthHero'
 import { RecentHoldings } from '../components/home/RecentHoldings'
 import { NetWorthTrendChart } from '../components/charts/NetWorthTrendChart'
+import { PullToRefresh } from '../components/ui/PullToRefresh'
 import { useMaskedFmt } from '../components/common/Money'
 import { useApp } from '../context/AppContext'
 import { fdDetailsApi } from '../api/fdDetailsApi'
@@ -133,6 +134,7 @@ export function HomePage({ onNavigate }: Props) {
   const isFiltered = excluded.size > 0
 
   return (
+    <PullToRefresh onRefresh={refreshDashboard}>
     <div className="grid gap-5">
       <NetWorthHero
         networth={displayNetworth}
@@ -318,5 +320,6 @@ export function HomePage({ onNavigate }: Props) {
         </div>
       )}
     </div>
+    </PullToRefresh>
   )
 }

@@ -68,6 +68,22 @@
   --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-hover: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
   --shadow-modal: 0 20px 60px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.08);
+
+  /* ── Glass design system (light) ── */
+  --glass-surface: rgba(255, 255, 255, 0.72);
+  --glass-surface-2: rgba(255, 255, 255, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-blur: 16px;
+  --glass-shadow: 0 8px 32px rgba(17, 24, 39, 0.08), 0 1px 2px rgba(17, 24, 39, 0.04);
+  /* Ambient gradient blobs behind the app */
+  --ambient-1: rgba(99, 102, 241, 0.18);   /* indigo */
+  --ambient-2: rgba(168, 85, 247, 0.14);   /* violet */
+  --ambient-3: rgba(16, 185, 129, 0.10);   /* emerald */
+  /* Signature accent gradient */
+  --gradient-accent: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  --gradient-positive: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  /* Glow for hero numbers / focal points */
+  --glow-primary: 0 0 24px rgba(99, 102, 241, 0.35);
 }
 
 .dark {
@@ -89,6 +105,19 @@
   --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
   --shadow-hover: 0 4px 16px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
   --shadow-modal: 0 20px 60px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.4);
+
+  /* ── Glass design system (dark) ── */
+  --glass-surface: rgba(30, 30, 35, 0.62);
+  --glass-surface-2: rgba(40, 40, 47, 0.5);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 18px;
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --ambient-1: rgba(99, 102, 241, 0.22);
+  --ambient-2: rgba(168, 85, 247, 0.18);
+  --ambient-3: rgba(16, 185, 129, 0.10);
+  --gradient-accent: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  --gradient-positive: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  --glow-primary: 0 0 28px rgba(129, 140, 248, 0.45);
 }
 
 /* ─────────────────────────────────────────
@@ -113,6 +142,38 @@ body {
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   transition: background 0.2s, color 0.2s;
+  overscroll-behavior-y: contain;
+}
+
+/* ─────────────────────────────────────────
+   Touch / mobile-native behavior
+   ───────────────────────────────────────── */
+
+/* Kill the 300ms tap delay and disable double-tap zoom on interactive elements */
+button, a, [role="button"], input, select, textarea, label {
+  touch-action: manipulation;
+}
+
+/* Remove the grey tap-flash on touch devices */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe-area helpers for notch / home indicator */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pt-safe { padding-top: env(safe-area-inset-top); }
+
+/* Momentum scrolling */
+main {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Bottom clearance for the mobile nav + home indicator; tighter on desktop */
+.main-content {
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 768px) {
+  .main-content { padding-bottom: 2.5rem; }
 }
 
 /* ─────────────────────────────────────────
@@ -140,6 +201,64 @@ body {
     padding: 1rem;
   }
 
+  /* ── Glass surfaces ──
+     Use .glass for focal cards (hero, KPIs, modals, nav). Dense lists keep
+     the solid .card/.panel for scroll performance. */
+  .glass {
+    background: var(--glass-surface);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    transition: box-shadow 0.18s, border-color 0.18s, transform 0.18s;
+  }
+  .glass-2 {
+    background: var(--glass-surface-2);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(130%);
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(130%);
+  }
+
+  /* Ambient gradient backdrop — soft colored blobs behind everything */
+  .ambient-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .ambient-bg::before,
+  .ambient-bg::after {
+    content: "";
+    position: absolute;
+    width: 50vw;
+    height: 50vw;
+    max-width: 620px;
+    max-height: 620px;
+    border-radius: 9999px;
+    filter: blur(80px);
+  }
+  .ambient-bg::before {
+    top: -12%;
+    left: -8%;
+    background: radial-gradient(circle at center, var(--ambient-1), transparent 70%);
+  }
+  .ambient-bg::after {
+    bottom: -16%;
+    right: -10%;
+    background: radial-gradient(circle at center, var(--ambient-2), transparent 70%);
+  }
+
+  /* Accent gradient text (hero numbers / emphasis) */
+  .gradient-text {
+    background: var(--gradient-accent);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
   /* Grid helpers */
   .cards {
     @apply mb-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4;
@@ -154,13 +273,24 @@ body {
     @apply grid grid-cols-1 gap-3 md:grid-cols-2;
   }
 
+  /* Press feedback for tappable surfaces (cards, list rows, nav items) */
+  .tap {
+    transition: transform 0.12s ease, background 0.12s ease;
+  }
+  .tap:active {
+    transform: scale(0.97);
+  }
+
   /* Typography utilities */
   .hero-number {
-    font-size: 2.25rem;
+    font-size: 2.75rem;
     font-weight: 800;
     letter-spacing: -0.03em;
     line-height: 1;
     color: var(--text);
+  }
+  @media (min-width: 768px) {
+    .hero-number { font-size: 2.25rem; }
   }
   .section-title {
     font-size: 1rem;
@@ -235,8 +365,12 @@ body {
 
   /* FAB */
   .fab {
-    @apply fixed bottom-24 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary-600 text-2xl text-white shadow-lg hover:bg-primary-700 md:bottom-6;
+    @apply fixed right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary-600 text-2xl text-white shadow-lg hover:bg-primary-700;
+    bottom: calc(6rem + env(safe-area-inset-bottom));
     transition: transform 0.15s, box-shadow 0.15s;
+  }
+  @media (min-width: 768px) {
+    .fab { bottom: 1.5rem; }
   }
   .fab:hover {
     transform: scale(1.05);
@@ -350,6 +484,19 @@ body {
 @keyframes slide-in-right {
   from { transform: translateX(100%); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* Bottom-sheet entrance (mobile drawer) — slides up.
+   On desktop the drawer is repositioned to the right, so a vertical
+   entrance is acceptable and unobtrusive. */
+@keyframes sheet-in {
+  from { transform: translateY(100%); opacity: 0.6; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* Give the sheet body clearance from the home indicator on mobile */
+.main-content-sheet {
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
 }
 
 @keyframes slide-out-right {

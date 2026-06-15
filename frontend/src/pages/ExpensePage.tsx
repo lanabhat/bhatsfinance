@@ -7,6 +7,7 @@ import { QuickExpenseForm } from '../components/expenses/QuickExpenseForm'
 import { ReassignDialog } from '../components/expenses/ReassignDialog'
 import { EditSpendDialog } from '../components/expenses/EditSpendDialog'
 import { EmojiPicker } from '../components/expenses/EmojiPicker'
+import { PullToRefresh } from '../components/ui/PullToRefresh'
 import { Drawer } from '../components/ui/Drawer'
 import { useAuth } from '../context/AuthContext'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
@@ -206,6 +207,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   }, [items])
 
   return (
+    <PullToRefresh onRefresh={loadData}>
     <div className="mx-auto max-w-4xl space-y-4 px-2 py-4 pb-24 md:px-4 md:pb-6">
 
       {/* ── Header ── */}
@@ -537,5 +539,6 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
         />
       )}
     </div>
+    </PullToRefresh>
   )
 }

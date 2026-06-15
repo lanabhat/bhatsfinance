@@ -3,11 +3,11 @@ import type { MemberNetWorth } from '../../types/domain'
 
 
 const RELATION_COLOR: Record<string, string> = {
-  self: 'bg-indigo-100 text-indigo-700',
-  spouse: 'bg-violet-100 text-violet-700',
-  child: 'bg-sky-100 text-sky-700',
-  parent: 'bg-amber-100 text-amber-700',
-  other: 'bg-slate-100 text-slate-600',
+  self: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+  spouse: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+  child: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  parent: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  other: 'bg-[var(--surface-3)] text-[var(--text-2)]',
 }
 
 type Props = {
@@ -26,27 +26,27 @@ export function MemberNetWorthRow({ member, householdTotal }: Props) {
     : null
 
   return (
-    <div className={`flex items-center gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-sm ${excluded ? 'opacity-50 grayscale' : ''}`}>
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
+    <div className={`tap flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-card)] ${excluded ? 'opacity-50 grayscale' : ''}`}>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm font-semibold text-[var(--text-2)]">
         {initials}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-slate-900">{member.member_name}</p>
+        <p className="text-sm font-medium text-[var(--text)]">{member.member_name}</p>
         <div className="mt-0.5 flex items-center gap-1.5">
           <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${colorClass}`}>
             {member.relation_type}
           </span>
           {excluded && (
-            <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+            <span className="inline-block rounded-full bg-[var(--surface-3)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">
               excluded
             </span>
           )}
         </div>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-base font-bold text-slate-900">{fmtINR(member.networth)}</p>
+        <p className="text-base font-bold text-[var(--text)]">{fmtINR(member.networth)}</p>
         {sharePct !== null && (
-          <p className="text-xs text-slate-400">{sharePct.toFixed(1)}% of household</p>
+          <p className="text-xs text-[var(--text-faint)]">{sharePct.toFixed(1)}% of household</p>
         )}
       </div>
     </div>
