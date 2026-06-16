@@ -43,10 +43,10 @@ export function RecentHoldings({ holdings, onViewAll }: Props) {
                   <p className="truncate text-sm font-medium text-[var(--text)]">{h.instrument_name}</p>
                   <p className="text-xs text-[var(--text-muted)]">{h.instrument_type.replace(/_/g, ' ')}</p>
                 </div>
-                <div className="shrink-0 text-right">
+                <div className="shrink-0 max-w-[40%] text-right">
                   <p className="text-sm font-bold text-[var(--text)]">{fmtINR(h.market_value)}</p>
                   <div className="flex items-center justify-end gap-1.5">
-                    <span className="text-xs text-[var(--text-muted)]">{pct.toFixed(1)}% of portfolio</span>
+                    <span className="text-xs text-[var(--text-muted)]">{pct.toFixed(1)}%</span>
                     {gainPct !== null && (
                       <span className={`text-xs font-medium ${gain >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                         {gain >= 0 ? '+' : ''}{gainPct.toFixed(1)}%

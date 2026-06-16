@@ -50,8 +50,13 @@ export function PullToRefresh({ onRefresh, children }: Props) {
   const showSpinner = refreshing || pull > 0
 
   return (
-    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
-      {/* Indicator */}
+    <div
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      style={{ touchAction: pull > 0 ? 'none' : 'pan-y', overflowX: 'hidden', minWidth: 0 }}
+    >
+      {/* Pull indicator */}
       <div
         className="flex items-center justify-center overflow-hidden text-[var(--text-muted)]"
         style={{
@@ -70,14 +75,7 @@ export function PullToRefresh({ onRefresh, children }: Props) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992V4.356M19.5 9.348a8.25 8.25 0 10-1.91 5.106" />
         </svg>
       </div>
-      <div
-        style={{
-          transform: pull > 0 && !refreshing ? `translateY(${pull * 0.3}px)` : undefined,
-          transition: startY.current === null ? 'transform 0.2s ease-out' : 'none',
-        }}
-      >
-        {children}
-      </div>
+      {children}
     </div>
   )
 }

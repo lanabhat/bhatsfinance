@@ -133,9 +133,24 @@ export function HomePage({ onNavigate }: Props) {
   const displayNetworth = filteredNetworth ?? dashboard.networth
   const isFiltered = excluded.size > 0
 
+  if (dashboardLoading && dashboard.holdings.length === 0) {
+    return (
+      <div className="grid min-w-0 gap-5 animate-pulse">
+        {/* Hero skeleton */}
+        <div className="rounded-3xl bg-[var(--surface-2)] h-36" />
+        {/* Chart skeleton */}
+        <div className="rounded-2xl bg-[var(--surface-2)] h-48" />
+        {/* Cards skeleton */}
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="rounded-xl bg-[var(--surface-2)] h-16" />
+        ))}
+      </div>
+    )
+  }
+
   return (
     <PullToRefresh onRefresh={refreshDashboard}>
-    <div className="grid gap-5">
+    <div className="grid min-w-0 gap-5">
       <NetWorthHero
         networth={displayNetworth}
         xirr={isFiltered ? null : dashboard.xirr}
@@ -152,7 +167,7 @@ export function HomePage({ onNavigate }: Props) {
             <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Filter by Type</h2>
             {isFiltered && (
               <button type="button" onClick={() => { setExcluded(new Set()); saveExcluded(new Set()) }}
-                className="text-xs text-indigo-600 hover:text-indigo-700">
+                className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-300">
                 Reset
               </button>
             )}
@@ -167,15 +182,15 @@ export function HomePage({ onNavigate }: Props) {
                   key={type}
                   type="button"
                   onClick={() => toggleType(type)}
-                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                  className={`flex min-w-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
                     active
                       ? 'bg-indigo-600 text-white'
                       : 'bg-[var(--surface-2)] text-[var(--text-muted)] line-through'
                   }`}
                 >
-                  <span>{TYPE_ICONS[type] ?? '💼'}</span>
-                  <span>{type.replace(/_/g, ' ')}</span>
-                  {active && <span className="opacity-70">{fmtINR(value)}</span>}
+                  <span className="shrink-0">{TYPE_ICONS[type] ?? '💼'}</span>
+                  <span className="truncate max-w-[8rem]">{type.replace(/_/g, ' ')}</span>
+                  {active && <span className="shrink-0 opacity-70">{fmtINR(value)}</span>}
                 </button>
               )
             })}
@@ -191,7 +206,7 @@ export function HomePage({ onNavigate }: Props) {
       {dashboard.networthHistory.length > 0 && (
         <div>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Net Worth Trend</h2>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="min-w-0 w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <NetWorthTrendChart data={dashboard.networthHistory} />
           </div>
         </div>
@@ -216,7 +231,7 @@ export function HomePage({ onNavigate }: Props) {
                     <MemberNetWorthRow member={m} householdTotal={parseFloat(dashboard.networth)} />
                   </button>
                   {isExpanded && (
-                    <div className="mt-2 ml-3 border-l-2 border-primary-200 pl-3">
+                    <div className="mt-2 sm:ml-3 sm:border-l-2 border-primary-200 sm:pl-3">
                       {memberHoldingsLoading ? (
                         <p className="py-2 text-xs text-[var(--text-muted)]">Loading {m.member_name}'s breakdown…</p>
                       ) : memberHoldings.length === 0 && memberAccounts.length === 0 ? (
@@ -260,20 +275,20 @@ export function HomePage({ onNavigate }: Props) {
               <button
                 type="button"
                 onClick={() => setBulkSheetOpen(true)}
-                className="text-xs font-medium text-amber-700 hover:text-amber-800"
+                className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:text-amber-800"
               >
                 Mark all paid →
               </button>
             )}
           </div>
-          <div className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50">
+          <div className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50 dark:bg-amber-900/15">
             {dashboard.missedSip.map((sip) => (
               <div key={`${sip.mandate_id}-${sip.due_date}`} className="flex items-center gap-3 border-b border-amber-100 px-4 py-3 last:border-0">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-[var(--text)]">{sip.instrument}</p>
                   <p className="text-xs text-[var(--text-muted)]">Due {sip.due_date} · {sip.account}</p>
                 </div>
-                <p className="shrink-0 text-sm font-bold text-amber-700">{fmtINR(sip.expected_amount)}</p>
+                <p className="shrink-0 text-sm font-bold text-amber-700 dark:text-amber-300">{fmtINR(sip.expected_amount)}</p>
                 <button
                   type="button"
                   onClick={() => setPaidSheetTarget(sip)}

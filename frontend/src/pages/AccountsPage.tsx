@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext'
 import type { Account, AccountBalance, AccountOwnership, Transaction } from '../types/domain'
 
 const ACCOUNT_TYPES = ['bank', 'broker', 'pf', 'loan', 'credit_card', 'insurance', 'cash', 'other'] as const
-const INP = 'w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
 function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
   householdId: number; account?: Account
@@ -91,9 +91,9 @@ function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
       {account && onDelete && (
         <div className="border-t border-[var(--border)] pt-3">
           {!confirmDelete ? (
-            <button type="button" onClick={() => setConfirmDelete(true)} className="w-full rounded-lg border border-red-200 py-2 text-sm text-red-500 hover:bg-red-50">Delete Account</button>
+            <button type="button" onClick={() => setConfirmDelete(true)} className="w-full rounded-lg border border-red-200 py-2 text-sm text-red-500 hover:bg-red-50 dark:bg-red-900/15">Delete Account</button>
           ) : (
-            <div className="rounded-lg bg-red-50 p-3 text-center">
+            <div className="rounded-lg bg-red-50 dark:bg-red-900/15 p-3 text-center">
               <p className="mb-2 text-xs text-red-600">Delete this account and all its transaction history?</p>
               <div className="flex gap-2">
                 <button type="button" onClick={onDelete} className="flex-1 rounded-lg bg-red-500 py-1.5 text-xs font-medium text-white hover:bg-red-600">Yes, delete</button>
@@ -231,7 +231,7 @@ function CardDetailSheet({ account, householdId, onEdit, onClose }: {
   return (
     <Sheet title={account.name} onClose={onClose} tall>
       {/* Header stats */}
-      <div className="mb-4 rounded-xl bg-rose-50 p-4">
+      <div className="mb-4 rounded-xl bg-rose-50 dark:bg-rose-900/15 p-4">
         <div className="flex items-end justify-between">
           <div>
             <p className="text-xs text-[var(--text-muted)]">Outstanding</p>
@@ -401,8 +401,8 @@ export function AccountsPage() {
     list.map((a) => <AccountCard key={a.id} account={a} onClick={() => handleCardClick(a)} />)
 
   return (
-    <div className="grid gap-3">
-      <div className="flex items-center gap-1">
+    <div className="grid grid-cols-1 min-w-0 gap-3">
+      <div className="flex flex-wrap items-center gap-1">
         <span className="mr-1 text-xs text-[var(--text-muted)]">Group:</span>
         {GROUP_OPTS.map((o) => (
           <button key={o.value} type="button" onClick={() => setGroupBy(o.value)}
@@ -417,7 +417,7 @@ export function AccountsPage() {
       </div>
 
       {!loading && unownedAccounts.length > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/15 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
           <span className="mt-0.5 text-lg">⚠️</span>
           <div className="flex-1">
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
@@ -446,13 +446,13 @@ export function AccountsPage() {
           <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first account.</p>
         </div>
       ) : groupBy === 'none' ? (
-        <div className="grid gap-2">{renderList(accounts)}</div>
+        <div className="grid grid-cols-1 min-w-0 gap-2">{renderList(accounts)}</div>
       ) : (
-        <div className="grid gap-2">
+        <div className="flex w-full min-w-0 max-w-full flex-col gap-2 overflow-hidden">
           {Array.from(grouped.entries()).map(([label, group]) => (
-            <div key={label}>
+            <div key={label} className="flex w-full min-w-0 max-w-full flex-col gap-2">
               <div className="mt-3 first:mt-0">
-                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
+                <span className="block truncate text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
               </div>
               {renderList(group)}
             </div>

@@ -46,7 +46,7 @@ export function AssetCategoryForm({ householdId, category, onSave, onCancel }: P
       <div>
         <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Name</label>
         <input
-          className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Retirement, Emergency Fund"

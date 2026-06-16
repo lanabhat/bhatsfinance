@@ -24,7 +24,7 @@ export function MaturingFDsCard({ items, windowDays }: Props) {
         <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Maturing Soon</h2>
         <span className="text-[10px] text-[var(--text-muted)]">Next {windowDays} days</span>
       </div>
-      <div className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50">
+      <div className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50 dark:bg-amber-900/15">
         {items.map((fd, i) => {
           const elapsedPct = fd.total_tenure_days > 0
             ? Math.min(100, (fd.elapsed_days / fd.total_tenure_days) * 100)
@@ -41,7 +41,7 @@ export function MaturingFDsCard({ items, windowDays }: Props) {
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-sm font-bold text-amber-800">{fmtINR(fd.maturity_value)}</p>
+                  <p className="text-sm font-bold text-amber-800 dark:text-amber-300">{fmtINR(fd.maturity_value)}</p>
                   <p className="text-xs text-[var(--text-muted)]">{formatRemaining(fd.days_remaining)}</p>
                 </div>
               </div>

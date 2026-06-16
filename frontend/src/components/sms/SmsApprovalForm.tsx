@@ -32,9 +32,9 @@ type ApprovalMode = 'transaction' | 'balance' | 'investment'
 function ConfidencePill({ value }: { value: number | null }) {
   if (value === null) return <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]">No match</span>
   const pct = Math.round(value * 100)
-  const color = value >= 0.7 ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-    : value >= 0.4 ? 'bg-amber-50 border-amber-300 text-amber-700'
-    : 'bg-red-50 border-red-300 text-red-700'
+  const color = value >= 0.7 ? 'bg-emerald-50 dark:bg-emerald-900/15 border-emerald-300 text-emerald-700 dark:text-emerald-300'
+    : value >= 0.4 ? 'bg-amber-50 dark:bg-amber-900/15 border-amber-300 text-amber-700 dark:text-amber-300'
+    : 'bg-red-50 dark:bg-red-900/15 border-red-300 text-red-700 dark:text-red-300'
   return (
     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${color}`} title="Auto-detection confidence">
       {pct}% match
@@ -211,10 +211,10 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
       {/* Backdrop */}
       <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm" onClick={onCancel} aria-hidden="true" />
 
-      {/* Modal */}
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+      {/* Modal — bottom sheet on mobile, centered on desktop */}
+      <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center md:p-4">
         <div
-          className="relative w-full max-w-lg rounded-2xl bg-[var(--surface)] shadow-[var(--shadow-modal)] my-auto"
+          className="relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-2xl bg-[var(--surface)] shadow-[var(--shadow-modal)] md:max-h-[88vh] md:rounded-2xl"
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
@@ -258,7 +258,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
             </div>
           </div>
 
-          <div className="px-5 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
+          <div className="main-content-sheet flex-1 space-y-4 overflow-y-auto px-5 py-4">
             {/* Original SMS body */}
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
               <p className="whitespace-pre-wrap text-xs text-[var(--text-muted)]">{message.body}</p>
@@ -271,7 +271,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
                   <button
                     type="button"
                     onClick={onReject}
-                    className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:border-rose-800/40 dark:text-rose-400 dark:hover:bg-rose-900/20"
+                    className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:bg-rose-900/15 dark:border-rose-800/40 dark:text-rose-400 dark:hover:bg-rose-900/20"
                   >
                     ✕ Reject &amp; next
                   </button>
@@ -355,7 +355,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
                   <input type="text" value={balanceNotes} onChange={(e) => setBalanceNotes(e.target.value)} placeholder="Optional" className={INP} />
                 </label>
                 <p className="text-[11px] text-[var(--text-muted)]">Records a balance snapshot — useful for bank balance alerts.</p>
-                {error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+                {error && <p className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-900/15 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
                 <div className="flex gap-2 pt-1">
                   <button type="button" onClick={() => void handleBalanceSave()} disabled={busy}
                     className="flex-1 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-40">
@@ -419,7 +419,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
                     {memberOptions.map((m) => <option key={m.id} value={String(m.id)}>{m.label}</option>)}
                   </select>
                 </label>
-                {error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+                {error && <p className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-900/15 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
                 <div className="flex gap-2 pt-1">
                   <button type="button" onClick={() => void handleInvestmentSave()} disabled={busy}
                     className="flex-1 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-40">

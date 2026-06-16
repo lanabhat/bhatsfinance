@@ -406,15 +406,15 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
         {step === 'result' && result && (
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
-                <p className="text-2xl font-bold text-emerald-700">{result.created}</p>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/15 p-4 text-center">
+                <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{result.created}</p>
                 <p className="text-xs text-emerald-600">Created</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4 text-center">
                 <p className="text-2xl font-bold text-[var(--text-2)]">{result.skipped}</p>
                 <p className="text-xs text-[var(--text-muted)]">Skipped (already exists)</p>
               </div>
-              <div className={`rounded-xl border p-4 text-center ${result.errors.length ? 'border-red-200 bg-red-50' : 'border-[var(--border)] bg-[var(--surface-2)]'}`}>
+              <div className={`rounded-xl border p-4 text-center ${result.errors.length ? 'border-red-200 bg-red-50 dark:bg-red-900/15' : 'border-[var(--border)] bg-[var(--surface-2)]'}`}>
                 <p className={`text-2xl font-bold ${result.errors.length ? 'text-red-600' : 'text-[var(--text-2)]'}`}>{result.errors.length}</p>
                 <p className={`text-xs ${result.errors.length ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>Errors</p>
               </div>
@@ -423,7 +423,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
             {result.errors.length > 0 && (
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-red-700">Error Details</h4>
+                  <h4 className="text-sm font-semibold text-red-700 dark:text-red-300">Error Details</h4>
                   <button type="button" className="secondary-btn text-xs" onClick={() => downloadErrorCsv(result.errors)}>
                     Download errors CSV
                   </button>

@@ -11,7 +11,7 @@ export function NetWorthTrendChart({ data }: Props) {
   const { hidden } = usePrivacy()
   const ct = useChartTheme()
   return (
-    <ResponsiveContainer width="100%" height={260}>
+    <ResponsiveContainer width="100%" height={220} minWidth={0}>
       <AreaChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
         <defs>
           <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
@@ -21,7 +21,7 @@ export function NetWorthTrendChart({ data }: Props) {
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
         <XAxis dataKey="date" tick={{ fontSize: 11, fill: ct.axis }} stroke={ct.grid} tickFormatter={(d) => d.slice(0, 7)} />
-        <YAxis tick={{ fontSize: 11, fill: ct.axis }} stroke={ct.grid} tickFormatter={(v) => hidden ? '••' : `₹${(v / 100000).toFixed(0)}L`} />
+        <YAxis width={48} tick={{ fontSize: 11, fill: ct.axis }} stroke={ct.grid} tickFormatter={(v) => hidden ? '••' : `₹${(v / 100000).toFixed(0)}L`} />
         <Tooltip content={(p) => <ChartTooltip {...p} fmt={fmt} />} />
         <Area type="monotone" dataKey="networth" name="Net Worth" stroke="#6366f1" fill="url(#nwGrad)" strokeWidth={2.5} dot={false} />
       </AreaChart>

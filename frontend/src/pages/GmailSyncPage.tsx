@@ -29,7 +29,7 @@ type Props = {
 function confidenceCls(c: number) {
   if (c >= 0.8) return 'bg-green-100 text-green-800'
   if (c >= 0.5) return 'bg-amber-100 text-amber-800'
-  return 'bg-red-100 text-red-700'
+  return 'bg-red-100 text-red-700 dark:text-red-300'
 }
 
 function confidenceLabel(c: number) {
@@ -125,7 +125,7 @@ function AddInstrumentModal({ proposal, accountOptions, memberOptions, fullMembe
         {/* Body */}
         <div className="px-5 py-4 grid gap-4">
           {/* Detected info strip */}
-          <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-2.5 text-xs text-indigo-700">
+          <div className="rounded-xl bg-indigo-50 dark:bg-indigo-900/15 border border-indigo-100 px-4 py-2.5 text-xs text-indigo-700 dark:text-indigo-300">
             <p className="font-medium">Detected from email</p>
             <div className="mt-1 flex flex-wrap gap-3 text-indigo-600">
               {proposal.folio_no && <span>Folio: <strong>{proposal.folio_no}</strong></span>}
@@ -135,7 +135,7 @@ function AddInstrumentModal({ proposal, accountOptions, memberOptions, fullMembe
               {(proposal.recipients || []).map(r => <span key={r}>To: <strong>{r}</strong></span>)}
             </div>
             {matchedMember && (
-              <p className="mt-1.5 text-indigo-700">
+              <p className="mt-1.5 text-indigo-700 dark:text-indigo-300">
                 Recipient matched to member: <strong>{matchedMember.full_name}</strong>
               </p>
             )}
@@ -146,7 +146,7 @@ function AddInstrumentModal({ proposal, accountOptions, memberOptions, fullMembe
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               placeholder="e.g. Kotak Gold Fund Growth - Direct"
             />
           </label>
@@ -154,7 +154,7 @@ function AddInstrumentModal({ proposal, accountOptions, memberOptions, fullMembe
           <div className="grid grid-cols-2 gap-3">
             <label className="text-sm text-[var(--text-2)]">
               <span className="font-medium">Type</span>
-              <select value={instType} onChange={(e) => setInstType(e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
+              <select value={instType} onChange={(e) => setInstType(e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm">
                 {INSTRUMENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </label>
@@ -164,7 +164,7 @@ function AddInstrumentModal({ proposal, accountOptions, memberOptions, fullMembe
               <input
                 value={folio}
                 onChange={(e) => setFolio(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
                 placeholder="e.g. 12345678901"
               />
             </label>
@@ -175,7 +175,7 @@ function AddInstrumentModal({ proposal, accountOptions, memberOptions, fullMembe
             {matchedMember
               ? <span className="ml-2 text-[11px] text-green-600 font-medium">auto-matched from recipient email</span>
               : <span className="ml-2 text-[11px] text-[var(--text-muted)]">no member email match found</span>}
-            <select value={memberId} onChange={(e) => setMemberId(e.target.value ? Number(e.target.value) : '')} className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
+            <select value={memberId} onChange={(e) => setMemberId(e.target.value ? Number(e.target.value) : '')} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm">
               <option value="">â€” no owner / skip â€”</option>
               {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
@@ -186,7 +186,7 @@ function AddInstrumentModal({ proposal, accountOptions, memberOptions, fullMembe
             {suggestedAccountId
               ? <span className="ml-2 text-[11px] text-green-600 font-medium">auto-suggested from recipient domain</span>
               : <span className="ml-2 text-[11px] text-[var(--text-muted)]">account used to fund this investment (optional)</span>}
-            <select value={defaultAccountId} onChange={(e) => setDefaultAccountId(e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
+            <select value={defaultAccountId} onChange={(e) => setDefaultAccountId(e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm">
               <option value="">â€” none â€”</option>
               {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
             </select>
@@ -228,7 +228,7 @@ function ProposalList({ proposals, createdInstruments, onOpenModal }: ProposalLi
   if (proposals.length === 0) return null
 
   return (
-    <section className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+    <section className="rounded-2xl border border-amber-200 bg-amber-50 dark:bg-amber-900/15 px-5 py-4">
       <div className="mb-3">
         <h2 className="text-base font-semibold text-[var(--text)]">Detected Instruments</h2>
         <p className="text-xs text-[var(--text-muted)] mt-0.5">Mutual fund schemes found in emails. Create them as instruments to enable import mapping.</p>
@@ -269,7 +269,7 @@ function ProposalList({ proposals, createdInstruments, onOpenModal }: ProposalLi
                   <p className="text-sm text-[var(--text-2)]">{p.scheme_name}</p>
                   {p.folio_no && <p className="text-[11px] text-[var(--text-muted)]">Folio: {p.folio_no}</p>}
                 </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${justCreated ? 'bg-green-100 text-green-700' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
+                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${justCreated ? 'bg-green-100 text-green-700 dark:text-green-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
                   {justCreated ? 'just created' : 'already exists'}
                 </span>
               </div>
@@ -296,24 +296,24 @@ const TX_TYPE_LABELS: Record<string, string> = {
 }
 
 const TX_TYPE_COLORS: Record<string, string> = {
-  'CC Spend':  'bg-red-50 text-red-700 border-red-200',
+  'CC Spend':  'bg-red-50 dark:bg-red-900/15 text-red-700 dark:text-red-300 border-red-200',
   'Debit':     'bg-orange-50 text-orange-700 border-orange-200',
-  'Credit':    'bg-green-50 text-green-700 border-green-200',
-  'Transfer':  'bg-blue-50 text-blue-700 border-blue-200',
+  'Credit':    'bg-green-50 dark:bg-green-900/15 text-green-700 dark:text-green-300 border-green-200',
+  'Transfer':  'bg-blue-50 dark:bg-blue-900/15 text-blue-700 dark:text-blue-300 border-blue-200',
   'ATM':       'bg-orange-50 text-orange-700 border-orange-200',
-  'EMI':       'bg-purple-50 text-purple-700 border-purple-200',
-  'Insurance': 'bg-purple-50 text-purple-700 border-purple-200',
-  'SIP':       'bg-indigo-50 text-indigo-700 border-indigo-200',
-  'Stock':     'bg-indigo-50 text-indigo-700 border-indigo-200',
+  'EMI':       'bg-purple-50 dark:bg-purple-900/15 text-purple-700 dark:text-purple-300 border-purple-200',
+  'Insurance': 'bg-purple-50 dark:bg-purple-900/15 text-purple-700 dark:text-purple-300 border-purple-200',
+  'SIP':       'bg-indigo-50 dark:bg-indigo-900/15 text-indigo-700 dark:text-indigo-300 border-indigo-200',
+  'Stock':     'bg-indigo-50 dark:bg-indigo-900/15 text-indigo-700 dark:text-indigo-300 border-indigo-200',
   'Balance':      'bg-teal-50 text-teal-700 border-teal-200',
-  'CC Bill':      'bg-amber-50 text-amber-700 border-amber-200',
-  'Bill Payment': 'bg-amber-50 text-amber-700 border-amber-200',
-  'UPI':          'bg-blue-50 text-blue-700 border-blue-200',
-  'UPI/Transfer':     'bg-blue-50 text-blue-700 border-blue-200',
+  'CC Bill':      'bg-amber-50 dark:bg-amber-900/15 text-amber-700 dark:text-amber-300 border-amber-200',
+  'Bill Payment': 'bg-amber-50 dark:bg-amber-900/15 text-amber-700 dark:text-amber-300 border-amber-200',
+  'UPI':          'bg-blue-50 dark:bg-blue-900/15 text-blue-700 dark:text-blue-300 border-blue-200',
+  'UPI/Transfer':     'bg-blue-50 dark:bg-blue-900/15 text-blue-700 dark:text-blue-300 border-blue-200',
   'FASTag Recharge':  'bg-teal-50 text-teal-700 border-teal-200',
   'Toll Fee':         'bg-orange-50 text-orange-700 border-orange-200',
   'Action Needed':    'bg-yellow-50 text-yellow-700 border-yellow-200',
-  'TDS':              'bg-red-50 text-red-700 border-red-200',
+  'TDS':              'bg-red-50 dark:bg-red-900/15 text-red-700 dark:text-red-300 border-red-200',
 }
 
 type TxPreviewRowProps = {
@@ -367,7 +367,7 @@ function TxPreviewRow({ email, accountLabel, txTypeLabel, skipped, onToggleSkip 
         <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] font-medium ${typeColor}`}>{txTypeLabel}</span>
 
         {/* Amount â€” most prominent */}
-        <span className={`w-24 shrink-0 text-right font-semibold tabular-nums ${email.parsed.direction === 'inflow' ? 'text-green-700' : 'text-[var(--text)]'}`}>
+        <span className={`w-24 shrink-0 text-right font-semibold tabular-nums ${email.parsed.direction === 'inflow' ? 'text-green-700 dark:text-green-300' : 'text-[var(--text)]'}`}>
           {email.parsed.amount
             ? `${email.parsed.direction === 'inflow' ? '+' : 'âˆ’'}â‚¹${Number(email.parsed.amount).toLocaleString('en-IN')}`
             : <span className="text-[var(--text-faint)] font-normal">no amount</span>}
@@ -388,7 +388,7 @@ function TxPreviewRow({ email, accountLabel, txTypeLabel, skipped, onToggleSkip 
           ? <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]">imported</span>
           : skipped
             ? <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]">excluded</span>
-            : <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] text-emerald-700">new</span>
+            : <span className="shrink-0 rounded-full bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-200 px-2 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-300">new</span>
         }
 
         {/* Expand email toggle */}
@@ -521,7 +521,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
             <p className="font-semibold text-[var(--text)]">{group.sender_display || group.sender_domain}</p>
             <span className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--text-muted)]">{group.sender_domain}</span>
             {group.recipient && (
-              <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs font-medium text-blue-700">To: {group.recipient}</span>
+              <span className="rounded-full bg-blue-50 dark:bg-blue-900/15 border border-blue-200 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">To: {group.recipient}</span>
             )}
           </div>
           {/* Row 2: subject pattern â€” the key line */}
@@ -541,7 +541,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
           {/* Row 4: fund/scheme name */}
           {group.scheme_name && (
             <div className="mt-1">
-              <span className="rounded-lg bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-semibold text-indigo-800">{group.scheme_name}</span>
+              <span className="rounded-lg bg-indigo-50 dark:bg-indigo-900/15 border border-indigo-200 px-2 py-0.5 text-xs font-semibold text-indigo-800">{group.scheme_name}</span>
             </div>
           )}
           {/* Row 5: meta badges */}
@@ -559,7 +559,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
               <span className="text-xs text-[var(--text-muted)]">{group.already_imported_count} imported</span>
             )}
             {autoMatchCount > 0 && (
-              <span className="rounded-full bg-green-50 border border-green-200 px-2 py-0.5 text-xs text-green-700">{autoMatchCount} auto-matched</span>
+              <span className="rounded-full bg-green-50 dark:bg-green-900/15 border border-green-200 px-2 py-0.5 text-xs text-green-700 dark:text-green-300">{autoMatchCount} auto-matched</span>
             )}
           </div>
         </div>
@@ -588,7 +588,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
         </div>
       </div>
       {balanceMsg && (
-        <div className={`mx-4 mb-3 rounded-lg px-3 py-2 text-xs ${balanceMsg.startsWith('Balance updated') ? 'bg-teal-50 text-teal-700' : 'bg-red-50 text-red-600'}`}>
+        <div className={`mx-4 mb-3 rounded-lg px-3 py-2 text-xs ${balanceMsg.startsWith('Balance updated') ? 'bg-teal-50 text-teal-700' : 'bg-red-50 dark:bg-red-900/15 text-red-600'}`}>
           {balanceMsg}
         </div>
       )}
@@ -605,7 +605,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
                   const t = templates.find((x) => x.key === e.target.value)
                   onChange({ ...mapping, template_key: e.target.value, target: t?.target ?? 'account' })
                 }}
-                className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               >
                 <option value="">â€” none / manual â€”</option>
                 {templates.map((t) => (
@@ -620,7 +620,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
               <input
                 value={mapping.sender}
                 onChange={(e) => onChange({ ...mapping, sender: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
                 placeholder="e.g. @axis.bank.in"
               />
               <p className="mt-1 text-[11px] text-[var(--text-muted)]">Prefix with @ for domain-wide match</p>
@@ -632,7 +632,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
                 <select
                   value={mapping.instrument_id || ''}
                   onChange={(e) => onChange({ ...mapping, instrument_id: Number(e.target.value) })}
-                  className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
                 >
                   <option value="">â€” select instrument â€”</option>
                   {instrumentOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
@@ -644,7 +644,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
                 <select
                   value={mapping.account_id || ''}
                   onChange={(e) => onChange({ ...mapping, account_id: Number(e.target.value) })}
-                  className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
                 >
                   <option value="">â€” select account â€”</option>
                   {accountOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
@@ -657,7 +657,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
               <input
                 value={mapping.keyword}
                 onChange={(e) => onChange({ ...mapping, keyword: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
                 placeholder="e.g. XX2133 â€” leave blank to match all"
               />
             </label>
@@ -667,7 +667,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
               <input
                 value={mapping.recipient}
                 onChange={(e) => onChange({ ...mapping, recipient: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
                 placeholder="e.g. you@gmail.com"
               />
               <p className="mt-1 text-[11px] text-[var(--text-muted)]">Only match emails sent to this address</p>
@@ -678,7 +678,7 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
               <input
                 value={mapping.card_suffix}
                 onChange={(e) => onChange({ ...mapping, card_suffix: e.target.value.replace(/\D/g, '').slice(0, 4) })}
-                className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
                 placeholder="e.g. 3003"
                 maxLength={4}
               />
@@ -787,7 +787,7 @@ function RecipientFilter({ recipients, selected, hidden, onToggle, onRemove, onR
           {visible.map((r) => {
             const active = selected.has(r.email)
             return (
-              <div key={r.email} className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${active ? 'border-blue-400 bg-blue-50 text-blue-800' : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
+              <div key={r.email} className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${active ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/15 text-blue-800' : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
                 {/* Checkbox-style toggle â€” temporarily show/hide groups */}
                 <button type="button" onClick={() => onToggle(r.email)} className="flex items-center gap-1.5">
                   <span className={`inline-block h-2 w-2 rounded-sm border ${active ? 'bg-blue-500 border-blue-500' : 'bg-[var(--surface)] border-[var(--border-2)]'}`} />
@@ -822,7 +822,7 @@ function RecipientFilter({ recipients, selected, hidden, onToggle, onRemove, onR
             <div className="mt-2 flex flex-wrap gap-2">
               {hiddenList.map((r) => (
                 <button key={r.email} type="button" onClick={() => onRestore(r.email)}
-                  className="rounded-full border border-dashed border-[var(--border-2)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--text-muted)] hover:border-blue-400 hover:text-blue-700">
+                  className="rounded-full border border-dashed border-[var(--border-2)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--text-muted)] hover:border-blue-400 hover:text-blue-700 dark:text-blue-300">
                   + restore {r.email}
                 </button>
               ))}
@@ -861,13 +861,13 @@ function ResetImportHistoryButton({ canWrite, onReset }: { canWrite: boolean; on
   }
 
   if (result) {
-    return <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{result}</p>
+    return <p className="text-xs text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/15 border border-green-200 rounded-lg px-3 py-2">{result}</p>
   }
 
   if (confirm) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-        <span className="text-xs text-red-700 flex-1">This will mark all previously-imported Gmail emails as unseen. Are you sure?</span>
+      <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/15 px-3 py-2">
+        <span className="text-xs text-red-700 dark:text-red-300 flex-1">This will mark all previously-imported Gmail emails as unseen. Are you sure?</span>
         <button type="button" disabled={loading} onClick={handleReset}
           className="rounded px-3 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
           {loading ? 'Clearingâ€¦' : 'Yes, clear'}
@@ -880,7 +880,7 @@ function ResetImportHistoryButton({ canWrite, onReset }: { canWrite: boolean; on
 
   return (
     <button type="button" disabled={!canWrite} onClick={() => setConfirm(true)}
-      className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-40">
+      className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-40">
       Clear import history
     </button>
   )
@@ -1182,11 +1182,11 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
         </div>
 
         {!clientConfigured && (
-          <details className="mt-3 rounded-xl border border-red-200 bg-red-50">
+          <details className="mt-3 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/15">
             <summary className="cursor-pointer px-4 py-2.5 text-sm font-medium text-red-800">
               OAuth not configured â€” expand for setup steps
             </summary>
-            <div className="border-t border-red-100 px-4 py-3 text-sm text-red-700">
+            <div className="border-t border-red-100 px-4 py-3 text-sm text-red-700 dark:text-red-300">
               <ol className="list-decimal space-y-1.5 pl-5">
                 <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console</a> and create a project.</li>
                 <li>Enable the <strong>Gmail API</strong>: APIs &amp; Services â†’ Library â†’ Gmail API â†’ Enable.</li>
@@ -1213,7 +1213,7 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
                 <button
                   type="button"
                   disabled={disconnectId === acct.id || !canWrite}
-                  className="rounded-lg border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  className="rounded-lg border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50"
                   onClick={async () => {
                     setDisconnectId(acct.id)
                     try { const res = await gmailApi.disconnect(acct.id); setConnectedAccounts(res.connected_accounts) }
@@ -1293,7 +1293,7 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
             <label className="text-xs font-medium text-[var(--text-2)]">
               Gmail query
               <input value={query} onChange={(e) => setQuery(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm" placeholder="e.g. newer_than:30d" />
+                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm" placeholder="e.g. newer_than:30d" />
               <p className="mt-1 text-[11px] text-[var(--text-muted)]">
                 Examples: <code>newer_than:90d</code> Â· <code>from:alerts@hdfcbank.bank.in</code>
               </p>
@@ -1524,7 +1524,7 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
                     ) : r.error ? (
                       <span className="text-xs text-red-600">{r.error}</span>
                     ) : (
-                      <span className="text-xs text-emerald-700">{r.created_transactions ?? 0} tx Â· {r.created_valuations ?? 0} bal</span>
+                      <span className="text-xs text-emerald-700 dark:text-emerald-300">{r.created_transactions ?? 0} tx Â· {r.created_valuations ?? 0} bal</span>
                     )}
                   </div>
                   {r.errors && r.errors.length > 0 && (
@@ -1543,7 +1543,7 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
                               <td className="py-1 pr-3 max-w-xs truncate text-[var(--text-2)]" title={e.subject}>{e.subject ?? e.message_id}</td>
                               <td className="py-1 pr-3 text-right font-medium text-[var(--text)]">{e.amount ? `â‚¹${Number(e.amount).toLocaleString('en-IN')}` : 'â€”'}</td>
                               <td className="py-1">
-                                <span className={`rounded-full px-2 py-0.5 ${e.status === 'queued' || e.status === 'created' ? 'bg-emerald-50 text-emerald-700' : e.status === 'already_imported' ? 'bg-[var(--surface-2)] text-[var(--text-muted)]' : 'bg-red-50 text-red-600'}`}>
+                                <span className={`rounded-full px-2 py-0.5 ${e.status === 'queued' || e.status === 'created' ? 'bg-emerald-50 dark:bg-emerald-900/15 text-emerald-700 dark:text-emerald-300' : e.status === 'already_imported' ? 'bg-[var(--surface-2)] text-[var(--text-muted)]' : 'bg-red-50 dark:bg-red-900/15 text-red-600'}`}>
                                   {e.status}
                                 </span>
                               </td>
@@ -1584,7 +1584,7 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
               disabled={!canWrite}
               onChange={(e) => setCfgQuery(e.target.value)}
               placeholder="e.g. newer_than:14d"
-              className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
             />
           </label>
 
@@ -1646,13 +1646,13 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
             ) : (
               <div className="flex flex-wrap gap-2">
                 {cfgExcludedSenders.map((sender) => (
-                  <div key={sender} className="flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-700">
+                  <div key={sender} className="flex items-center gap-1 rounded-full border border-red-200 bg-red-50 dark:bg-red-900/15 px-3 py-1 text-xs text-red-700 dark:text-red-300">
                     {sender}
                     <button
                       type="button"
                       disabled={!canWrite}
                       onClick={() => setCfgExcludedSenders(prev => prev.filter(s => s !== sender))}
-                      className="ml-1 text-red-400 hover:text-red-700 disabled:opacity-50"
+                      className="ml-1 text-red-400 hover:text-red-700 dark:text-red-300 disabled:opacity-50"
                     >
                       Ã—
                     </button>

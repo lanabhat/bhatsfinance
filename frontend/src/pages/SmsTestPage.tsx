@@ -83,7 +83,7 @@ export function SmsTestPage() {
               type="text"
               value={sender}
               onChange={(e) => setSender(e.target.value)}
-              className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
             />
           </label>
           <label className="flex flex-col gap-1">
@@ -92,7 +92,7 @@ export function SmsTestPage() {
               type="datetime-local"
               value={when}
               onChange={(e) => setWhen(e.target.value)}
-              className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
             />
           </label>
         </div>
@@ -103,7 +103,7 @@ export function SmsTestPage() {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={3}
-            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
           />
           <span className="flex flex-wrap gap-1.5 mt-1">
             {SAMPLE_BODIES.map((sample, i) => (
@@ -132,8 +132,8 @@ export function SmsTestPage() {
           <div className="flex items-center gap-2 mb-2">
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
               result.status >= 200 && result.status < 300
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-red-50 text-red-700'
+                ? 'bg-emerald-50 dark:bg-emerald-900/15 text-emerald-700 dark:text-emerald-300'
+                : 'bg-red-50 dark:bg-red-900/15 text-red-700 dark:text-red-300'
             }`}>
               {result.status}
             </span>

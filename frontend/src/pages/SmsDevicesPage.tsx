@@ -122,7 +122,7 @@ export function SmsDevicesPage({ householdId }: Props) {
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="e.g. Dad's Phone"
-                className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               />
             </label>
             <Button size="sm" onClick={handleCreate} loading={creating} disabled={!label.trim()}>
@@ -163,7 +163,7 @@ export function SmsDevicesPage({ householdId }: Props) {
                   <td className="px-4 py-2.5 font-medium text-[var(--text)]">{key.label || 'SMS device'}</td>
                   <td className="px-4 py-2.5 font-mono text-xs text-[var(--text-muted)]">{key.token}</td>
                   <td className="px-4 py-2.5">
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${key.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${key.is_active ? 'bg-emerald-50 dark:bg-emerald-900/15 text-emerald-700 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
                       {key.is_active ? 'Active' : 'Revoked'}
                     </span>
                   </td>
@@ -189,7 +189,7 @@ export function SmsDevicesPage({ householdId }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl bg-[var(--surface,white)] p-6 shadow-xl">
             <h2 className="mb-1 text-base font-semibold text-[var(--text)]">Device registered</h2>
-            <p className="mb-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <p className="mb-4 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/15 border border-amber-200 rounded-lg px-3 py-2">
               ⚠️ This API key is shown only once. Copy it into the forwarder app now — you won't be able to view it again.
             </p>
 

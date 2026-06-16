@@ -241,7 +241,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
 
       {/* ── Unmapped categories warning ── */}
       {unmapped.count > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/15 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
           <span className="mt-0.5 text-lg">⚠️</span>
           <div className="flex-1">
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
@@ -380,7 +380,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
         <div className="space-y-1">
 
           {unmapped.count > 0 && (
-            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/40 dark:bg-amber-900/20">
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/15 p-3 dark:border-amber-800/40 dark:bg-amber-900/20">
               <p className="mb-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
                 ⚠️ {unmapped.count} spend{unmapped.count > 1 ? 's' : ''} with unrecognised categories
               </p>
@@ -447,7 +447,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
                     <button
                       type="button"
                       onClick={() => setReassignTarget(cat)}
-                      className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/30"
+                      className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-rose-50 dark:bg-rose-900/15 hover:text-rose-600 dark:hover:bg-rose-900/30"
                       title="Delete"
                     >
                       🗑️

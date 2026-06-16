@@ -52,7 +52,7 @@ function InstrumentOwnershipRow({
       <select
         value={memberId}
         onChange={(e) => setMemberId(e.target.value)}
-        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-2)] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-2)] focus:outline-none focus:ring-2 focus:ring-primary-500"
       >
         <option value="">— Unassigned —</option>
         {memberOptions.map((m) => (
@@ -121,7 +121,7 @@ function AccountOwnershipRow({
       <select
         value={memberId}
         onChange={(e) => setMemberId(e.target.value)}
-        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-2)] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-2)] focus:outline-none focus:ring-2 focus:ring-primary-500"
       >
         <option value="">— Unassigned —</option>
         {memberOptions.map((m) => (
@@ -206,7 +206,7 @@ export function MaintenancePage({ section: initSection }: { section?: Section } 
                 onClick={() => setSection(s)}
                 className={`px-3 pb-2.5 text-sm font-medium capitalize border-b-2 transition-colors ${
                   section === s
-                    ? 'border-indigo-600 text-indigo-700'
+                    ? 'border-indigo-600 text-indigo-700 dark:text-indigo-300'
                     : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-2)]'
                 }`}
               >

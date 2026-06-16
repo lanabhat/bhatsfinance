@@ -13,7 +13,7 @@ import { useAuth } from '../context/AuthContext'
 import type { AssetCategory, DashboardHolding, Instrument, InstrumentOwnership, Transaction } from '../types/domain'
 
 // ── shared helpers ────────────────────────────────────────────────────────────
-const INP = 'w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
 // ── valuation form ────────────────────────────────────────────────────────────
 function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCancel }: {
@@ -129,11 +129,11 @@ function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
                 <option value="">— Select —</option>
                 {instruments.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
               </select>
-              <button type="button" onClick={() => setShowNewInst(true)} className="shrink-0 rounded-lg border border-dashed border-indigo-400 px-3 text-xs text-indigo-600 hover:bg-indigo-50">+ New</button>
+              <button type="button" onClick={() => setShowNewInst(true)} className="shrink-0 rounded-lg border border-dashed border-indigo-400 px-3 text-xs text-indigo-600 hover:bg-indigo-50 dark:bg-indigo-900/15">+ New</button>
             </div>
           ) : (
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
-              <p className="text-xs font-medium text-indigo-700">New Instrument</p>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/15 p-3 space-y-2">
+              <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">New Instrument</p>
               <input placeholder="Name" value={newInstName} onChange={(e) => setNewInstName(e.target.value)} className={INP} />
               <select value={newInstType} onChange={(e) => setNewInstType(e.target.value as Instrument['instrument_type'])} className={INP}>
                 {INSTRUMENT_TYPES_OPTS.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
@@ -365,7 +365,7 @@ function HoldingDetailSheet({ householdId, holding, instrument, onBuy, onUpdateV
                     <button type="button" onClick={() => setEditingTx(t)} className="rounded border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-2)] hover:bg-[var(--surface-2)]">
                       Edit
                     </button>
-                    <button type="button" disabled={busyTxId === t.id} onClick={() => void handleDeleteBuy(t)} className="rounded border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-50">
+                    <button type="button" disabled={busyTxId === t.id} onClick={() => void handleDeleteBuy(t)} className="rounded border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
                       Delete
                     </button>
                   </>
@@ -386,7 +386,7 @@ function HoldingDetailSheet({ householdId, holding, instrument, onBuy, onUpdateV
           />
         ) : null}
         <div className="flex gap-2 border-t border-[var(--border)] p-4">
-          <button type="button" onClick={onBuy} disabled={!canWrite} className="flex-1 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">+ Buy More</button>
+          <button type="button" onClick={onBuy} disabled={!canWrite} className="flex-1 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:bg-indigo-900/15 disabled:opacity-50">+ Buy More</button>
           <button type="button" onClick={onUpdateValue} disabled={!canWrite} className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">Update Value</button>
           <button type="button" onClick={onEdit} disabled={!canWrite} className="rounded-xl border border-[var(--border)] px-3 py-2.5 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50" title="Edit instrument">✏️</button>
         </div>

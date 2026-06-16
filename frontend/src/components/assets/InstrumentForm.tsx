@@ -3,7 +3,7 @@ import { portfolioApi } from '../../api/portfolioApi'
 import { useApp } from '../../context/AppContext'
 import type { Instrument } from '../../types/domain'
 
-const INP = 'w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const INSTRUMENT_TYPES = ['equity','mutual_fund','fd','rd','epf','ppf','nps','gold','real_estate','insurance','cash','other','vehicle','liability','sip'] as const
 
 function metadataString(metadata: Record<string, unknown>, key: string) {
@@ -73,7 +73,7 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
         <input className={INP} value={form.symbol ?? ''} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} /></div>
       {form.instrument_type === 'fd' && (
         <div className="grid gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
-          <p className="text-xs font-medium text-indigo-700">Fixed Deposit Details</p>
+          <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">Fixed Deposit Details</p>
           <div>
             <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Investment Start Date (Optional)</label>
             <input type="date" className={INP} value={investmentStartDate} onChange={(e) => setMetadataValue('investment_start_date', e.target.value)} />
@@ -93,7 +93,7 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
       </div>
       {instrument && onDelete && (
         <div className="border-t border-[var(--border)] pt-3">
-          <button type="button" onClick={onDelete} className="w-full rounded-lg border border-red-200 py-2 text-sm text-red-500 hover:bg-red-50">
+          <button type="button" onClick={onDelete} className="w-full rounded-lg border border-red-200 py-2 text-sm text-red-500 hover:bg-red-50 dark:bg-red-900/15">
             Delete Instrument…
           </button>
         </div>

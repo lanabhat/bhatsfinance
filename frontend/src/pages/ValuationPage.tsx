@@ -30,7 +30,7 @@ const EMPTY_FORM = (householdId: number): Omit<ValuationSnapshot, 'id'> => ({
   notes: '',
 })
 
-const INP = 'w-full rounded-lg border border-[var(--border-2)] px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400'
+const INP = 'w-full rounded-lg border border-[var(--border-2)] bg-[var(--surface)] text-[var(--text)] px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const LBL = 'text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]'
 
 type GroupFilter = 'all' | 'account' | 'instrument'
@@ -158,7 +158,7 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
             placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="rounded-lg border border-[var(--border-2)] px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="rounded-lg border border-[var(--border-2)] bg-[var(--surface)] text-[var(--text)] px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
         <div className="flex gap-2">
@@ -171,9 +171,9 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
 
       {/* Snapshot panel */}
       {snapshotOpen && (
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 grid gap-3">
-          <p className="text-sm font-semibold text-indigo-900">Bulk Snapshot</p>
-          <p className="text-xs text-indigo-700">
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 grid gap-3 dark:border-indigo-900/40 dark:bg-indigo-900/15">
+          <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">Bulk Snapshot</p>
+          <p className="text-xs text-indigo-700 dark:text-indigo-300">
             Auto-computes FD/RD values using saved interest rates. Carries forward last known values for all other instruments and accounts.
           </p>
           <div className="flex flex-wrap items-end gap-3">
@@ -194,7 +194,7 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
                   { label: 'Total Assets', value: snapshotResult.total_assets },
                   { label: 'Total Liabilities', value: snapshotResult.total_liabilities },
                 ].map((s) => (
-                  <div key={s.label} className="rounded-lg bg-[var(--surface)] border border-indigo-100 px-3 py-2">
+                  <div key={s.label} className="rounded-lg bg-[var(--surface)] border border-indigo-100 px-3 py-2 dark:border-indigo-900/40">
                     <p className="text-[11px] text-[var(--text-muted)]">{s.label}</p>
                     <p className="text-base font-bold text-[var(--text)]">{fmt(s.value)}</p>
                   </div>
@@ -206,7 +206,7 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
                   <p className="text-xs font-medium text-emerald-700 mb-1">✓ Auto-computed ({snapshotResult.auto_computed.length})</p>
                   <div className="flex flex-wrap gap-1">
                     {snapshotResult.auto_computed.map((x, i) => (
-                      <span key={i} className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-xs text-emerald-700">
+                      <span key={i} className="rounded-full bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-200 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/25 dark:border-emerald-800/40 dark:text-emerald-300">
                         {x.name} — {fmt(x.value)}
                       </span>
                     ))}
@@ -218,18 +218,18 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
                   <p className="text-xs font-medium text-amber-700">⚠ Needs manual entry ({snapshotResult.needs_manual.length})</p>
                   <div className="flex flex-wrap gap-1">
                     {snapshotResult.needs_manual.map((x, i) => (
-                      <span key={i} className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
+                      <span key={i} className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-900/25 dark:border-amber-800/40 dark:text-amber-300">
                         {x.name}
                       </span>
                     ))}
                   </div>
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 grid gap-1.5">
-                    <p className="text-xs font-semibold text-amber-800">Why does this happen?</p>
-                    <p className="text-[11px] text-amber-700 leading-relaxed">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 grid gap-1.5 dark:border-amber-800/40 dark:bg-amber-900/15">
+                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Why does this happen?</p>
+                    <p className="text-[11px] text-amber-700 leading-relaxed dark:text-amber-300">
                       These items have no transactions, no opening balance, and no prior snapshot — so there's nothing to compute from.
                     </p>
-                    <p className="text-xs font-semibold text-amber-800 mt-1">How to fix</p>
-                    <ol className="text-[11px] text-amber-700 leading-relaxed list-decimal list-inside space-y-1">
+                    <p className="text-xs font-semibold text-amber-800 mt-1 dark:text-amber-300">How to fix</p>
+                    <ol className="text-[11px] text-amber-700 leading-relaxed list-decimal list-inside space-y-1 dark:text-amber-300">
                       <li>Click <strong>+ Add Valuation</strong> above.</li>
                       <li>Select the account or instrument.</li>
                       <li>Enter the current balance or market value.</li>
@@ -243,7 +243,7 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
                   <p className="text-xs font-medium text-indigo-700 mb-1">↩ Carried forward ({snapshotResult.carried_forward.length})</p>
                   <div className="flex flex-wrap gap-1">
                     {snapshotResult.carried_forward.map((x, i) => (
-                      <span key={i} className="rounded-full bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs text-indigo-700">
+                      <span key={i} className="rounded-full bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-900/25 dark:border-indigo-800/40 dark:text-indigo-300">
                         {x.name}
                       </span>
                     ))}
@@ -416,7 +416,7 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
           </label>
 
           {formError && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{formError}</p>
+            <p className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/15 px-3 py-2 text-xs text-red-700 dark:text-red-300">{formError}</p>
           )}
 
           <div className="flex gap-2">

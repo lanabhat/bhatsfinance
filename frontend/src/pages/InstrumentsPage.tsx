@@ -58,8 +58,8 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
 
   return (
     <div className="grid gap-4 px-5 py-4">
-      <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-center">
-        <p className="text-sm font-semibold text-red-700">Deleting: {instrument.name}</p>
+      <div className="rounded-xl bg-red-50 dark:bg-red-900/15 border border-red-200 p-3 text-center">
+        <p className="text-sm font-semibold text-red-700 dark:text-red-300">Deleting: {instrument.name}</p>
         <p className="mt-0.5 text-xs text-red-500">Remove all connected data below before deleting the instrument.</p>
       </div>
 
@@ -71,7 +71,7 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
               <p className="text-xs font-semibold text-[var(--text-2)]">Transactions ({txs.length})</p>
               {txs.length > 0 && (
                 <button type="button" disabled={deleting} onClick={() => deleteAll('txs')}
-                  className="rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-50">
+                  className="rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
                   Delete all
                 </button>
               )}
@@ -95,7 +95,7 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
               <p className="text-xs font-semibold text-[var(--text-2)]">Valuations ({valuations.length})</p>
               {valuations.length > 0 && (
                 <button type="button" disabled={deleting} onClick={() => deleteAll('valuations')}
-                  className="rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-50">
+                  className="rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
                   Delete all
                 </button>
               )}
@@ -119,7 +119,7 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
               <p className="text-xs font-semibold text-[var(--text-2)]">Ownerships ({ownerships.length})</p>
               {ownerships.length > 0 && (
                 <button type="button" disabled={deleting} onClick={() => deleteAll('ownerships')}
-                  className="rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-50">
+                  className="rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
                   Delete all
                 </button>
               )}
@@ -262,7 +262,7 @@ export function InstrumentsPage() {
       <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Categories</p>
-          <button type="button" onClick={() => setSheet({ type: 'category' })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 disabled:opacity-50">+ Add</button>
+          <button type="button" onClick={() => setSheet({ type: 'category' })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-300 disabled:opacity-50">+ Add</button>
         </div>
         {categories.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">No categories yet.</p>
@@ -273,7 +273,7 @@ export function InstrumentsPage() {
                 <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: cat.color }} />
                 <p className="flex-1 text-sm text-[var(--text-2)]">{cat.name}</p>
                 <p className="text-xs text-[var(--text-muted)]">{cat.instrument_count}</p>
-                <button type="button" onClick={() => setSheet({ type: 'category', item: cat })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 disabled:opacity-50">Edit</button>
+                <button type="button" onClick={() => setSheet({ type: 'category', item: cat })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-300 disabled:opacity-50">Edit</button>
               </div>
             ))}
           </div>

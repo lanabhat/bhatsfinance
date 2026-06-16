@@ -25,9 +25,9 @@ function Avatar({ picture, name }: { picture: string; name: string }) {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: 'bg-amber-100 text-amber-700',
-  approved: 'bg-green-100 text-green-700',
-  denied: 'bg-red-100 text-red-700',
+  pending: 'bg-amber-100 text-amber-700 dark:text-amber-300',
+  approved: 'bg-green-100 text-green-700 dark:text-green-300',
+  denied: 'bg-red-100 text-red-700 dark:text-red-300',
 }
 
 export function AdminPage() {
@@ -148,7 +148,7 @@ export function AdminPage() {
                   type="button"
                   disabled={saving === user.id}
                   onClick={() => patch(user.id, { status: 'denied' })}
-                  className="flex-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-200 disabled:opacity-50 transition-colors"
+                  className="flex-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-200 disabled:opacity-50 transition-colors"
                 >
                   Deny
                 </button>
@@ -160,7 +160,7 @@ export function AdminPage() {
                   type="button"
                   disabled={saving === user.id}
                   onClick={() => patch(user.id, { status: 'denied' })}
-                  className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-200 disabled:opacity-50 transition-colors"
+                  className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-200 disabled:opacity-50 transition-colors"
                 >
                   Revoke
                 </button>

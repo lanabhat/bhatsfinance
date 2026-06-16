@@ -45,8 +45,9 @@ const BASE_GROUPS: RouteGroup[] = [
     ],
   },
   {
-    label: 'Support',
+    label: 'Account',
     items: [
+      { key: 'settings', label: 'Settings', icon: '⚙️' },
       { key: 'help', label: 'Help', icon: '❓' },
     ],
   },

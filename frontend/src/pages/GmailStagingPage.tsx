@@ -20,9 +20,9 @@ const CLASSIFICATIONS = [
 function ConfidencePill({ value }: { value: number | null }) {
   if (value === null) return <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]">No match</span>
   const pct = Math.round(value * 100)
-  const color = value >= 0.7 ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-    : value >= 0.4 ? 'bg-amber-50 border-amber-300 text-amber-700'
-    : 'bg-red-50 border-red-300 text-red-700'
+  const color = value >= 0.7 ? 'bg-emerald-50 dark:bg-emerald-900/15 border-emerald-300 text-emerald-700 dark:text-emerald-300'
+    : value >= 0.4 ? 'bg-amber-50 dark:bg-amber-900/15 border-amber-300 text-amber-700 dark:text-amber-300'
+    : 'bg-red-50 dark:bg-red-900/15 border-red-300 text-red-700 dark:text-red-300'
   return (
     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${color}`} title="Template confidence score">
       {pct}%
@@ -80,7 +80,7 @@ function EditForm({ msg, accountOptions, spendCategories, onSave, onCancel }: Ed
   }
 
   return (
-    <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2">
+    <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-900/15 p-3 space-y-2">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <label className="flex flex-col gap-0.5">
           <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Account</span>
@@ -230,7 +230,7 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
             ? <span className="text-xs text-[var(--text-muted)]">Balance update</span>
             : <>
                 <DirectionBadge direction={tx?.direction} />
-                <span className={`ml-1 font-semibold tabular-nums ${tx?.direction === 'inflow' ? 'text-emerald-700' : 'text-[var(--text)]'}`}>
+                <span className={`ml-1 font-semibold tabular-nums ${tx?.direction === 'inflow' ? 'text-emerald-700 dark:text-emerald-300' : 'text-[var(--text)]'}`}>
                   {tx?.amount ? `₹${Number(tx.amount).toLocaleString('en-IN')}` : <span className="font-normal text-[var(--text-faint)]">no amount</span>}
                 </span>
               </>
@@ -249,7 +249,7 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
             <span className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">{msg.template_key.replace(/_/g, ' ')}</span>
           )}
           {msg.template_classification && (
-            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-600">
+            <span className="rounded bg-indigo-50 dark:bg-indigo-900/15 px-1.5 py-0.5 text-[10px] text-indigo-600">
               {msg.template_classification.replace(/_/g, ' ')}
               {msg.template_classification === 'spend' && msg.template_default_spend_category ? ` · ${msg.template_default_spend_category}` : ''}
             </span>
@@ -280,7 +280,7 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
               <button
                 onClick={handleReject}
                 disabled={busy}
-                className="rounded-lg border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                className="rounded-lg border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50"
               >
                 Reject
               </button>
@@ -289,7 +289,7 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
               <button
                 onClick={() => setConfirmDelete(true)}
                 disabled={busy}
-                className="rounded-lg border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                className="rounded-lg border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50"
               >
                 Delete
               </button>
@@ -322,7 +322,7 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
       {hasSuggestions && (
         <div className="flex flex-wrap gap-1.5 px-4 pb-2">
           {msg.suggestions.map((s, i) => (
-            <span key={i} className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] text-amber-700">
+            <span key={i} className="rounded-full bg-amber-50 dark:bg-amber-900/15 border border-amber-200 px-2 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">
               ⚠ {s}
             </span>
           ))}
@@ -485,8 +485,8 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
       </div>
 
       {/* Danger zone — Delete All + Clear Sync */}
-      <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
-        <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-rose-700">Danger Zone</p>
+      <div className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-900/15 px-4 py-3">
+        <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-300">Danger Zone</p>
         <div className="flex flex-wrap gap-3">
 
           {/* Delete all staged transactions */}
@@ -494,13 +494,13 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
             <button
               type="button"
               onClick={() => { setConfirmDeleteAll(true); setConfirmClearSync(false) }}
-              className="rounded-lg border border-rose-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+              className="rounded-lg border border-rose-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-100"
             >
               🗑 Delete All Transactions
             </button>
           ) : (
             <div className="flex items-center gap-2 rounded-lg border border-rose-300 bg-[var(--surface)] px-3 py-1.5">
-              <span className="text-xs text-rose-700">Delete all {items.length} staged transactions?</span>
+              <span className="text-xs text-rose-700 dark:text-rose-300">Delete all {items.length} staged transactions?</span>
               <button
                 type="button"
                 onClick={handleDeleteAll}
@@ -518,13 +518,13 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
             <button
               type="button"
               onClick={() => { setConfirmClearSync(true); setConfirmDeleteAll(false) }}
-              className="rounded-lg border border-rose-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+              className="rounded-lg border border-rose-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-100"
             >
               🔄 Clear Sync History
             </button>
           ) : (
             <div className="flex items-center gap-2 rounded-lg border border-rose-300 bg-[var(--surface)] px-3 py-1.5">
-              <span className="text-xs text-rose-700">Reset sync checkpoint? Gmail will re-scan from scratch.</span>
+              <span className="text-xs text-rose-700 dark:text-rose-300">Reset sync checkpoint? Gmail will re-scan from scratch.</span>
               <button
                 type="button"
                 onClick={handleClearSync}
@@ -555,7 +555,7 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
 
       {/* Bulk approve bar */}
       {statusFilter === 'pending' && autoApprovable.length > 0 && (
-        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5">
+        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/15 px-4 py-2.5">
           <p className="text-sm text-emerald-800">
             <strong>{autoApprovable.length}</strong> high-confidence transaction{autoApprovable.length !== 1 ? 's' : ''} ready to approve automatically.
           </p>
@@ -569,11 +569,11 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
         </div>
       )}
       {bulkMsg && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{bulkMsg}</p>
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/15 px-3 py-2 text-sm text-emerald-800">{bulkMsg}</p>
       )}
 
       {/* Error */}
-      {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/15 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
 
       {/* List */}
       {loading && items.length === 0 ? (
@@ -607,9 +607,9 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-xs text-[var(--text-muted)] space-y-1">
         <p className="font-medium text-[var(--text-2)]">Confidence score</p>
         <div className="flex flex-wrap gap-3">
-          <span><span className="rounded-full bg-emerald-50 border border-emerald-300 px-1.5 py-0.5 text-emerald-700">≥70%</span> All template signals matched</span>
-          <span><span className="rounded-full bg-amber-50 border border-amber-300 px-1.5 py-0.5 text-amber-700">40–69%</span> Partial match</span>
-          <span><span className="rounded-full bg-red-50 border border-red-300 px-1.5 py-0.5 text-red-700">&lt;40%</span> Low match — review carefully</span>
+          <span><span className="rounded-full bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-300 px-1.5 py-0.5 text-emerald-700 dark:text-emerald-300">≥70%</span> All template signals matched</span>
+          <span><span className="rounded-full bg-amber-50 dark:bg-amber-900/15 border border-amber-300 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">40–69%</span> Partial match</span>
+          <span><span className="rounded-full bg-red-50 dark:bg-red-900/15 border border-red-300 px-1.5 py-0.5 text-red-700 dark:text-red-300">&lt;40%</span> Low match — review carefully</span>
         </div>
       </div>
     </div>

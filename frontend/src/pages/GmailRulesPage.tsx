@@ -247,7 +247,7 @@ function RuleRow({
         <button
           type="button"
           onClick={() => onDelete(idx)}
-          className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50"
+          className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15"
         >
           ✕
         </button>
@@ -797,11 +797,11 @@ function TemplatesSection({
                           <span className="shrink-0 rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--text-2)]">{t.key}</span>
                           <span className="font-medium text-[var(--text)] text-sm">{t.label}</span>
                           {t.direction && (
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] ${t.direction === 'outflow' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{t.direction}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] ${t.direction === 'outflow' ? 'bg-red-50 dark:bg-red-900/15 text-red-700 dark:text-red-300' : 'bg-green-50 dark:bg-green-900/15 text-green-700 dark:text-green-300'}`}>{t.direction}</span>
                           )}
                           <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text-2)]">{t.target}</span>
                           {!t.is_builtin && (
-                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700 border border-amber-200">custom</span>
+                            <span className="rounded-full bg-amber-50 dark:bg-amber-900/15 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300 border border-amber-200">custom</span>
                           )}
                         </div>
                         {t.description && <p className="text-xs text-[var(--text-muted)]">{t.description}</p>}
@@ -829,7 +829,7 @@ function TemplatesSection({
                             <button
                               type="button"
                               onClick={() => handleDelete(t.key)}
-                              className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                              className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15"
                               title={t.key in TEMPLATE_CATEGORIES ? 'Reset to built-in default' : 'Delete custom template'}
                             >
                               {t.key in TEMPLATE_CATEGORIES ? 'Reset' : '✕'}
@@ -865,7 +865,7 @@ function TemplatesSection({
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="shrink-0 rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--text-2)]">{t.key}</span>
                           <span className="font-medium text-[var(--text)] text-sm">{t.label}</span>
-                          {!t.is_builtin && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700 border border-amber-200">custom</span>}
+                          {!t.is_builtin && <span className="rounded-full bg-amber-50 dark:bg-amber-900/15 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300 border border-amber-200">custom</span>}
                         </div>
                         {t.description && <p className="text-xs text-[var(--text-muted)]">{t.description}</p>}
                       </div>
@@ -873,7 +873,7 @@ function TemplatesSection({
                         <div className="flex shrink-0 gap-1">
                           <button type="button" onClick={() => setEditingKey(t.key)} className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]">Edit</button>
                           {!t.is_builtin && (
-                            <button type="button" onClick={() => handleDelete(t.key)} className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50">✕</button>
+                            <button type="button" onClick={() => handleDelete(t.key)} className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15">✕</button>
                           )}
                         </div>
                       )}

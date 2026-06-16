@@ -362,7 +362,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
             )}
 
             {editingId !== null && (
-              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/40 dark:bg-amber-900/20">
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/15 p-4 dark:border-amber-800/40 dark:bg-amber-900/20">
                 <p className="mb-2 text-sm font-semibold text-amber-800 dark:text-amber-300">Editing #{editingId}</p>
                 <TxFormFields
                   form={editForm} onChange={setEditForm}

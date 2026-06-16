@@ -20,14 +20,14 @@ export function NetWorthHero({ networth, xirr, asOf, onDateChange, onRefresh, lo
       <div className="absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-purple-400/20 blur-3xl" aria-hidden="true" />
 
       <div className="relative">
-        <div className="mb-4 flex items-center justify-between">
-          <p className="text-sm font-medium text-white/80">Total Net Worth</p>
-          <div className="flex items-center gap-2">
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-sm font-medium text-white/80">Total Net Worth</p>
+          <div className="flex shrink-0 items-center gap-1.5">
             <input
               type="date"
               value={asOf}
               onChange={(e) => onDateChange(e.target.value)}
-              className="h-8 rounded-lg border border-white/25 bg-white/15 px-2 text-xs text-white backdrop-blur focus:outline-none focus:ring-1 focus:ring-white"
+              className="h-8 w-[6.5rem] rounded-lg border border-white/25 bg-white/15 px-2 text-xs text-white backdrop-blur focus:outline-none focus:ring-1 focus:ring-white"
             />
             <button
               type="button"
@@ -42,7 +42,7 @@ export function NetWorthHero({ networth, xirr, asOf, onDateChange, onRefresh, lo
           </div>
         </div>
 
-        <p className="text-[2.75rem] font-black leading-none tracking-tight drop-shadow-sm md:text-5xl">
+        <p className="text-3xl font-black leading-none tracking-tight drop-shadow-sm md:text-5xl">
           {loading ? '—' : fmtINR(networth)}
         </p>
         <p className="mt-2 text-sm text-white/70">

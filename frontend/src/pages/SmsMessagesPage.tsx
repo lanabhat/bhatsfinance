@@ -336,7 +336,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search body or sender…"
-            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -346,7 +346,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
             value={sender}
             onChange={(e) => setSender(e.target.value)}
             placeholder="e.g. HDFCBK"
-            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -355,7 +355,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -364,7 +364,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -372,7 +372,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
           <select
             value={ordering}
             onChange={(e) => setOrdering(e.target.value)}
-            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
           >
             <option value="-received_at">Newest first</option>
             <option value="received_at">Oldest first</option>
@@ -385,7 +385,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
           <select
             value={pageSize}
             onChange={(e) => setPageSize(Number(e.target.value))}
-            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
           >
             {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
@@ -394,7 +394,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
 
       {error && <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
       {importResult && (
-        <div className={`rounded-xl border px-4 py-3 text-sm ${importResult.errors.length > 0 ? 'border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/20' : 'border-green-200 bg-green-50 dark:border-green-800/40 dark:bg-green-900/20'}`}>
+        <div className={`rounded-xl border px-4 py-3 text-sm ${importResult.errors.length > 0 ? 'border-amber-200 bg-amber-50 dark:bg-amber-900/15 dark:border-amber-800/40 dark:bg-amber-900/20' : 'border-green-200 bg-green-50 dark:bg-green-900/15 dark:border-green-800/40 dark:bg-green-900/20'}`}>
           <p className={importResult.errors.length > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-green-800 dark:text-green-300'}>
             Import complete — <strong>{importResult.created}</strong> created, <strong>{importResult.skipped}</strong> skipped (duplicates)
             {importResult.errors.length > 0 && `, ${importResult.errors.length} error${importResult.errors.length === 1 ? '' : 's'}`}.

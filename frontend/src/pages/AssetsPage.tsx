@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { assetCategoryApi } from '../api/assetCategoryApi'
 import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
@@ -107,19 +108,19 @@ function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCa
       <div>
         <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-          className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
       </div>
       <div>
         <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Unit Price</label>
         <input type="number" min="0" step="0.000001" placeholder="e.g. 94.50" value={unitPrice}
           onChange={(e) => setUnitPrice(e.target.value)}
-          className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
       </div>
       <div>
         <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Market Value (total)</label>
         <input type="number" min="0" step="0.01" placeholder="e.g. 50000" value={marketValue}
           onChange={(e) => setMarketValue(e.target.value)}
-          className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
       </div>
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2 border-t border-[var(--border)] pt-3">
@@ -174,7 +175,7 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
     }
   }, [quantity, pricePerUnit])
 
-  const inp = 'w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+  const inp = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
   const save = async () => {
     if (!amount || parseFloat(amount) <= 0) { setError('Enter total amount paid.'); return }
@@ -251,13 +252,13 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
                 {instruments.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
               </select>
               <button type="button" onClick={() => setShowNewInst(true)}
-                className="shrink-0 rounded-lg border border-dashed border-indigo-400 px-3 text-xs text-indigo-600 hover:bg-indigo-50">
+                className="shrink-0 rounded-lg border border-dashed border-indigo-400 px-3 text-xs text-indigo-600 hover:bg-indigo-50 dark:bg-indigo-900/15">
                 + New
               </button>
             </div>
           ) : (
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
-              <p className="text-xs font-medium text-indigo-700">New Instrument</p>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/15 p-3 space-y-2">
+              <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">New Instrument</p>
               <input placeholder="Name" value={newInstName} onChange={(e) => setNewInstName(e.target.value)} className={inp} />
               <select value={newInstType} onChange={(e) => setNewInstType(e.target.value as Instrument['instrument_type'])} className={inp}>
                 {INSTRUMENT_TYPES_OPTS.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
@@ -365,9 +366,9 @@ function HoldingDetailSheet({ householdId, holding, instrument, members, onBuy, 
     ? ownerships.map((o) => members.find((m) => m.id === o.member)?.label ?? `#${o.member}`).join(', ')
     : 'Unassigned'
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-t-2xl bg-[var(--surface)] shadow-xl" onClick={(e) => e.stopPropagation()}>
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 backdrop-blur-sm md:items-center md:p-4" onClick={onClose}>
+      <div className="dialog-panel w-full max-w-lg rounded-t-2xl bg-[var(--surface)] shadow-xl md:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         {/* header */}
         <div className="flex items-start justify-between border-b border-[var(--border)] px-5 py-4">
           <div>
@@ -412,9 +413,9 @@ function HoldingDetailSheet({ householdId, holding, instrument, members, onBuy, 
         </div>
 
         {/* actions */}
-        <div className="flex gap-2 border-t border-[var(--border)] p-4">
+        <div className="flex gap-2 border-t border-[var(--border)] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-4">
           <button type="button" onClick={onBuy}
-            className="flex-1 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
+            className="flex-1 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:bg-indigo-900/15">
             + Buy More
           </button>
           <button type="button" onClick={onUpdateValue}
@@ -423,7 +424,8 @@ function HoldingDetailSheet({ householdId, holding, instrument, members, onBuy, 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -474,7 +476,7 @@ function AccountForm({
     }
   }
 
-  const sel = 'w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+  const sel = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
   const field = (label: string, node: React.ReactNode) => (
     <div>
@@ -486,7 +488,7 @@ function AccountForm({
   const inp = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
     <input
       {...props}
-      className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
     />
   )
 
@@ -566,10 +568,10 @@ function InstrumentForm({
   }
 
   const inp = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
-    <input {...props} className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+    <input {...props} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
   )
   const sel = (value: string, onChange: (v: string) => void, children: React.ReactNode) => (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
       {children}
     </select>
   )
@@ -893,9 +895,9 @@ export function AssetsPage() {
       </div>
 
       {manageTab === 'accounts' && (
-        <div className="grid gap-2">
+        <div className="grid grid-cols-1 min-w-0 gap-2">
           {!loading && unownedAccounts.length > 0 && (
-            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/15 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
               <span className="mt-0.5 text-lg">⚠️</span>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
@@ -933,7 +935,7 @@ export function AssetsPage() {
             ))
           ) : (
             Array.from(groupedAccounts.entries()).map(([label, group]) => (
-              <div key={label}>
+              <div key={label} className="grid grid-cols-1 min-w-0 gap-2">
                 <GroupHeader label={label} />
                 {group.map((a) => (
                   <AccountCard key={a.id} account={a} onClick={canWrite ? () => setSheet({ type: 'account', item: a }) : undefined} />
@@ -953,7 +955,7 @@ export function AssetsPage() {
       )}
 
       {manageTab === 'instruments' && (
-        <div className="grid gap-2">
+        <div className="grid grid-cols-1 min-w-0 gap-2">
           <div className="flex items-center justify-end">
             <button
               type="button"
@@ -964,7 +966,7 @@ export function AssetsPage() {
             </button>
           </div>
           {!loading && unownedInstruments.length > 0 && (
-            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/15 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
               <span className="mt-0.5 text-lg">⚠️</span>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
@@ -1006,7 +1008,7 @@ export function AssetsPage() {
             })
           ) : (
             Array.from(groupedInstruments.entries()).map(([label, { items, color }]) => (
-              <div key={label}>
+              <div key={label} className="grid grid-cols-1 min-w-0 gap-1">
                 <GroupHeader label={label} color={color} />
                 {items.map((inst) => {
                   const cat = categories.find((c) => c.id === inst.asset_category)
@@ -1040,7 +1042,7 @@ export function AssetsPage() {
                   <p className="text-sm font-medium text-[var(--text)]">{cat.name}</p>
                   <p className="text-xs text-[var(--text-muted)]">{cat.instrument_count} instrument{cat.instrument_count !== 1 ? 's' : ''}</p>
                 </div>
-                <button type="button" onClick={() => setSheet({ type: 'category', item: cat })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 disabled:opacity-50">Edit</button>
+                <button type="button" onClick={() => setSheet({ type: 'category', item: cat })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-300 disabled:opacity-50">Edit</button>
                 <button type="button" onClick={() => deleteCategory(cat.id)} disabled={!canWrite} className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50">Delete</button>
               </div>
             ))

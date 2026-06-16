@@ -156,7 +156,7 @@ function LeafEditor({
       <button
         type="button"
         onClick={() => onDelete(path)}
-        className="shrink-0 rounded-md border border-red-200 px-1.5 py-1 text-[11px] text-red-500 hover:bg-red-50"
+        className="shrink-0 rounded-md border border-red-200 px-1.5 py-1 text-[11px] text-red-500 hover:bg-red-50 dark:bg-red-900/15"
         title="Remove condition"
       >
         ✕
@@ -196,8 +196,8 @@ function GroupEditor({
           onClick={() => onChange(path, { ...group, op: group.op === 'and' ? 'or' : 'and' })}
           className={`rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
             group.op === 'and'
-              ? 'bg-blue-50 text-blue-700 border border-blue-200'
-              : 'bg-amber-50 text-amber-700 border border-amber-200'
+              ? 'bg-blue-50 dark:bg-blue-900/15 text-blue-700 dark:text-blue-300 border border-blue-200'
+              : 'bg-amber-50 dark:bg-amber-900/15 text-amber-700 dark:text-amber-300 border border-amber-200'
           }`}
           title="Click to toggle AND / OR"
         >
@@ -216,7 +216,7 @@ function GroupEditor({
             <button
               type="button"
               onClick={() => onDelete(path)}
-              className="rounded-md border border-red-200 px-1.5 py-0.5 text-[11px] text-red-500 hover:bg-red-50"
+              className="rounded-md border border-red-200 px-1.5 py-0.5 text-[11px] text-red-500 hover:bg-red-50 dark:bg-red-900/15"
             >
               ✕
             </button>
@@ -657,13 +657,13 @@ function RuleEditor({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium border ${
                   testResult.matched
-                    ? 'bg-green-50 border-green-300 text-green-700'
-                    : 'bg-red-50 border-red-300 text-red-600'
+                    ? 'bg-green-50 dark:bg-green-900/15 border-green-300 text-green-700 dark:text-green-300'
+                    : 'bg-red-50 dark:bg-red-900/15 border-red-300 text-red-600'
                 }`}>
                   {testResult.matched ? '✓ Matched' : '✗ No match'}
                 </span>
                 {Object.entries(testResult.extractions).map(([k, v]) => (
-                  <span key={k} className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[11px] text-blue-700">
+                  <span key={k} className="rounded-full bg-blue-50 dark:bg-blue-900/15 border border-blue-200 px-2 py-0.5 text-[11px] text-blue-700 dark:text-blue-300">
                     {k}: {v}
                   </span>
                 ))}
@@ -738,7 +738,7 @@ function RuleRow({
           <span className="font-medium text-sm text-[var(--text)] truncate">{rule.name}</span>
           <span className={`rounded-full px-2 py-0.5 text-[11px] border ${
             rule.is_active
-              ? 'bg-green-50 border-green-200 text-green-700'
+              ? 'bg-green-50 dark:bg-green-900/15 border-green-200 text-green-700 dark:text-green-300'
               : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text-muted)]'
           }`}>
             {rule.is_active ? 'active' : 'inactive'}
@@ -761,13 +761,13 @@ function RuleRow({
           )}
           {rule.direction && (
             <span className={`rounded-full px-2 py-0.5 text-[11px] ${
-              rule.direction === 'outflow' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+              rule.direction === 'outflow' ? 'bg-red-50 dark:bg-red-900/15 text-red-600' : 'bg-green-50 dark:bg-green-900/15 text-green-600'
             }`}>
               {rule.direction}
             </span>
           )}
           {rule.classification && (
-            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">
+            <span className="rounded-full bg-blue-50 dark:bg-blue-900/15 px-2 py-0.5 text-[11px] text-blue-700 dark:text-blue-300">
               {rule.classification}
             </span>
           )}
@@ -800,7 +800,7 @@ function RuleRow({
         <button
           type="button"
           onClick={onDelete}
-          className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50"
+          className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15"
         >
           ✕
         </button>
@@ -825,17 +825,17 @@ function SuggestionCard({
   onCreateRule: () => void
 }) {
   const dirColor = suggestion.direction === 'outflow'
-    ? 'bg-red-50 text-red-600'
+    ? 'bg-red-50 dark:bg-red-900/15 text-red-600'
     : suggestion.direction === 'inflow'
-      ? 'bg-green-50 text-green-600'
+      ? 'bg-green-50 dark:bg-green-900/15 text-green-600'
       : 'bg-[var(--surface-2)] text-[var(--text-muted)]'
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 grid gap-2.5">
+    <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/15 px-4 py-3 grid gap-2.5">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-amber-900">Auto-suggested rule</span>
+            <span className="text-xs font-semibold text-amber-900 dark:text-amber-200">Auto-suggested rule</span>
             <span className="rounded-full bg-amber-100 border border-amber-200 px-2 py-0.5 text-[11px] text-amber-800">
               {suggestion.observation_count} approval{suggestion.observation_count === 1 ? '' : 's'}
             </span>
@@ -847,7 +847,7 @@ function SuggestionCard({
         <button
           type="button"
           onClick={onDismiss}
-          className="shrink-0 text-amber-400 hover:text-amber-700 text-xs px-1"
+          className="shrink-0 text-amber-400 hover:text-amber-700 dark:text-amber-300 text-xs px-1"
           title="Dismiss suggestion"
         >
           ✕
@@ -872,12 +872,12 @@ function SuggestionCard({
           </span>
         )}
         {suggestion.classification && (
-          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">
+          <span className="rounded-full bg-blue-50 dark:bg-blue-900/15 px-2 py-0.5 text-[11px] text-blue-700 dark:text-blue-300">
             {suggestion.classification}
           </span>
         )}
         {suggestion.spend_category && (
-          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700">
+          <span className="rounded-full bg-violet-50 dark:bg-violet-900/15 px-2 py-0.5 text-[11px] text-violet-700 dark:text-violet-300">
             {suggestion.spend_category}
           </span>
         )}
@@ -905,7 +905,7 @@ function SuggestionCard({
           <button
             type="button"
             onClick={onDismiss}
-            className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-100"
+            className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300 hover:bg-amber-100"
             title="Hide for now — will resurface if more approvals come in"
           >
             Dismiss
@@ -914,7 +914,7 @@ function SuggestionCard({
         <button
           type="button"
           onClick={onDelete}
-          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-500 hover:bg-red-50"
+          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 dark:bg-red-900/15"
           title="Permanently delete this suggestion"
         >
           Delete
@@ -1063,7 +1063,7 @@ function RulesImportDrawer({
                     key={i}
                     className={`rounded-xl border px-4 py-3 transition-colors ${
                       state === 'imported'
-                        ? 'border-green-200 bg-green-50 opacity-60'
+                        ? 'border-green-200 bg-green-50 dark:bg-green-900/15 opacity-60'
                         : state === 'skipped'
                           ? 'border-[var(--border)] bg-[var(--surface-2)] opacity-50'
                           : 'border-[var(--border)] bg-[var(--surface)]'
@@ -1083,12 +1083,12 @@ function RulesImportDrawer({
                             <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[11px] text-primary-700">{row.account_name}</span>
                           )}
                           {row.direction && (
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] ${row.direction === 'outflow' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] ${row.direction === 'outflow' ? 'bg-red-50 dark:bg-red-900/15 text-red-600' : 'bg-green-50 dark:bg-green-900/15 text-green-600'}`}>
                               {row.direction}
                             </span>
                           )}
                           {row.classification && (
-                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">{row.classification}</span>
+                            <span className="rounded-full bg-blue-50 dark:bg-blue-900/15 px-2 py-0.5 text-[11px] text-blue-700 dark:text-blue-300">{row.classification}</span>
                           )}
                         </div>
                       </div>
@@ -1116,13 +1116,13 @@ function RulesImportDrawer({
             </div>
 
             {result && (
-              <div className={`rounded-xl border px-4 py-3 text-sm ${result.errors.length > 0 ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`}>
+              <div className={`rounded-xl border px-4 py-3 text-sm ${result.errors.length > 0 ? 'border-amber-200 bg-amber-50 dark:bg-amber-900/15' : 'border-green-200 bg-green-50 dark:bg-green-900/15'}`}>
                 <p className={result.errors.length > 0 ? 'text-amber-800' : 'text-green-800'}>
                   {result.created} rule{result.created === 1 ? '' : 's'} imported
                   {result.errors.length > 0 && `, ${result.errors.length} failed`}.
                 </p>
                 {result.errors.map((err) => (
-                  <p key={err.index} className="mt-0.5 text-xs text-amber-700">{err.name || `Rule ${err.index + 1}`}: {err.detail}</p>
+                  <p key={err.index} className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">{err.name || `Rule ${err.index + 1}`}: {err.detail}</p>
                 ))}
               </div>
             )}
@@ -1232,7 +1232,7 @@ function TestDetectionPanel({ householdId }: { householdId: number }) {
           {/* Match result */}
           <div className={`rounded-xl border px-4 py-3 ${
             result.matched_rule
-              ? 'border-green-200 bg-green-50'
+              ? 'border-green-200 bg-green-50 dark:bg-green-900/15'
               : 'border-[var(--border)] bg-[var(--surface-2)]'
           }`}>
             {result.matched_rule ? (
@@ -1483,7 +1483,7 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
           {/* Suggestions */}
           {canWrite && suggestions.length > 0 && (
             <div className="grid gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
                 Suggested rules ({suggestions.length})
               </p>
               {suggestions.map((sg) => (

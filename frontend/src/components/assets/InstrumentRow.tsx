@@ -24,22 +24,22 @@ export function InstrumentRow({ instrument, holding, category, onClick, onBuy, o
 
   return (
     <div
-      className={`rounded-xl border-l-4 bg-[var(--surface)] shadow-sm ${onClick ? 'cursor-pointer hover:bg-[var(--surface-2)]' : ''}`}
+      className={`w-full overflow-hidden rounded-xl border-l-4 bg-[var(--surface)] shadow-sm ${onClick ? 'cursor-pointer hover:bg-[var(--surface-2)]' : ''}`}
       style={{ borderLeftColor: borderColor }}
     >
-      <div className="flex items-center gap-3 p-4" onClick={onClick}>
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-lg">
+      <div className="flex items-center gap-2.5 px-3 py-2.5" onClick={onClick}>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-base">
           {TYPE_ICONS[instrument.instrument_type] ?? '💼'}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-[var(--text)]">{instrument.name}</p>
-          <p className="text-xs text-[var(--text-muted)] capitalize">{instrument.instrument_type.replace(/_/g, ' ')}</p>
+          <p className="truncate text-[13px] font-medium text-[var(--text)]">{instrument.name}</p>
+          <p className="text-[11px] text-[var(--text-muted)] capitalize">{instrument.instrument_type.replace(/_/g, ' ')}</p>
         </div>
         {holding && (
-          <div className="shrink-0 text-right">
-            <p className="text-sm font-bold text-[var(--text)]">{fmtINR(holding.market_value)}</p>
+          <div className="max-w-[52%] shrink-0 text-right">
+            <p className="truncate text-[13px] font-bold text-[var(--text)]">{fmtINR(holding.market_value)}</p>
             {holding.net_invested && parseFloat(holding.net_invested) > 0 && (
-              <p className="text-xs text-[var(--text-muted)]">inv {fmtINR(holding.net_invested)}</p>
+              <p className="truncate text-[11px] text-[var(--text-muted)]">inv {fmtINR(holding.net_invested)}</p>
             )}
           </div>
         )}
@@ -50,7 +50,7 @@ export function InstrumentRow({ instrument, holding, category, onClick, onBuy, o
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onBuy() }}
-              className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--text-2)] hover:border-indigo-400 hover:text-indigo-700"
+              className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--text-2)] hover:border-indigo-400 hover:text-indigo-700 dark:text-indigo-300"
             >
               + Buy
             </button>
@@ -59,7 +59,7 @@ export function InstrumentRow({ instrument, holding, category, onClick, onBuy, o
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onUpdateValue() }}
-              className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--text-2)] hover:border-indigo-400 hover:text-indigo-700"
+              className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--text-2)] hover:border-indigo-400 hover:text-indigo-700 dark:text-indigo-300"
             >
               Update Value
             </button>
