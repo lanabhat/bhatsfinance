@@ -31,6 +31,14 @@ def _to_decimal(val) -> Decimal:
         raise ValueError(f"Cannot convert {val!r} to decimal")
 
 
+def _money(val) -> Decimal | None:
+    """Convert to Decimal rounded to 2dp for monetary fields. Returns None if zero."""
+    d = _to_decimal(val)
+    if d == 0:
+        return None
+    return d.quantize(Decimal('0.01'))
+
+
 def _to_date(val) -> date:
     if isinstance(val, date):
         return val
@@ -340,3 +348,323 @@ def _import_members(household, row, mapping, defaults):
         },
     )
     return 'created' if created else 'skipped'
+
+
+# ---------------------------------------------------------------------------
+# Groww-specific importer
+# ---------------------------------------------------------------------------
+
+def _get_or_create_broker_account(household, broker_name: str):
+    """Get or create a broker account for the given household."""
+    from instruments.models import Account
+    account, _ = Account.objects.get_or_create(
+        household=household,
+        name=broker_name,
+        defaults={'account_type': 'broker', 'institution_name': broker_name},
+    )
+    return account
+
+
+def _get_asset_category(household, name: str):
+    """Look up an AssetCategory by name for the household, case-insensitive."""
+    from instruments.models import AssetCategory
+    try:
+        return AssetCategory.objects.get(household=household, name__iexact=name)
+    except AssetCategory.DoesNotExist:
+        return None
+
+
+def apply_groww_import(household, member, parsed: dict) -> dict:
+    """
+    Import a parsed Groww Excel file (output of groww_parser.parse_groww_excel)
+    for a specific household member.
+
+    Creates Instruments, InstrumentOwnerships, ValuationSnapshots, and initial
+    buy Transactions (only if no transaction exists yet for that instrument).
+    All operations are idempotent — safe to re-run with the same file.
+    """
+    from instruments.models import Instrument, InstrumentOwnership
+    from valuations.models import ValuationSnapshot
+    from ledger.models import Transaction
+
+    valuation_date = parsed['valuation_date']
+    stocks_created = 0
+    mf_created = 0
+    valuations_created = 0
+    errors = []
+
+    member_label = member.full_name if member else None
+    account_name = f'Groww ({member_label})' if member_label else 'Groww'
+    groww_account = _get_or_create_broker_account(household, account_name)
+    stocks_category = _get_asset_category(household, 'Stocks')
+    mf_category = _get_asset_category(household, 'Mutual Fund')
+
+    # ── Stocks ────────────────────────────────────────────────────────────────
+    for i, stock in enumerate(parsed.get('stocks', []), start=1):
+        try:
+            with db_transaction.atomic():
+                name = stock['name'].strip()
+                if not name:
+                    continue
+
+                instrument, created = Instrument.objects.get_or_create(
+                    household=household,
+                    name=name,
+                    defaults={
+                        'instrument_type': 'equity',
+                        'symbol': stock.get('isin', ''),
+                        'default_account': groww_account,
+                        'asset_category': stocks_category,
+                    },
+                )
+                if created:
+                    stocks_created += 1
+                else:
+                    # Update missing fields on existing instruments
+                    update_fields = []
+                    if not instrument.default_account:
+                        instrument.default_account = groww_account
+                        update_fields.append('default_account')
+                    if not instrument.asset_category and stocks_category:
+                        instrument.asset_category = stocks_category
+                        update_fields.append('asset_category')
+                    if update_fields:
+                        instrument.save(update_fields=update_fields)
+
+                InstrumentOwnership.objects.get_or_create(
+                    instrument=instrument,
+                    member=member,
+                    defaults={'allocation_percent': Decimal('100')},
+                )
+
+                closing_price = _money(stock.get('closing_price') or '0')
+                closing_value = _money(stock.get('closing_value') or '0')
+
+                _, snap_created = ValuationSnapshot.objects.update_or_create(
+                    household=household,
+                    instrument=instrument,
+                    account=None,
+                    valuation_date=valuation_date,
+                    defaults={
+                        'unit_price': closing_price,
+                        'market_value': closing_value,
+                        'source': 'csv',
+                    },
+                )
+                if snap_created:
+                    valuations_created += 1
+
+                # Create initial buy transaction only if none exists yet
+                if not Transaction.objects.filter(instrument=instrument, household=household).exists():
+                    qty = _to_decimal(stock.get('quantity') or '0').quantize(Decimal('0.0001'))
+                    avg_price = _money(stock.get('avg_buy_price') or '0')
+                    buy_value = _money(stock.get('buy_value') or '0')
+                    if qty > 0 and buy_value:
+                        Transaction.objects.create(
+                            household=household,
+                            instrument=instrument,
+                            account=groww_account,
+                            member=member,
+                            tx_date=valuation_date,
+                            amount=buy_value,
+                            quantity=qty,
+                            price_per_unit=avg_price,
+                            direction='inflow',
+                            transaction_type='buy',
+                            currency='INR',
+                            source='csv',
+                        )
+        except Exception as e:
+            errors.append({'section': 'stocks', 'row': i, 'name': stock.get('name', ''), 'reason': str(e)})
+
+    # ── Mutual Funds ──────────────────────────────────────────────────────────
+    for i, mf in enumerate(parsed.get('mutual_funds', []), start=1):
+        try:
+            with db_transaction.atomic():
+                name = mf['scheme_name'].strip()
+                if not name:
+                    continue
+
+                instrument, created = Instrument.objects.get_or_create(
+                    household=household,
+                    name=name,
+                    defaults={
+                        'instrument_type': 'mutual_fund',
+                        'symbol': mf.get('folio_no', ''),
+                        'default_account': groww_account,
+                        'asset_category': mf_category,
+                        'metadata': {
+                            'amc': mf.get('amc', ''),
+                            'category': mf.get('category', ''),
+                            'sub_category': mf.get('sub_category', ''),
+                        },
+                    },
+                )
+                if created:
+                    mf_created += 1
+                else:
+                    update_fields = []
+                    if not instrument.default_account:
+                        instrument.default_account = groww_account
+                        update_fields.append('default_account')
+                    if not instrument.asset_category and mf_category:
+                        instrument.asset_category = mf_category
+                        update_fields.append('asset_category')
+                    if update_fields:
+                        instrument.save(update_fields=update_fields)
+
+                InstrumentOwnership.objects.get_or_create(
+                    instrument=instrument,
+                    member=member,
+                    defaults={'allocation_percent': Decimal('100')},
+                )
+
+                current_value = _money(mf.get('current_value') or '0')
+
+                _, snap_created = ValuationSnapshot.objects.update_or_create(
+                    household=household,
+                    instrument=instrument,
+                    account=None,
+                    valuation_date=valuation_date,
+                    defaults={
+                        'market_value': current_value,
+                        'source': 'csv',
+                    },
+                )
+                if snap_created:
+                    valuations_created += 1
+
+                # Create initial buy transaction only if none exists yet
+                if not Transaction.objects.filter(instrument=instrument, household=household).exists():
+                    units = _to_decimal(mf.get('units') or '0').quantize(Decimal('0.0001'))
+                    invested = _money(mf.get('invested_value') or '0')
+                    if invested:
+                        avg_nav = _money(invested / units) if units > 0 else None
+                        Transaction.objects.create(
+                            household=household,
+                            instrument=instrument,
+                            account=groww_account,
+                            member=member,
+                            tx_date=valuation_date,
+                            amount=invested,
+                            quantity=units if units > 0 else None,
+                            price_per_unit=avg_nav,
+                            direction='inflow',
+                            transaction_type='buy',
+                            currency='INR',
+                            source='csv',
+                        )
+        except Exception as e:
+            errors.append({'section': 'mutual_funds', 'row': i, 'name': mf.get('scheme_name', ''), 'reason': str(e)})
+
+    return {
+        'stocks_created': stocks_created,
+        'mf_created': mf_created,
+        'valuations_created': valuations_created,
+        'errors': errors,
+    }
+
+
+def apply_upstox_import(household, member, parsed: dict) -> dict:
+    """
+    Import a parsed Upstox holdings Excel file for a specific household member.
+    Creates Instruments (equity), InstrumentOwnerships, ValuationSnapshots,
+    and initial buy Transactions if none exist.
+    """
+    from instruments.models import Instrument, InstrumentOwnership
+    from valuations.models import ValuationSnapshot
+    from ledger.models import Transaction
+
+    created = 0
+    updated = 0
+    errors = []
+
+    member_label = member.full_name if member else None
+    account_name = f'Upstox ({member_label})' if member_label else 'Upstox'
+    upstox_account = _get_or_create_broker_account(household, account_name)
+    stocks_category = _get_asset_category(household, 'Stocks')
+
+    for i, h in enumerate(parsed.get('holdings', []), start=1):
+        try:
+            with db_transaction.atomic():
+                name = h['name'].strip()
+                if not name:
+                    continue
+
+                vd = _to_date(h.get('value_date') or str(parsed['valuation_date']))
+                quantity = _to_decimal(h.get('quantity') or '0').quantize(Decimal('0.0001'))
+                rate = _money(h.get('rate') or '0')
+                valuation = _money(h.get('valuation') or '0')
+
+                instrument, inst_created = Instrument.objects.get_or_create(
+                    household=household,
+                    name=name,
+                    defaults={
+                        'instrument_type': 'equity',
+                        'symbol': h.get('isin', ''),
+                        'default_account': upstox_account,
+                        'asset_category': stocks_category,
+                    },
+                )
+
+                if not inst_created:
+                    update_fields = []
+                    if not instrument.default_account:
+                        instrument.default_account = upstox_account
+                        update_fields.append('default_account')
+                    if not instrument.asset_category and stocks_category:
+                        instrument.asset_category = stocks_category
+                        update_fields.append('asset_category')
+                    if update_fields:
+                        instrument.save(update_fields=update_fields)
+
+                if member:
+                    InstrumentOwnership.objects.get_or_create(
+                        instrument=instrument,
+                        member=member,
+                        defaults={'allocation_percent': Decimal('100')},
+                    )
+
+                ValuationSnapshot.objects.update_or_create(
+                    household=household,
+                    instrument=instrument,
+                    account=None,
+                    valuation_date=vd,
+                    defaults={
+                        'unit_price': rate,
+                        'market_value': valuation,
+                        'source': 'csv',
+                    },
+                )
+
+                # Create initial buy transaction only if none exists
+                if not Transaction.objects.filter(instrument=instrument, household=household).exists():
+                    if valuation and valuation > 0:
+                        Transaction.objects.create(
+                            household=household,
+                            instrument=instrument,
+                            account=upstox_account,
+                            member=member,
+                            tx_date=vd,
+                            amount=valuation,
+                            quantity=quantity if quantity > 0 else None,
+                            price_per_unit=rate,
+                            direction='inflow',
+                            transaction_type='buy',
+                            currency='INR',
+                            source='csv',
+                        )
+
+                if inst_created:
+                    created += 1
+                else:
+                    updated += 1
+
+        except Exception as e:
+            errors.append({'row': i, 'name': h.get('name', ''), 'reason': str(e)})
+
+    return {
+        'holdings_created': created,
+        'holdings_updated': updated,
+        'errors': errors,
+    }

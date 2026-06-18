@@ -99,7 +99,7 @@ export function Drawer({ open, onClose, title, children, width = 'w-full max-w-m
             </button>
           </div>
           {/* Body */}
-          <div className="main-content-sheet flex-1 overflow-y-auto overflow-x-hidden p-5 min-w-0">{children}</div>
+          <div className="main-content-sheet flex-1 overflow-y-auto overflow-x-clip p-5 min-w-0">{children}</div>
         </div>
       </div>
     </>,

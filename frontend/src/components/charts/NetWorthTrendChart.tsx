@@ -12,7 +12,7 @@ export function NetWorthTrendChart({ data }: Props) {
   const ct = useChartTheme()
   return (
     <ResponsiveContainer width="100%" height={220} minWidth={0}>
-      <AreaChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+      <AreaChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35} />

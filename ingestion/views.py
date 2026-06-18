@@ -1,3 +1,5 @@
+import difflib
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -91,3 +93,214 @@ class ImportApplyView(APIView):
             return Response({'error': str(e)}, status=400)
 
         return Response(result, status=201)
+
+
+def _detect_and_parse(file_bytes: bytes, filename: str) -> tuple[dict, str]:
+    """
+    Auto-detect whether a file is a Groww or Upstox export and parse it.
+    Returns (parsed_dict, source) where source is 'groww' or 'upstox'.
+    Detection order:
+      1. Filename contains 'upstox' (case-insensitive)
+      2. First 10 rows contain 'UPSTOX' or 'UCC' anywhere in any cell value
+      3. Fall back to Groww parser
+    """
+    from ingestion.groww_parser import parse_groww_excel
+    from ingestion.upstox_parser import parse_upstox_excel
+    from openpyxl import load_workbook
+    from io import BytesIO
+
+    # 1. Filename-based detection
+    import re as _re
+    fname_lower = filename.lower()
+    # Upstox filenames: 'holdings_18-06-2026_HT9515.xlsx' or contain 'upstox'/'rksv'
+    _upstox_fname = (
+        'upstox' in fname_lower
+        or 'rksv' in fname_lower
+        or bool(_re.match(r'holdings_\d{2}-\d{2}-\d{4}', fname_lower))
+    )
+    if _upstox_fname:
+        return parse_upstox_excel(file_bytes), 'upstox'
+
+    # 2. Content-based detection — scan all cell values in first 10 rows
+    wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
+    sheet = wb.worksheets[0]
+    rows_preview = list(sheet.rows)[:10]
+    wb.close()
+    # Fallback for files unreadable in read_only mode
+    if len(rows_preview) <= 1:
+        wb2 = load_workbook(BytesIO(file_bytes), data_only=True)
+        sheet = wb2.worksheets[0]
+        rows_preview = list(sheet.rows)[:10]
+        wb2.close()
+    is_upstox = False
+    for row in rows_preview:
+        for cell in row:
+            val = str(cell.value or '').strip().upper()
+            if 'UPSTOX' in val or 'RKSV' in val or val == 'UCC':
+                is_upstox = True
+                break
+        if is_upstox:
+            break
+
+    if is_upstox:
+        return parse_upstox_excel(file_bytes), 'upstox'
+    return parse_groww_excel(file_bytes), 'groww'
+
+
+def _fuzzy_match_member(investor_name: str, member_names: dict):
+    """Returns (member, confidence) or (None, 0)."""
+    if not investor_name or not member_names:
+        return None, 0.0
+    name_lower = investor_name.lower().strip()
+    close = difflib.get_close_matches(name_lower, member_names.keys(), n=1, cutoff=0.4)
+    if close:
+        seq = difflib.SequenceMatcher(None, name_lower, close[0])
+        return member_names[close[0]], round(seq.ratio(), 2)
+    for key, m in member_names.items():
+        if name_lower in key or key in name_lower:
+            return m, 0.5
+    return None, 0.0
+
+
+class GrowwPreviewView(APIView):
+    """
+    Step 1: parse one or more uploaded Groww/Upstox Excel files and return
+    metadata (investor name, holding counts) with fuzzy-matched member.
+    Accepts both Groww and Upstox formats — auto-detected per file.
+    """
+
+    def post(self, request):
+        from core.models import Household
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'error': 'household_id is required'}, status=400)
+
+        try:
+            household = Household.objects.get(pk=int(household_id))
+        except Household.DoesNotExist:
+            return Response({'error': 'Household not found'}, status=404)
+
+        members = list(household.members.filter(is_active=True))
+        member_names = {m.full_name.lower(): m for m in members}
+
+        files = request.FILES.getlist('files')
+        if not files:
+            single = request.FILES.get('file')
+            if single:
+                files = [single]
+        if not files:
+            return Response({'error': 'No files provided'}, status=400)
+
+        member_list = [{'id': m.id, 'name': m.full_name, 'relation': m.relation_type} for m in members]
+
+        results = []
+        for f in files:
+            try:
+                parsed, source = _detect_and_parse(f.read(), f.name)
+            except Exception as e:
+                results.append({'filename': f.name, 'error': str(e), 'members': member_list})
+                continue
+
+            investor_name = parsed.get('investor_name', '')
+            matched_member, confidence = _fuzzy_match_member(investor_name, member_names)
+
+            # Build summary counts based on source
+            if source == 'groww':
+                summary = {
+                    'stocks_count': len(parsed.get('stocks', [])),
+                    'mf_count': len(parsed.get('mutual_funds', [])),
+                    'holdings_count': 0,
+                }
+            else:
+                summary = {
+                    'stocks_count': 0,
+                    'mf_count': 0,
+                    'holdings_count': len(parsed.get('holdings', [])),
+                }
+
+            results.append({
+                'filename': f.name,
+                'source': source,
+                'investor_name': investor_name,
+                'valuation_date': str(parsed.get('valuation_date', '')),
+                **summary,
+                'matched_member': {
+                    'id': matched_member.id,
+                    'name': matched_member.full_name,
+                    'relation': matched_member.relation_type,
+                    'confidence': confidence,
+                } if matched_member else None,
+                'members': [{'id': m.id, 'name': m.full_name} for m in members],
+            })
+
+        return Response(results)
+
+
+class GrowwApplyView(APIView):
+    """
+    Step 2: apply confirmed member assignments and import holdings.
+    Handles both Groww and Upstox formats — auto-detected per file.
+    """
+
+    def post(self, request):
+        from ingestion.universal_importer import apply_groww_import, apply_upstox_import
+        from core.models import Household, Member
+        import json
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'error': 'household_id is required'}, status=400)
+
+        try:
+            household = Household.objects.get(pk=int(household_id))
+        except Household.DoesNotExist:
+            return Response({'error': 'Household not found'}, status=404)
+
+        raw_assignments = request.data.get('assignments', '[]')
+        try:
+            assignments = json.loads(raw_assignments) if isinstance(raw_assignments, str) else raw_assignments
+        except Exception:
+            return Response({'error': 'assignments must be a JSON array'}, status=400)
+
+        assignment_map = {a['filename']: int(a['member_id']) for a in assignments if a.get('filename') and a.get('member_id')}
+
+        files = request.FILES.getlist('files')
+        if not files:
+            single = request.FILES.get('file')
+            if single:
+                files = [single]
+        if not files:
+            return Response({'error': 'No files provided'}, status=400)
+
+        all_results = []
+        for f in files:
+            member_id = assignment_map.get(f.name)
+            if not member_id:
+                all_results.append({'filename': f.name, 'error': 'No member assigned'})
+                continue
+
+            try:
+                member = Member.objects.get(pk=member_id, household=household)
+            except Member.DoesNotExist:
+                all_results.append({'filename': f.name, 'error': f'Member {member_id} not found'})
+                continue
+
+            try:
+                parsed, source = _detect_and_parse(f.read(), f.name)
+                if source == 'upstox':
+                    result = apply_upstox_import(household, member, parsed)
+                    result['holdings_parsed'] = len(parsed.get('holdings', []))
+                else:
+                    result = apply_groww_import(household, member, parsed)
+                    result['stocks_parsed'] = len(parsed.get('stocks', []))
+                    result['mf_parsed'] = len(parsed.get('mutual_funds', []))
+                result['filename'] = f.name
+                result['source'] = source
+                result['member_name'] = member.full_name
+                result['investor_name'] = parsed.get('investor_name', '')
+                all_results.append(result)
+            except Exception as e:
+                all_results.append({'filename': f.name, 'member_name': member.full_name, 'error': str(e)})
+
+        return Response(all_results, status=201)

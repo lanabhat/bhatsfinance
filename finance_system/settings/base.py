@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'networth_tree',
     'gmail_ingestion',
     'sms_ingestion',
+    'upstox_integration',
 ]
 
 MIDDLEWARE = [

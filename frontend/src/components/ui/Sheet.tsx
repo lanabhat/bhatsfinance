@@ -94,7 +94,7 @@ export function Sheet({ title, onClose, children }: Props) {
           </div>
 
           {/* Body */}
-          <div className="main-content-sheet flex-1 overflow-y-auto overflow-x-hidden px-5 py-4 min-w-0">
+          <div className="main-content-sheet flex-1 overflow-y-auto overflow-x-clip px-5 py-4 min-w-0">
             {children}
           </div>
         </div>

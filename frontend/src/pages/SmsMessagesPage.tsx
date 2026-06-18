@@ -179,8 +179,14 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
     setError('')
     try {
       await smsApi.rejectStaged(id)
-      setSelected(null)
-      load()
+      if (statusFilter === 'all' || statusFilter === 'rejected') {
+        setMessages((prev) => prev.map((m) => m.id === id ? { ...m, status: 'rejected' as const } : m))
+        setSelected((prev) => prev?.id === id ? { ...prev, status: 'rejected' as const } : prev)
+      } else {
+        setMessages((prev) => prev.filter((m) => m.id !== id))
+        setCount((c) => Math.max(0, c - 1))
+        setSelected((prev) => prev?.id === id ? null : prev)
+      }
     } catch (e) {
       setError(normalizeApiError(e))
     }
@@ -219,8 +225,13 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
     setError('')
     try {
       await smsApi.rejectStaged(id)
+      if (statusFilter === 'all' || statusFilter === 'rejected') {
+        setMessages((prev) => prev.map((m) => m.id === id ? { ...m, status: 'rejected' as const } : m))
+      } else {
+        setMessages((prev) => prev.filter((m) => m.id !== id))
+        setCount((c) => Math.max(0, c - 1))
+      }
       goToNextApprovable(id)
-      load()
     } catch (e) {
       setError(normalizeApiError(e))
     }
@@ -243,6 +254,33 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
       await smsApi.bulkDeleteByIds(Array.from(checked))
       setConfirmingBulkDelete(false)
       load()
+    } catch (e) {
+      setError(normalizeApiError(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const rejectSelected = async () => {
+    setError('')
+    setBulkBusy(true)
+    const ids = Array.from(checked).filter((id) => {
+      const msg = messages.find((m) => m.id === id)
+      return msg && msg.status !== 'rejected'
+    })
+    try {
+      await Promise.all(ids.map((id) => smsApi.rejectStaged(id)))
+      if (statusFilter === 'all' || statusFilter === 'rejected') {
+        setMessages((prev) => prev.map((m) => ids.includes(m.id) ? { ...m, status: 'rejected' as const } : m))
+      } else {
+        setMessages((prev) => {
+          const next = prev.filter((m) => !ids.includes(m.id))
+          if (next.length === 0 && page > 1) setPage(1)
+          return next
+        })
+        setCount((c) => Math.max(0, c - ids.length))
+      }
+      setChecked(new Set())
     } catch (e) {
       setError(normalizeApiError(e))
     } finally {
@@ -314,155 +352,163 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="grid w-full min-w-0 max-w-full gap-4">
       <div>
         <h2 className="text-lg font-semibold text-[var(--text)]">SMS Messages</h2>
-        <p className="text-sm text-[var(--text-muted)] mt-0.5">
-          Browse staged messages forwarded from registered devices. Categories are auto-detected
-          from the message body — use them to quickly find transaction alerts, OTPs, SIP reminders, and promotions.
+        <p className="mt-0.5 text-sm text-[var(--text-muted)]">
+          Browse staged messages forwarded from registered devices.
         </p>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex min-w-0 max-w-full flex-col gap-2">
         <Tabs tabs={CATEGORY_TABS} active={categoryFilter} onChange={setCategoryFilter} size="sm" />
         <Tabs tabs={STATUS_TABS} active={statusFilter} onChange={setStatusFilter} size="sm" />
       </div>
 
-      <div className="grid grid-cols-2 items-end gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:grid-cols-3 lg:grid-cols-6">
-        <label className="col-span-2 flex flex-col gap-1 sm:col-span-3 lg:col-span-1">
-          <span className="text-xs font-medium text-[var(--text-muted)]">Search</span>
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search body or sender…"
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[var(--text-muted)]">Sender</span>
-          <input
-            type="text"
-            value={sender}
-            onChange={(e) => setSender(e.target.value)}
-            placeholder="e.g. HDFCBK"
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[var(--text-muted)]">From</span>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[var(--text-muted)]">To</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[var(--text-muted)]">Sort</span>
-          <select
-            value={ordering}
-            onChange={(e) => setOrdering(e.target.value)}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
-          >
-            <option value="-received_at">Newest first</option>
-            <option value="received_at">Oldest first</option>
-            <option value="sender">Sender (A–Z)</option>
-            <option value="-sender">Sender (Z–A)</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[var(--text-muted)]">Per page</span>
-          <select
-            value={pageSize}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
-          >
-            {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </label>
-      </div>
+      {/* Filters — collapsible on mobile */}
+      <details className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
+          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Filters &amp; Options</span>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 text-[var(--text-faint)] transition-transform group-open:rotate-90">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 4l4 4-4 4" />
+          </svg>
+        </summary>
+        <div className="grid grid-cols-2 gap-3 border-t border-[var(--border)] p-4 sm:grid-cols-3">
+          <label className="col-span-2 flex flex-col gap-1 sm:col-span-3">
+            <span className="text-xs font-medium text-[var(--text-muted)]">Search</span>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search body or sender…"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[var(--text-muted)]">Sender</span>
+            <input
+              type="text"
+              value={sender}
+              onChange={(e) => setSender(e.target.value)}
+              placeholder="e.g. HDFCBK"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[var(--text-muted)]">Sort</span>
+            <select
+              value={ordering}
+              onChange={(e) => setOrdering(e.target.value)}
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
+            >
+              <option value="-received_at">Newest first</option>
+              <option value="received_at">Oldest first</option>
+              <option value="sender">Sender (A–Z)</option>
+              <option value="-sender">Sender (Z–A)</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[var(--text-muted)]">Per page</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[var(--text-muted)]">From</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[var(--text-muted)]">To</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
+            />
+          </label>
+        </div>
+      </details>
 
       {error && <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
       {importResult && (
-        <div className={`rounded-xl border px-4 py-3 text-sm ${importResult.errors.length > 0 ? 'border-amber-200 bg-amber-50 dark:bg-amber-900/15 dark:border-amber-800/40 dark:bg-amber-900/20' : 'border-green-200 bg-green-50 dark:bg-green-900/15 dark:border-green-800/40 dark:bg-green-900/20'}`}>
+        <div className={`rounded-xl border px-4 py-3 text-sm ${importResult.errors.length > 0 ? 'border-amber-200 bg-amber-50 dark:bg-amber-900/15' : 'border-green-200 bg-green-50 dark:bg-green-900/15'}`}>
           <p className={importResult.errors.length > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-green-800 dark:text-green-300'}>
-            Import complete — <strong>{importResult.created}</strong> created, <strong>{importResult.skipped}</strong> skipped (duplicates)
+            Import complete — <strong>{importResult.created}</strong> created, <strong>{importResult.skipped}</strong> skipped
             {importResult.errors.length > 0 && `, ${importResult.errors.length} error${importResult.errors.length === 1 ? '' : 's'}`}.
           </p>
           <button type="button" onClick={() => setImportResult(null)} className="mt-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-2)]">Dismiss</button>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-[var(--text-muted)]">
-          {count === 0 ? 'No messages' : `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, count)} of ${count}`}
-        </p>
-        <div className="flex items-center gap-2 flex-wrap">
-          {reapplyResult && (
-            <span className="text-xs text-emerald-600 dark:text-emerald-400">{reapplyResult}</span>
-          )}
-          {/* Export */}
-          <Button size="sm" variant="secondary" onClick={exportMessages}>
-            {checked.size > 0 ? `Export selected (${checked.size})` : 'Export all'}
-          </Button>
-          {/* Import */}
-          <label className="cursor-pointer">
-            <span className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]">
-              {importing ? 'Importing…' : 'Import JSON'}
-            </span>
-            <input
-              ref={importFileRef}
-              type="file"
-              accept=".json"
-              className="sr-only"
-              onChange={handleImportFile}
-              disabled={importing}
-            />
-          </label>
-          {checked.size > 0 && (
+      {/* Toolbar */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-[var(--text-muted)]">
+            {count === 0 ? 'No messages' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, count)} of ${count}`}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={exportMessages}>
+              {checked.size > 0 ? `Export (${checked.size})` : 'Export'}
+            </Button>
+            <label className="cursor-pointer">
+              <span className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]">
+                {importing ? 'Importing…' : 'Import'}
+              </span>
+              <input ref={importFileRef} type="file" accept=".json" className="sr-only" onChange={handleImportFile} disabled={importing} />
+            </label>
+          </div>
+        </div>
+        {/* Bulk actions — only when items checked */}
+        {checked.size > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {reapplyResult && <span className="text-xs text-emerald-600 dark:text-emerald-400">{reapplyResult}</span>}
             <Button size="sm" variant="secondary" loading={bulkBusy} onClick={reapplyRules}>
               Re-apply rules ({checked.size})
             </Button>
-          )}
-          {checked.size > 0 && canDelete('sms_message') && (
-            confirmingBulkDelete ? (
-              <span className="flex items-center gap-2 text-xs">
-                <span className="text-[var(--text-2)]">Delete {checked.size} selected message{checked.size === 1 ? '' : 's'}?</span>
-                <Button size="sm" variant="danger" loading={bulkBusy} onClick={deleteSelected}>Confirm</Button>
-                <Button size="sm" variant="secondary" onClick={() => setConfirmingBulkDelete(false)}>Cancel</Button>
-              </span>
-            ) : (
-              <Button size="sm" variant="danger" onClick={() => setConfirmingBulkDelete(true)}>
-                Delete selected ({checked.size})
+            {messages.some((m) => checked.has(m.id) && m.status !== 'rejected') && (
+              <Button size="sm" variant="secondary" loading={bulkBusy} onClick={rejectSelected}>
+                Reject ({checked.size})
               </Button>
-            )
-          )}
-          {canDelete('sms_message') && count > 0 && (
-            confirmingDeleteAll ? (
-              <span className="flex items-center gap-2 text-xs">
-                <span className="font-medium text-red-600">
-                  Permanently delete all {count} message{count === 1 ? '' : 's'} matching the current filters?
+            )}
+            {canDelete('sms_message') && (
+              confirmingBulkDelete ? (
+                <span className="flex items-center gap-2 text-xs">
+                  <span className="text-[var(--text-2)]">Delete {checked.size}?</span>
+                  <Button size="sm" variant="danger" loading={bulkBusy} onClick={deleteSelected}>Confirm</Button>
+                  <Button size="sm" variant="secondary" onClick={() => setConfirmingBulkDelete(false)}>Cancel</Button>
                 </span>
-                <Button size="sm" variant="danger" loading={bulkBusy} onClick={deleteAllMatching}>Yes, delete all</Button>
-                <Button size="sm" variant="secondary" onClick={() => setConfirmingDeleteAll(false)}>Cancel</Button>
-              </span>
-            ) : (
+              ) : (
+                <Button size="sm" variant="danger" onClick={() => setConfirmingBulkDelete(true)}>
+                  Delete ({checked.size})
+                </Button>
+              )
+            )}
+          </div>
+        )}
+        {canDelete('sms_message') && count > 0 && !checked.size && (
+          confirmingDeleteAll ? (
+            <span className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-medium text-red-600">Delete all {count} matching?</span>
+              <Button size="sm" variant="danger" loading={bulkBusy} onClick={deleteAllMatching}>Yes, delete all</Button>
+              <Button size="sm" variant="secondary" onClick={() => setConfirmingDeleteAll(false)}>Cancel</Button>
+            </span>
+          ) : (
+            <div>
               <Button size="sm" variant="danger" onClick={() => setConfirmingDeleteAll(true)}>
-                Delete all matching filters…
+                Delete all matching…
               </Button>
-            )
-          )}
-        </div>
+            </div>
+          )
+        )}
       </div>
 
       {loading ? (
@@ -475,81 +521,143 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-          <table className="w-full text-sm table-fixed">
-            <colgroup>
-              {canDelete('sms_message') && <col className="w-8" />}
-              <col className="w-36" />
-              <col className="w-32" />
-              <col />
-              <col className="w-48" />
-              <col className="w-28" />
-              <col className="w-44" />
-              {canDelete('sms_message') && <col className="w-20" />}
-            </colgroup>
-            <thead className="bg-[var(--surface-2)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-              <tr>
-                {canDelete('sms_message') && (
-                  <th className="px-4 py-2.5">
-                    <input type="checkbox" checked={allOnPageChecked} onChange={toggleAllOnPage} aria-label="Select all on page" />
-                  </th>
-                )}
-                <th className="px-4 py-2.5">Received</th>
-                <th className="px-4 py-2.5">Sender</th>
-                <th className="px-4 py-2.5">Message</th>
-                <th className="px-4 py-2.5">Categories</th>
-                <th className="px-4 py-2.5">Status</th>
-                <th className="px-4 py-2.5">Actions</th>
-                {canDelete('sms_message') && <th className="px-4 py-2.5"></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {messages.map((msg) => (
-                <tr
-                  key={msg.id}
-                  className="cursor-pointer border-t border-[var(--border)] align-top hover:bg-[var(--surface-2)]"
-                  onClick={() => setSelected(msg)}
-                >
+        <>
+          {/* ── Desktop table ── */}
+          <div className="hidden md:block w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+            <table className="w-full table-fixed text-sm">
+              <thead className="bg-[var(--surface-2)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                <tr>
                   {canDelete('sms_message') && (
-                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={checked.has(msg.id)} onChange={() => toggleOne(msg.id)} aria-label={`Select message from ${msg.sender}`} />
-                    </td>
+                    <th className="w-8 px-3 py-2.5">
+                      <input type="checkbox" checked={allOnPageChecked} onChange={toggleAllOnPage} aria-label="Select all on page" />
+                    </th>
                   )}
-                  <td className="px-4 py-2.5 text-xs text-[var(--text-muted)] whitespace-nowrap">{formatDateTime(msg.received_at)}</td>
-                  <td className="px-4 py-2.5 font-medium text-[var(--text)] whitespace-nowrap truncate">{msg.sender}</td>
-                  <td className="px-4 py-2.5 text-[var(--text-2)] truncate" title={msg.body}>{msg.body}</td>
-                  <td className="px-4 py-2.5">
-                    <span className="flex flex-wrap gap-1">
+                  <th className="w-32 px-3 py-2.5">Received</th>
+                  <th className="w-24 px-3 py-2.5">Sender</th>
+                  <th className="px-3 py-2.5">Message</th>
+                  <th className="w-20 px-3 py-2.5">Category</th>
+                  <th className="w-32 px-3 py-2.5">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {messages.map((msg) => (
+                  <tr
+                    key={msg.id}
+                    className="cursor-pointer border-t border-[var(--border)] align-middle hover:bg-[var(--surface-2)]"
+                    onClick={() => setSelected(msg)}
+                  >
+                    {canDelete('sms_message') && (
+                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={checked.has(msg.id)} onChange={() => toggleOne(msg.id)} aria-label={`Select message from ${msg.sender}`} />
+                      </td>
+                    )}
+                    <td className="px-3 py-2.5 text-xs text-[var(--text-muted)]">
+                      <span className="block truncate">{formatDateTime(msg.received_at)}</span>
+                    </td>
+                    <td className="px-3 py-2.5 font-medium text-[var(--text)]">
+                      <span className="block truncate">{msg.sender}</span>
+                    </td>
+                    <td className="px-3 py-3 min-w-0">
+                      <p className="line-clamp-2 break-words text-[var(--text-2)]">{msg.body}</p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <Badge label={msg.status} color={STATUS_COLOR[msg.status]} />
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
                       {msg.categories.length === 0
-                        ? <Badge label="Uncategorised" color="slate" />
-                        : msg.categories.map((cat) => (
-                            <Badge key={cat} label={CATEGORY_LABEL[cat] ?? cat} color={CATEGORY_COLOR[cat] ?? 'slate'} />
-                          ))}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Badge label={msg.status} color={STATUS_COLOR[msg.status]} />
-                  </td>
-                  <td className="px-4 py-2.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                    {msg.status !== 'approved' && (
-                      <div className="flex gap-1.5">
-                        <Button size="sm" onClick={() => setApproving(msg)}>Approve</Button>
-                        {msg.status !== 'rejected' && (
-                          <Button size="sm" variant="secondary" onClick={() => rejectOne(msg.id)}>Reject</Button>
+                        ? <Badge label="—" color="slate" />
+                        : <Badge label={CATEGORY_LABEL[msg.categories[0]] ?? msg.categories[0]} color={CATEGORY_COLOR[msg.categories[0]] ?? 'slate'} />}
+                    </td>
+                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {msg.status !== 'approved' && (
+                          <>
+                            <Button size="sm" onClick={() => setApproving(msg)}>Approve</Button>
+                            {msg.status !== 'rejected' && (
+                              <Button size="sm" variant="secondary" onClick={() => rejectOne(msg.id)}>Reject</Button>
+                            )}
+                          </>
+                        )}
+                        {canDelete('sms_message') && (
+                          <DeleteButton disabled={!canDelete('sms_message')} onDelete={() => deleteOne(msg.id)} />
                         )}
                       </div>
-                    )}
-                  </td>
-                  {canDelete('sms_message') && (
-                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                      <DeleteButton disabled={!canDelete('sms_message')} onDelete={() => deleteOne(msg.id)} />
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ── Mobile card list ── */}
+          <div className="md:hidden">
+            {/* Select-all + bulk reject bar */}
+            <div className="mb-2 flex items-center gap-3 px-1">
+              <label className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                <input type="checkbox" checked={allOnPageChecked} onChange={toggleAllOnPage} aria-label="Select all on page" />
+                Select all
+              </label>
+              {checked.size > 0 && messages.some((m) => checked.has(m.id) && m.status !== 'rejected') && (
+                <Button size="sm" variant="secondary" loading={bulkBusy} onClick={rejectSelected}>
+                  Reject ({checked.size})
+                </Button>
+              )}
+              {checked.size > 0 && canDelete('sms_message') && (
+                confirmingBulkDelete ? (
+                  <span className="flex items-center gap-1.5 text-xs">
+                    <Button size="sm" variant="danger" loading={bulkBusy} onClick={deleteSelected}>Confirm delete</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setConfirmingBulkDelete(false)}>Cancel</Button>
+                  </span>
+                ) : (
+                  <Button size="sm" variant="danger" onClick={() => setConfirmingBulkDelete(true)}>
+                    Delete ({checked.size})
+                  </Button>
+                )
+              )}
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] divide-y divide-[var(--border)]">
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className="flex min-w-0 items-start gap-3 px-4 py-4 cursor-pointer hover:bg-[var(--surface-2)]"
+                onClick={() => setSelected(msg)}
+              >
+                {canDelete('sms_message') && (
+                  <div className="pt-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" checked={checked.has(msg.id)} onChange={() => toggleOne(msg.id)} aria-label={`Select message from ${msg.sender}`} />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-[var(--text)] truncate">{msg.sender}</span>
+                    <Badge label={msg.status} color={STATUS_COLOR[msg.status]} />
+                  </div>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">{formatDateTime(msg.received_at)}</p>
+                  <p className="mt-2 text-sm text-[var(--text-2)] line-clamp-3 leading-relaxed">{msg.body}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {msg.categories.length === 0
+                      ? <Badge label="Uncategorised" color="slate" />
+                      : msg.categories.map((cat) => (
+                          <Badge key={cat} label={CATEGORY_LABEL[cat] ?? cat} color={CATEGORY_COLOR[cat] ?? 'slate'} />
+                        ))}
+                  </div>
+                  {msg.status !== 'approved' && (
+                    <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" onClick={() => setApproving(msg)}>Approve</Button>
+                      {msg.status !== 'rejected' && (
+                        <Button size="sm" variant="secondary" onClick={() => rejectOne(msg.id)}>Reject</Button>
+                      )}
+                      {canDelete('sms_message') && (
+                        <DeleteButton disabled={!canDelete('sms_message')} onDelete={() => deleteOne(msg.id)} />
+                      )}
+                    </div>
                   )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </div>
+              </div>
+            ))}
+            </div>
+          </div>
+        </>
       )}
 
       {count > 0 && (
@@ -612,7 +720,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
             </div>
             <div>
               <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Message</span>
-              <p className="mt-1 whitespace-pre-wrap rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3 text-[var(--text-2)]">{selected.body}</p>
+              <p className="mt-1 whitespace-pre-wrap break-words rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3 text-[var(--text-2)]">{selected.body}</p>
             </div>
             <div>
               <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Categories</span>

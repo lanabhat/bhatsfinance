@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from alerts.views import MissedSIPAlertsView, SIPMandateViewSet
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
-from ingestion.views import CSVImportView, ImportApplyView, ImportPreviewView, ImportSchemasView
+from ingestion.views import CSVImportView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView
 from insights.views import AllocationView, CategoryBreakdownView, CashFlowView, HoldingsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, SpendAnalyticsView, XIRRView
 from instruments.views import (
     AccountBalanceView,
@@ -49,6 +49,14 @@ from sms_ingestion.views import (
     SmsStagedUpdateView,
 )
 from tax.views import TaxProjectionViewSet, TaxRecordViewSet
+from upstox_integration.views import (
+    UpstoxCallbackView,
+    UpstoxConnectStartView,
+    UpstoxDisconnectView,
+    UpstoxStatusView,
+    UpstoxSyncView,
+    UpstoxUpdateMemberView,
+)
 from valuations.views import BulkSnapshotView, ValuationSnapshotViewSet
 
 router = DefaultRouter()
@@ -89,6 +97,8 @@ urlpatterns = router.urls + [
     path('imports/preview', ImportPreviewView.as_view(), name='imports-preview'),
     path('imports/schemas', ImportSchemasView.as_view(), name='imports-schemas'),
     path('imports/apply', ImportApplyView.as_view(), name='imports-apply'),
+    path('imports/groww-preview', GrowwPreviewView.as_view(), name='imports-groww-preview'),
+    path('imports/groww-apply', GrowwApplyView.as_view(), name='imports-groww-apply'),
     path('valuations/bulk-snapshot', BulkSnapshotView.as_view(), name='bulk-snapshot'),
     path('accounts/<int:pk>/balance/', AccountBalanceView.as_view(), name='account-balance'),
     path('fd-details/maturing', MaturingFDsView.as_view(), name='fd-details-maturing'),
@@ -117,6 +127,12 @@ urlpatterns = router.urls + [
     path('gmail/staged/<int:pk>', GmailStagedEditView.as_view(), name='gmail-staged-edit'),
     path('gmail/staged/<int:pk>/approve', GmailStagedActionView.as_view(), {'action': 'approve'}, name='gmail-staged-approve'),
     path('gmail/staged/<int:pk>/reject', GmailStagedActionView.as_view(), {'action': 'reject'}, name='gmail-staged-reject'),
+    path('upstox/status', UpstoxStatusView.as_view(), name='upstox-status'),
+    path('upstox/connect', UpstoxConnectStartView.as_view(), name='upstox-connect-start'),
+    path('upstox/callback', UpstoxCallbackView.as_view(), name='upstox-callback'),
+    path('upstox/disconnect', UpstoxDisconnectView.as_view(), name='upstox-disconnect'),
+    path('upstox/sync', UpstoxSyncView.as_view(), name='upstox-sync'),
+    path('upstox/credentials/<int:pk>/member', UpstoxUpdateMemberView.as_view(), name='upstox-update-member'),
     path('sms/ingest', SmsIngestView.as_view(), name='sms-ingest'),
     path('sms-messages/<int:pk>/edit/', SmsStagedUpdateView.as_view(), name='sms-staged-edit'),
     path('sms-messages/<int:pk>/approve/', SmsStagedActionView.as_view(), {'action': 'approve'}, name='sms-staged-approve'),

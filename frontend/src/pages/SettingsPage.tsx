@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { ImportWizard } from './ImportWizard'
+import { GrowwImportWizard } from '../components/imports/GrowwImportWizard'
+import { UpstoxConnect } from '../components/integrations/UpstoxConnect'
 import { useTerms } from '../context/TermsContext'
 import type { OptionItem } from '../types/domain'
 
@@ -18,7 +20,7 @@ const ENTITY_LABELS: Array<{ key: DeleteEntity; label: string; warning?: string 
   { key: 'tax_projection', label: 'Tax Projections' },
 ]
 
-type Tab = 'display' | 'delete' | 'import'
+type Tab = 'display' | 'delete' | 'import' | 'groww' | 'upstox'
 
 type Props = {
   deleteConfig: Record<DeleteEntity, boolean>
@@ -38,10 +40,12 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
 
   return (
     <section className="grid single-col">
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         <button className={tabCls('display')} onClick={() => setTab('display')}>Display</button>
         <button className={tabCls('delete')} onClick={() => setTab('delete')}>Delete Permissions</button>
         <button className={tabCls('import')} onClick={() => setTab('import')}>Import Data</button>
+        <button className={tabCls('groww')} onClick={() => setTab('groww')}>Portfolio Import</button>
+        <button className={tabCls('upstox')} onClick={() => setTab('upstox')}>Upstox</button>
       </div>
 
       {tab === 'display' && (
@@ -81,6 +85,29 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
           accountOptions={accountOptions}
           instrumentOptions={instrumentOptions}
         />
+      )}
+
+      {tab === 'groww' && (
+        <article className="panel">
+          <h2>Portfolio Import</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Import holdings from Groww or Upstox Excel exports. Both formats are auto-detected.
+            Groww: Portfolio → top-right menu → Download. Upstox: Reports → Holdings.
+            Upload files for multiple family members at once.
+          </p>
+          <GrowwImportWizard householdId={householdId} />
+        </article>
+      )}
+
+      {tab === 'upstox' && (
+        <article className="panel">
+          <h2>Upstox Integration</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Connect a family member's Upstox account to automatically sync their equity holdings.
+            Requires a free developer app at <strong>developer.upstox.com</strong> — credentials go in <code>.env</code>.
+          </p>
+          <UpstoxConnect householdId={householdId} memberOptions={memberOptions} />
+        </article>
       )}
 
       {tab === 'delete' && <article className="panel">

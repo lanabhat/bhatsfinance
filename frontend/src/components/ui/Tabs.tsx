@@ -17,7 +17,7 @@ export function Tabs<T extends string>({ tabs, active, onChange, size = 'md' }: 
     : 'px-4 py-2 text-sm'
 
   return (
-    <div className="flex gap-1 overflow-x-auto rounded-xl bg-[var(--surface-2)] p-1">
+    <div className="flex min-w-0 flex-wrap gap-1 rounded-xl bg-[var(--surface-2)] p-1">
       {tabs.map((tab) => (
         <button
           key={tab.key}

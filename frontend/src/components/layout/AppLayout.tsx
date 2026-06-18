@@ -83,14 +83,13 @@ const CHEVRON_RIGHT = (
   </svg>
 )
 
-const SECONDARY_KEYS = new Set(['instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'household', 'maintenance', 'manage-instruments', 'manage-accounts', 'help', 'import', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules', 'settings'])
+const SECONDARY_KEYS = new Set(['instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'household', 'maintenance', 'help', 'import', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules', 'settings'])
 const MOBILE_SECONDARY_KEYS = new Set([...SECONDARY_KEYS, 'spend-trends'])
 
 const PAGE_TITLES: Record<string, string> = {
   home: 'Home', holdings: 'Investments', accounts: 'Accounts', expenses: 'Transactions', settings: 'Settings',
   instruments: 'Instruments', ledger: 'Ledger', cashflow: 'Cash Flow', 'spend-trends': 'Spend Trends', alerts: 'Alerts', tax: 'Tax',
   valuation: 'Valuation', insurance: 'Insurance', household: 'Household & Members', maintenance: 'Maintenance',
-  'manage-instruments': 'Manage Instruments', 'manage-accounts': 'Manage Accounts',
   help: 'Help', import: 'Import', admin: 'User Management', 'gmail-sync': 'Gmail Sync',
   'gmail-rules': 'Gmail Rules', 'gmail-staging': 'Gmail Transactions', 'sms-devices': 'SMS Devices', 'sms-test': 'SMS Test Sender', 'sms-messages': 'SMS Messages', 'sms-rules': 'SMS Rules',
 }
@@ -155,7 +154,7 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
   }
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[var(--bg)]">
+    <div className="relative min-h-screen overflow-x-clip bg-[var(--bg)]">
       {/* Ambient gradient backdrop */}
       <div className="ambient-bg" aria-hidden="true" />
       {/* ── Desktop sidebar ── */}
@@ -245,7 +244,7 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
       </aside>
 
       {/* ── Main content ── */}
-      <div className={`relative z-10 w-full overflow-x-hidden transition-[margin] duration-200 ease-out ${mainOffset}`}>
+      <div className={`relative z-10 transition-[margin] duration-200 ease-out ${mainOffset}`}>
         {/* Header */}
         <header className="sticky top-0 z-20 flex h-14 min-w-0 items-center justify-between border-b border-[var(--glass-border)] bg-[var(--glass-surface)] px-4 pt-safe backdrop-blur-xl md:px-6 md:pt-0">
           <div className="flex items-center gap-2">
@@ -366,7 +365,7 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
         </header>
 
         {/* Page content */}
-        <main className="main-content min-w-0 overflow-x-hidden mx-auto max-w-7xl px-4 pt-5 md:px-6">
+        <main className="main-content min-w-0 overflow-x-clip mx-auto max-w-7xl px-4 pt-5 md:px-6">
           {children}
         </main>
       </div>

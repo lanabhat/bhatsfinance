@@ -24,13 +24,6 @@ const BASE_GROUPS: RouteGroup[] = [
     ],
   },
   {
-    label: 'Manage',
-    items: [
-      { key: 'manage-instruments', label: 'Instruments', icon: '🏷️' },
-      { key: 'manage-accounts', label: 'Accounts', icon: '🏦' },
-    ],
-  },
-  {
     label: 'Setup',
     items: [
       { key: 'household', label: 'Household & Members', icon: '👪' },

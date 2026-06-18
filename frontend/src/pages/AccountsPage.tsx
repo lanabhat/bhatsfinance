@@ -9,6 +9,48 @@ import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import type { Account, AccountBalance, AccountOwnership, Transaction } from '../types/domain'
 
+// ── shared ownership row ──────────────────────────────────────────────────────
+function OwnershipRow({ name, subtitle, currentMemberId, memberOptions, onSave }: {
+  name: string
+  subtitle: string
+  currentMemberId: number | null
+  memberOptions: { id: number; label: string }[]
+  onSave: (memberId: number | null) => Promise<void>
+}) {
+  const [memberId, setMemberId] = useState<string>(String(currentMemberId ?? ''))
+  const [saving, setSaving] = useState(false)
+  const isDirty = String(currentMemberId ?? '') !== memberId
+
+  const save = async () => {
+    setSaving(true)
+    try { await onSave(memberId === '' ? null : Number(memberId)) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="flex items-center gap-3 border-b border-[var(--border)] py-2.5 last:border-0">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-[var(--text)]">{name}</p>
+        <p className="text-xs text-[var(--text-muted)] capitalize">{subtitle}</p>
+      </div>
+      <select
+        value={memberId}
+        onChange={(e) => setMemberId(e.target.value)}
+        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-2)] focus:outline-none focus:ring-2 focus:ring-primary-500"
+      >
+        <option value="">— Unassigned —</option>
+        {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+      </select>
+      {isDirty && (
+        <button type="button" disabled={saving} onClick={save}
+          className="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          {saving ? '…' : 'Save'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 const ACCOUNT_TYPES = ['bank', 'broker', 'pf', 'loan', 'credit_card', 'insurance', 'cash', 'other'] as const
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -458,6 +500,46 @@ export function AccountsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Ownership section */}
+      {accounts.length > 0 && members.length > 1 && (
+        <details className="group rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Ownership</p>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 text-[var(--text-faint)] transition-transform group-open:rotate-90">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 4l4 4-4 4" />
+            </svg>
+          </summary>
+          <div className="border-t border-[var(--border)] px-4 py-1">
+            <p className="py-2 text-xs text-[var(--text-muted)]">Assign each account to the member who owns it — drives per-member net worth on Home.</p>
+            {accounts.map((acct) => {
+              const existing = ownerships.filter((o) => o.account === acct.id)
+              const currentMemberId = existing[0]?.member ?? acct.primary_member ?? null
+              return (
+                <OwnershipRow
+                  key={acct.id}
+                  name={acct.name}
+                  subtitle={acct.account_type.replace(/_/g, ' ')}
+                  currentMemberId={currentMemberId}
+                  memberOptions={members}
+                  onSave={async (memberId) => {
+                    if (memberId === null) {
+                      await Promise.all(existing.map((o) => portfolioApi.deleteAccountOwnership(o.id)))
+                    } else {
+                      if (existing.length === 0) {
+                        await portfolioApi.createAccountOwnership({ account: acct.id, member: memberId, allocation_percent: '100.00' })
+                      } else {
+                        await Promise.all(existing.map((o) => portfolioApi.updateAccountOwnership(o.id, { member: memberId })))
+                      }
+                    }
+                    await load()
+                  }}
+                />
+              )
+            })}
+          </div>
+        </details>
       )}
 
       {sheet.type === 'account' && (

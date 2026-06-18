@@ -26,7 +26,7 @@ export function MemberNetWorthRow({ member, householdTotal }: Props) {
     : null
 
   return (
-    <div className={`tap flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-card)] ${excluded ? 'opacity-50 grayscale' : ''}`}>
+    <div className={`tap flex min-w-0 items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-card)] ${excluded ? 'opacity-50 grayscale' : ''}`}>
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm font-semibold text-[var(--text-2)]">
         {initials}
       </span>
@@ -43,10 +43,10 @@ export function MemberNetWorthRow({ member, householdTotal }: Props) {
           )}
         </div>
       </div>
-      <div className="shrink-0 text-right">
-        <p className="text-base font-bold text-[var(--text)]">{fmtINR(member.networth)}</p>
+      <div className="shrink-0 max-w-[48%] text-right">
+        <p className="text-base font-bold text-[var(--text)] tabular-nums">{fmtINR(member.networth)}</p>
         {sharePct !== null && (
-          <p className="text-xs text-[var(--text-faint)]">{sharePct.toFixed(1)}% of household</p>
+          <p className="text-xs text-[var(--text-faint)]">{sharePct.toFixed(1)}% of hh</p>
         )}
       </div>
     </div>
