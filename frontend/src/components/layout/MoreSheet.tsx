@@ -18,6 +18,7 @@ const BASE_GROUPS: RouteGroup[] = [
       { key: 'valuation', label: 'Valuation', icon: '📈' },
       { key: 'cashflow', label: 'Cash Flow', icon: '📊' },
       { key: 'spend-trends', label: 'Spend Trends', icon: '📉' },
+      { key: 'analytics', label: 'Analytics', icon: '📊' },
       { key: 'alerts', label: 'Alerts', icon: '🔔' },
       { key: 'tax', label: 'Tax', icon: '🧾' },
       { key: 'insurance', label: 'Insurance', icon: '🛡' },

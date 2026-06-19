@@ -17,11 +17,10 @@ type StatusResponse = {
 }
 
 type Props = {
-  householdId: number
   memberOptions: OptionItem[]
 }
 
-export function UpstoxConnect({ householdId, memberOptions }: Props) {
+export function UpstoxConnect({ memberOptions }: Props) {
   const [status, setStatus] = useState<StatusResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<number | null>(null)
@@ -123,7 +122,7 @@ export function UpstoxConnect({ householdId, memberOptions }: Props) {
               >
                 <option value="">No member</option>
                 {memberOptions.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
+                  <option key={m.id} value={m.id}>{m.label}</option>
                 ))}
               </select>
               <Button
@@ -163,7 +162,7 @@ export function UpstoxConnect({ householdId, memberOptions }: Props) {
             >
               <option value="">— select member —</option>
               {memberOptions.map(m => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+                <option key={m.id} value={m.id}>{m.label}</option>
               ))}
             </select>
           </div>

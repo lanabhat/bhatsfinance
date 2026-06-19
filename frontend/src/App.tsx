@@ -32,13 +32,14 @@ import { SmsDevicesPage } from './pages/SmsDevicesPage'
 import { SmsTestPage } from './pages/SmsTestPage'
 import { SmsMessagesPage } from './pages/SmsMessagesPage'
 import { SmsRulesPage } from './pages/SmsRulesPage'
+import { AnalyticsPage } from './pages/AnalyticsPage'
 import { LoginPage } from './pages/LoginPage'
 import { PendingPage } from './pages/PendingPage'
 import { DeniedPage } from './pages/DeniedPage'
 
-type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'settings' | 'instruments' | 'ledger' | 'cashflow' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail-sync' | 'gmail-rules' | 'gmail-staging' | 'sms-devices' | 'sms-test' | 'sms-messages' | 'sms-rules'
+type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'analytics' | 'settings' | 'instruments' | 'ledger' | 'cashflow' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail-sync' | 'gmail-rules' | 'gmail-staging' | 'sms-devices' | 'sms-test' | 'sms-messages' | 'sms-rules'
 
-const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'settings', 'instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules'])
+const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'analytics', 'settings', 'instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules'])
 
 function routeFromHash(): RouteKey {
   const value = window.location.hash.replace('#/', '') as RouteKey
@@ -82,6 +83,7 @@ function AppInner() {
       case 'assets': return <AssetsPage />
       case 'expenses': return <ExpensePage householdId={householdId} memberOptions={members} accountOptions={accounts} canDelete={canDelete} />
       case 'spend-trends': return <SpendTrendsPage householdId={householdId} />
+      case 'analytics': return <AnalyticsPage />
       case 'settings':
         return (
           <SettingsPage

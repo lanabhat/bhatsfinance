@@ -61,9 +61,18 @@ const TABS: Tab[] = [
       </svg>
     ),
   },
+  {
+    key: 'analytics',
+    label: 'Analytics',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
+      </svg>
+    ),
+  },
 ]
 
-const MOBILE_TABS: Tab[] = TABS.filter((t) => t.key !== 'spend-trends')
+const MOBILE_TABS: Tab[] = TABS.filter((t) => t.key !== 'spend-trends' && t.key !== 'analytics')
 
 const MORE_ICON = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5">
@@ -83,12 +92,12 @@ const CHEVRON_RIGHT = (
   </svg>
 )
 
-const SECONDARY_KEYS = new Set(['instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'household', 'maintenance', 'help', 'import', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules', 'settings'])
+const SECONDARY_KEYS = new Set(['instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'household', 'maintenance', 'help', 'import', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules', 'settings', 'analytics'])
 const MOBILE_SECONDARY_KEYS = new Set([...SECONDARY_KEYS, 'spend-trends'])
 
 const PAGE_TITLES: Record<string, string> = {
   home: 'Home', holdings: 'Investments', accounts: 'Accounts', expenses: 'Transactions', settings: 'Settings',
-  instruments: 'Instruments', ledger: 'Ledger', cashflow: 'Cash Flow', 'spend-trends': 'Spend Trends', alerts: 'Alerts', tax: 'Tax',
+  instruments: 'Instruments', ledger: 'Ledger', cashflow: 'Cash Flow', 'spend-trends': 'Spend Trends', analytics: 'Analytics', alerts: 'Alerts', tax: 'Tax',
   valuation: 'Valuation', insurance: 'Insurance', household: 'Household & Members', maintenance: 'Maintenance',
   help: 'Help', import: 'Import', admin: 'User Management', 'gmail-sync': 'Gmail Sync',
   'gmail-rules': 'Gmail Rules', 'gmail-staging': 'Gmail Transactions', 'sms-devices': 'SMS Devices', 'sms-test': 'SMS Test Sender', 'sms-messages': 'SMS Messages', 'sms-rules': 'SMS Rules',

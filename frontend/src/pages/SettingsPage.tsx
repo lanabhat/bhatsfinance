@@ -106,7 +106,7 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
             Connect a family member's Upstox account to automatically sync their equity holdings.
             Requires a free developer app at <strong>developer.upstox.com</strong> — credentials go in <code>.env</code>.
           </p>
-          <UpstoxConnect householdId={householdId} memberOptions={memberOptions} />
+          <UpstoxConnect memberOptions={memberOptions} />
         </article>
       )}
 
