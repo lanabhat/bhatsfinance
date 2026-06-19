@@ -195,6 +195,7 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
 
 // ── main page ─────────────────────────────────────────────────────────────────
 type GroupBy = 'none' | 'category' | 'type' | 'owner'
+type SortBy = 'name' | 'type' | 'category'
 type SheetState =
   | { type: 'none' }
   | { type: 'instrument'; item?: Instrument }
@@ -207,8 +208,13 @@ export function InstrumentsPage() {
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
   const [loading, setLoading] = useState(false)
-  const [groupBy, setGroupBy] = useState<GroupBy>('none')
+  const [groupBy, setGroupBy] = useState<GroupBy>('type')
+  const [sortBy, setSortBy] = useState<SortBy>('name')
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
+
+  const toggleGroup = (key: string) =>
+    setCollapsed((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
 
   const load = async () => {
     setLoading(true)
@@ -229,9 +235,21 @@ export function InstrumentsPage() {
     return m
   }, [instruments, ownerships, members])
 
+  const sortedInstruments = useMemo(() => {
+    return [...instruments].sort((a, b) => {
+      if (sortBy === 'type') return a.instrument_type.localeCompare(b.instrument_type)
+      if (sortBy === 'category') {
+        const ca = categories.find(c => c.id === a.asset_category)?.name ?? 'z'
+        const cb = categories.find(c => c.id === b.asset_category)?.name ?? 'z'
+        return ca.localeCompare(cb)
+      }
+      return a.name.localeCompare(b.name)
+    })
+  }, [instruments, sortBy, categories])
+
   const grouped = useMemo(() => {
     const g = new Map<string, { items: Instrument[]; color?: string }>()
-    for (const inst of instruments) {
+    for (const inst of sortedInstruments) {
       let key = '__flat__'; let color: string | undefined
       if (groupBy === 'category') { const cat = categories.find((c) => c.id === inst.asset_category); key = cat?.name ?? 'Uncategorised'; color = cat?.color }
       else if (groupBy === 'type') { key = inst.instrument_type.replace(/_/g, ' ') }
@@ -240,17 +258,13 @@ export function InstrumentsPage() {
       g.get(key)!.items.push(inst)
     }
     return g
-  }, [instruments, groupBy, ownerMap, categories])
+  }, [sortedInstruments, groupBy, ownerMap, categories])
 
   const close = () => setSheet({ type: 'none' })
   const afterSave = async () => { close(); await load() }
 
-  const GROUP_OPTS: { value: GroupBy; label: string }[] = [
-    { value: 'none', label: 'None' },
-    { value: 'category', label: 'Category' },
-    { value: 'type', label: 'Type' },
-    { value: 'owner', label: 'Owner' },
-  ]
+  const pillCls = (active: boolean) =>
+    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`
 
   const renderRow = (inst: Instrument) => {
     const cat = categories.find((c) => c.id === inst.asset_category)
@@ -262,14 +276,19 @@ export function InstrumentsPage() {
 
   return (
     <div className="grid gap-3">
-      <div className="flex items-center gap-1">
-        <span className="mr-1 text-xs text-[var(--text-muted)]">Group:</span>
-        {GROUP_OPTS.map((o) => (
-          <button key={o.value} type="button" onClick={() => setGroupBy(o.value)}
-            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${groupBy === o.value ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`}>
-            {o.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-[var(--text-muted)]">Group:</span>
+          {([['type', 'Type'], ['category', 'Category'], ['owner', 'Owner'], ['none', 'None']] as [GroupBy, string][]).map(([v, l]) => (
+            <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-[var(--text-muted)]">Sort:</span>
+          {([['name', 'Name'], ['type', 'Type'], ['category', 'Category']] as [SortBy, string][]).map(([v, l]) => (
+            <button key={v} type="button" onClick={() => setSortBy(v)} className={pillCls(sortBy === v)}>{l}</button>
+          ))}
+        </div>
         <button type="button" onClick={() => setSheet({ type: 'instrument' })} disabled={!canWrite}
           className="ml-auto shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           + Add Instrument
@@ -287,16 +306,27 @@ export function InstrumentsPage() {
       ) : groupBy === 'none' ? (
         <div className="grid gap-2">{instruments.map(renderRow)}</div>
       ) : (
-        <div className="grid gap-2">
-          {Array.from(grouped.entries()).map(([label, { items, color }]) => (
-            <div key={label}>
-              <div className="mt-3 flex items-center gap-2 first:mt-0">
-                {color && <span className="h-2 w-2 rounded-full" style={{ background: color }} />}
-                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
+        <div className="grid gap-1">
+          {Array.from(grouped.entries()).map(([label, { items, color }]) => {
+            const isOpen = !collapsed.has(label)
+            return (
+              <div key={label}>
+                <button type="button" onClick={() => toggleGroup(label)}
+                  className="flex w-full items-center justify-between py-2">
+                  <div className="flex items-center gap-2">
+                    {color && <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />}
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
+                    <span className="rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">{items.length}</span>
+                  </div>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+                    className={`h-4 w-4 text-[var(--text-muted)] transition-transform ${isOpen ? 'rotate-180' : ''}`}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </button>
+                {isOpen && <div className="grid gap-2 pb-2">{items.map(renderRow)}</div>}
               </div>
-              {items.map(renderRow)}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

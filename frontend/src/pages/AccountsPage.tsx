@@ -362,6 +362,7 @@ function CardDetailSheet({ account, householdId, onEdit, onClose }: {
 }
 
 type GroupBy = 'none' | 'owner' | 'type'
+type SortBy = 'name' | 'type' | 'institution'
 type SheetState =
   | { type: 'none' }
   | { type: 'account'; item?: Account }
@@ -373,8 +374,13 @@ export function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [ownerships, setOwnerships] = useState<AccountOwnership[]>([])
   const [loading, setLoading] = useState(false)
-  const [groupBy, setGroupBy] = useState<GroupBy>('none')
+  const [groupBy, setGroupBy] = useState<GroupBy>('type')
+  const [sortBy, setSortBy] = useState<SortBy>('name')
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
+
+  const toggleGroup = (key: string) =>
+    setCollapsed((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
 
   const load = async () => {
     setLoading(true)
@@ -406,9 +412,17 @@ export function AccountsPage() {
     [accounts, ownerMap]
   )
 
+  const sortedAccounts = useMemo(() => {
+    return [...accounts].sort((a, b) => {
+      if (sortBy === 'type') return a.account_type.localeCompare(b.account_type)
+      if (sortBy === 'institution') return (a.institution_name || '').localeCompare(b.institution_name || '')
+      return a.name.localeCompare(b.name)
+    })
+  }, [accounts, sortBy])
+
   const grouped = useMemo(() => {
     const g = new Map<string, Account[]>()
-    for (const a of accounts) {
+    for (const a of sortedAccounts) {
       const key = groupBy === 'owner' ? (ownerMap.get(a.id) ?? 'Unassigned')
         : groupBy === 'type' ? a.account_type.replace(/_/g, ' ')
         : '__flat__'
@@ -416,7 +430,7 @@ export function AccountsPage() {
       g.get(key)!.push(a)
     }
     return g
-  }, [accounts, groupBy, ownerMap])
+  }, [sortedAccounts, groupBy, ownerMap])
 
   const close = () => setSheet({ type: 'none' })
   const afterSave = async () => { close(); await load() }
@@ -433,25 +447,27 @@ export function AccountsPage() {
     }
   }
 
-  const GROUP_OPTS: { value: GroupBy; label: string }[] = [
-    { value: 'none', label: 'None' },
-    { value: 'owner', label: 'Owner' },
-    { value: 'type', label: 'Type' },
-  ]
+  const pillCls = (active: boolean) =>
+    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`
 
   const renderList = (list: Account[]) =>
     list.map((a) => <AccountCard key={a.id} account={a} onClick={() => handleCardClick(a)} />)
 
   return (
     <div className="grid grid-cols-1 min-w-0 gap-3">
-      <div className="flex flex-wrap items-center gap-1">
-        <span className="mr-1 text-xs text-[var(--text-muted)]">Group:</span>
-        {GROUP_OPTS.map((o) => (
-          <button key={o.value} type="button" onClick={() => setGroupBy(o.value)}
-            className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${groupBy === o.value ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`}>
-            {o.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-[var(--text-muted)]">Group:</span>
+          {([['type', 'Type'], ['owner', 'Owner'], ['none', 'None']] as [GroupBy, string][]).map(([v, l]) => (
+            <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-[var(--text-muted)]">Sort:</span>
+          {([['name', 'Name'], ['type', 'Type'], ['institution', 'Institution']] as [SortBy, string][]).map(([v, l]) => (
+            <button key={v} type="button" onClick={() => setSortBy(v)} className={pillCls(sortBy === v)}>{l}</button>
+          ))}
+        </div>
         <button type="button" onClick={() => setSheet({ type: 'account' })} disabled={!canWrite}
           className="ml-auto shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           + Add Account
@@ -488,17 +504,28 @@ export function AccountsPage() {
           <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first account.</p>
         </div>
       ) : groupBy === 'none' ? (
-        <div className="grid grid-cols-1 min-w-0 gap-2">{renderList(accounts)}</div>
+        <div className="grid grid-cols-1 min-w-0 gap-2">{renderList(sortedAccounts)}</div>
       ) : (
-        <div className="flex w-full min-w-0 max-w-full flex-col gap-2 overflow-hidden">
-          {Array.from(grouped.entries()).map(([label, group]) => (
-            <div key={label} className="flex w-full min-w-0 max-w-full flex-col gap-2">
-              <div className="mt-3 first:mt-0">
-                <span className="block truncate text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
+        <div className="flex w-full min-w-0 max-w-full flex-col gap-1 overflow-hidden">
+          {Array.from(grouped.entries()).map(([label, group]) => {
+            const isOpen = !collapsed.has(label)
+            return (
+              <div key={label} className="w-full min-w-0 max-w-full">
+                <button type="button" onClick={() => toggleGroup(label)}
+                  className="flex w-full items-center justify-between py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] capitalize">{label}</span>
+                    <span className="rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">{group.length}</span>
+                  </div>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+                    className={`h-4 w-4 text-[var(--text-muted)] transition-transform ${isOpen ? 'rotate-180' : ''}`}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </button>
+                {isOpen && <div className="grid gap-2 pb-2">{renderList(group)}</div>}
               </div>
-              {renderList(group)}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

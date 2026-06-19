@@ -50,7 +50,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setHouseholdId(authHouseholdId)
   }, [authHouseholdId])
-  const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10))
+  const [asOf, setAsOf] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
   const [dashboard, setDashboard] = useState<DashboardPayload>(EMPTY_DASHBOARD)
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [categories, setCategories] = useState<AssetCategory[]>([])

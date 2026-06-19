@@ -24,7 +24,8 @@ function subMonths(dateStr: string, months: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-const today = new Date().toISOString().slice(0, 10)
+const _d = new Date()
+const today = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`
 
 export function AnalyticsPage() {
   const { householdId, members } = useApp()
@@ -32,7 +33,7 @@ export function AnalyticsPage() {
 
   const [asOf, setAsOf] = useState(today)
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null)
-  const [groupBy, setGroupBy] = useState<GroupBy>('category')
+  const [groupBy, setGroupBy] = useState<GroupBy>('type')
   const [range, setRange] = useState<Range>('1Y')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState(today)
@@ -120,8 +121,8 @@ export function AnalyticsPage() {
             value={groupBy}
             onChange={e => setGroupBy(e.target.value as GroupBy)}
           >
-            <option value="category">Category</option>
             <option value="type">Asset Type</option>
+            <option value="category">Category</option>
           </select>
         </div>
 
@@ -243,7 +244,7 @@ export function AnalyticsPage() {
             equity: 'Equity', mutual_fund: 'Mutual Fund', fd: 'FD', rd: 'RD',
             epf: 'EPF', ppf: 'PPF', nps: 'NPS', gold: 'Gold',
             real_estate: 'Real Estate', sip: 'SIP', insurance: 'Insurance',
-            cash: 'Cash', vehicle: 'Vehicle', liability: 'Liability', other: 'Other',
+            lending: 'Lending', cash: 'Cash', vehicle: 'Vehicle', liability: 'Liability', other: 'Other',
           }
           for (const h of holdings) {
             const key = TYPE_LABELS[h.instrument_type] ?? h.instrument_type

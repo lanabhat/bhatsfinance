@@ -216,6 +216,7 @@ export type Instrument = {
     | 'vehicle'
     | 'liability'
     | 'insurance'
+    | 'lending'
     | 'other'
   symbol: string
   metadata: Record<string, unknown>

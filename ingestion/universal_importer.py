@@ -431,34 +431,14 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                     if update_fields:
                         instrument.save(update_fields=update_fields)
 
-                InstrumentOwnership.objects.get_or_create(
-                    instrument=instrument,
-                    member=member,
-                    defaults={'allocation_percent': Decimal('100')},
-                )
-
+                qty = _to_decimal(stock.get('quantity') or '0').quantize(Decimal('0.0001'))
                 closing_price = _money(stock.get('closing_price') or '0')
                 closing_value = _money(stock.get('closing_value') or '0')
+                avg_price = _money(stock.get('avg_buy_price') or '0')
+                buy_value = _money(stock.get('buy_value') or '0')
 
-                _, snap_created = ValuationSnapshot.objects.update_or_create(
-                    household=household,
-                    instrument=instrument,
-                    account=None,
-                    valuation_date=valuation_date,
-                    defaults={
-                        'unit_price': closing_price,
-                        'market_value': closing_value,
-                        'source': 'csv',
-                    },
-                )
-                if snap_created:
-                    valuations_created += 1
-
-                # Create initial buy transaction only if none exists yet
-                if not Transaction.objects.filter(instrument=instrument, household=household).exists():
-                    qty = _to_decimal(stock.get('quantity') or '0').quantize(Decimal('0.0001'))
-                    avg_price = _money(stock.get('avg_buy_price') or '0')
-                    buy_value = _money(stock.get('buy_value') or '0')
+                # Create buy tx for this member if they don't already have one
+                if member and not Transaction.objects.filter(instrument=instrument, household=household, member=member, transaction_type='buy').exists():
                     if qty > 0 and buy_value:
                         Transaction.objects.create(
                             household=household,
@@ -474,6 +454,53 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                             currency='INR',
                             source='csv',
                         )
+
+                # Recalculate allocation_percent for all owners based on their quantities
+                # Total quantity = sum of each member's buy transactions
+                all_buy_txs = Transaction.objects.filter(instrument=instrument, household=household, transaction_type='buy', direction='outflow')
+                total_qty = sum((_to_decimal(str(t.quantity or 0)) for t in all_buy_txs), Decimal('0'))
+
+                if total_qty > 0:
+                    for tx in all_buy_txs:
+                        tx_qty = _to_decimal(str(tx.quantity or 0))
+                        alloc = (tx_qty / total_qty * 100).quantize(Decimal('0.01'))
+                        if tx.member_id:
+                            InstrumentOwnership.objects.update_or_create(
+                                instrument=instrument,
+                                member_id=tx.member_id,
+                                defaults={'allocation_percent': alloc},
+                            )
+                else:
+                    InstrumentOwnership.objects.get_or_create(
+                        instrument=instrument,
+                        member=member,
+                        defaults={'allocation_percent': Decimal('100')},
+                    )
+
+                # Valuation = sum of all members' closing values for this instrument
+                all_buy_txs_fresh = Transaction.objects.filter(instrument=instrument, household=household, transaction_type='buy', direction='outflow')
+                total_closing_value = Decimal('0')
+                for tx in all_buy_txs_fresh:
+                    tx_qty = _to_decimal(str(tx.quantity or 0))
+                    if total_qty > 0 and closing_price:
+                        total_closing_value += tx_qty * closing_price
+                if not total_closing_value and closing_value:
+                    total_closing_value = closing_value
+
+                _, snap_created = ValuationSnapshot.objects.update_or_create(
+                    household=household,
+                    instrument=instrument,
+                    account=None,
+                    valuation_date=valuation_date,
+                    defaults={
+                        'unit_price': closing_price,
+                        'market_value': total_closing_value or closing_value,
+                        'source': 'csv',
+                    },
+                )
+                if snap_created:
+                    valuations_created += 1
+
         except Exception as e:
             errors.append({'section': 'stocks', 'row': i, 'name': stock.get('name', ''), 'reason': str(e)})
 
@@ -481,16 +508,21 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
     for i, mf in enumerate(parsed.get('mutual_funds', []), start=1):
         try:
             with db_transaction.atomic():
-                name = mf['scheme_name'].strip()
-                if not name:
+                base_name = mf['scheme_name'].strip()
+                if not base_name:
                     continue
+
+                # Use folio number as the disambiguator — each folio is a separate holding
+                # even if the scheme name is identical (same person, two folios; or two people).
+                folio_no = mf.get('folio_no', '').strip()
+                name = f'{base_name} ({folio_no})' if folio_no else base_name
 
                 instrument, created = Instrument.objects.get_or_create(
                     household=household,
                     name=name,
                     defaults={
                         'instrument_type': 'mutual_fund',
-                        'symbol': mf.get('folio_no', ''),
+                        'symbol': folio_no,
                         'default_account': groww_account,
                         'asset_category': mf_category,
                         'metadata': {
@@ -618,12 +650,48 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                     if update_fields:
                         instrument.save(update_fields=update_fields)
 
-                if member:
+                # Create buy tx for this member if they don't already have one
+                if member and not Transaction.objects.filter(instrument=instrument, household=household, member=member, transaction_type='buy').exists():
+                    if quantity > 0 and valuation > 0:
+                        Transaction.objects.create(
+                            household=household,
+                            instrument=instrument,
+                            account=upstox_account,
+                            member=member,
+                            tx_date=vd,
+                            amount=valuation,
+                            quantity=quantity,
+                            price_per_unit=rate,
+                            direction='outflow',
+                            transaction_type='buy',
+                            currency='INR',
+                            source='csv',
+                        )
+
+                # Recalculate allocation_percent for all owners based on their quantities
+                all_buy_txs = Transaction.objects.filter(instrument=instrument, household=household, transaction_type='buy', direction='outflow')
+                total_qty = sum((_to_decimal(str(t.quantity or 0)) for t in all_buy_txs), Decimal('0'))
+
+                if total_qty > 0:
+                    for tx in all_buy_txs:
+                        tx_qty = _to_decimal(str(tx.quantity or 0))
+                        alloc = (tx_qty / total_qty * 100).quantize(Decimal('0.01'))
+                        if tx.member_id:
+                            InstrumentOwnership.objects.update_or_create(
+                                instrument=instrument,
+                                member_id=tx.member_id,
+                                defaults={'allocation_percent': alloc},
+                            )
+                elif member:
                     InstrumentOwnership.objects.get_or_create(
                         instrument=instrument,
                         member=member,
                         defaults={'allocation_percent': Decimal('100')},
                     )
+
+                # Valuation = total quantity across all members × unit price
+                total_qty_fresh = sum((_to_decimal(str(t.quantity or 0)) for t in all_buy_txs), Decimal('0'))
+                total_value = total_qty_fresh * rate if rate and total_qty_fresh else valuation
 
                 ValuationSnapshot.objects.update_or_create(
                     household=household,
@@ -632,28 +700,10 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                     valuation_date=vd,
                     defaults={
                         'unit_price': rate,
-                        'market_value': valuation,
+                        'market_value': total_value,
                         'source': 'csv',
                     },
                 )
-
-                # Create initial buy transaction only if none exists
-                if not Transaction.objects.filter(instrument=instrument, household=household).exists():
-                    if valuation and valuation > 0:
-                        Transaction.objects.create(
-                            household=household,
-                            instrument=instrument,
-                            account=upstox_account,
-                            member=member,
-                            tx_date=vd,
-                            amount=valuation,
-                            quantity=quantity if quantity > 0 else None,
-                            price_per_unit=rate,
-                            direction='outflow',
-                            transaction_type='buy',
-                            currency='INR',
-                            source='csv',
-                        )
 
                 if inst_created:
                     created += 1

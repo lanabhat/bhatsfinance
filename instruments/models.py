@@ -81,6 +81,7 @@ class Instrument(TimeStampedModel):
         VEHICLE = 'vehicle', 'Vehicle'
         LIABILITY = 'liability', 'Liability'
         INSURANCE = 'insurance', 'Insurance'
+        LENDING = 'lending', 'Lending (Loan Given)'
         OTHER = 'other', 'Other'
 
     household = models.ForeignKey('core.Household', on_delete=models.CASCADE, related_name='instruments')

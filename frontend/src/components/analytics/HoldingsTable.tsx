@@ -14,7 +14,7 @@ const TYPE_LABELS: Record<string, string> = {
   equity: 'Equity', mutual_fund: 'Mutual Fund', fd: 'FD', rd: 'RD',
   epf: 'EPF', ppf: 'PPF', nps: 'NPS', gold: 'Gold',
   real_estate: 'Real Estate', sip: 'SIP', insurance: 'Insurance',
-  cash: 'Cash', vehicle: 'Vehicle', liability: 'Liability', other: 'Other',
+  lending: 'Lending', cash: 'Cash', vehicle: 'Vehicle', liability: 'Liability', other: 'Other',
 }
 
 export function HoldingsTable({ holdings, categoryBreakdown }: Props) {

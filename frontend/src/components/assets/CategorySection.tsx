@@ -5,12 +5,13 @@ type Props = {
   name: string
   color: string
   totalValue?: string
+  count?: number
   children: React.ReactNode
   defaultOpen?: boolean
 }
 
 
-export function CategorySection({ name, color, totalValue, children, defaultOpen = true }: Props) {
+export function CategorySection({ name, color, totalValue, count, children, defaultOpen = true }: Props) {
   const fmtINR = useMaskedFmt()
   const [open, setOpen] = useState(defaultOpen)
 
@@ -24,6 +25,9 @@ export function CategorySection({ name, color, totalValue, children, defaultOpen
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
           <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{name}</span>
+          {count !== undefined && (
+            <span className="rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">{count}</span>
+          )}
           {totalValue && <span className="text-xs text-[var(--text-muted)]">· {fmtINR(totalValue)}</span>}
         </div>
         <svg

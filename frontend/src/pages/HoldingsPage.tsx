@@ -61,7 +61,7 @@ function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCa
 }
 
 // ── buy form ──────────────────────────────────────────────────────────────────
-const INSTRUMENT_TYPES_OPTS = ['equity','mutual_fund','fd','rd','epf','ppf','nps','gold','real_estate','insurance','cash','other','vehicle','liability','sip'] as const
+const INSTRUMENT_TYPES_OPTS = ['equity','mutual_fund','fd','rd','epf','ppf','nps','gold','real_estate','insurance','lending','cash','other','vehicle','liability','sip'] as const
 
 function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
   householdId: number; instrumentId?: number; onSave: () => void; onCancel: () => void
@@ -404,6 +404,16 @@ type SheetState =
   | { type: 'edit_instrument'; instrument: Instrument }
   | { type: 'category'; item?: AssetCategory }
 
+type HoldingGroupBy = 'type' | 'category' | 'none'
+type HoldingSortBy = 'value' | 'gain' | 'gainPct' | 'name' | 'invested'
+
+const TYPE_LABELS: Record<string, string> = {
+  equity: 'Equity', mutual_fund: 'Mutual Fund', fd: 'FD', rd: 'RD',
+  epf: 'EPF', ppf: 'PPF', nps: 'NPS', gold: 'Gold',
+  real_estate: 'Real Estate', sip: 'SIP', insurance: 'Insurance',
+  cash: 'Cash', vehicle: 'Vehicle', liability: 'Liability', other: 'Other',
+}
+
 export function HoldingsPage() {
   const { canWrite } = useAuth()
   const { householdId, categories, refreshCategories, dashboard, members, asOf, refreshDashboard } = useApp()
@@ -412,10 +422,15 @@ export function HoldingsPage() {
   const [holdingsLoading, setHoldingsLoading] = useState(false)
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
+  const [groupBy, setGroupBy] = useState<HoldingGroupBy>('type')
+  const [sortBy, setSortBy] = useState<HoldingSortBy>('value')
 
   const loadInstruments = () => portfolioApi.listInstruments(householdId).then(setInstruments).catch(() => {})
 
   useEffect(() => { void loadInstruments() }, [householdId])
+
+  // Resync instruments whenever holdings change (e.g. after an import adds new instruments)
+  useEffect(() => { void loadInstruments() }, [dashboard.holdings])
 
   useEffect(() => {
     if (activeMemberId === null) { setMemberHoldings(null); return }
@@ -431,7 +446,67 @@ export function HoldingsPage() {
   const activeHoldings = activeMemberId !== null ? (memberHoldings ?? []) : dashboard.holdings
 
   const holdingsSections = useMemo(() => {
-    const catMap = new Map<number | null, typeof activeHoldings>()
+    const sortFn = (a: DashboardHolding, b: DashboardHolding) => {
+      if (sortBy === 'name') return a.instrument_name.localeCompare(b.instrument_name)
+      if (sortBy === 'invested') return parseFloat(b.net_invested) - parseFloat(a.net_invested)
+      if (sortBy === 'gain') return (parseFloat(b.market_value) - parseFloat(b.net_invested)) - (parseFloat(a.market_value) - parseFloat(a.net_invested))
+      if (sortBy === 'gainPct') {
+        const pctA = parseFloat(a.net_invested) > 0 ? (parseFloat(a.market_value) - parseFloat(a.net_invested)) / parseFloat(a.net_invested) : -Infinity
+        const pctB = parseFloat(b.net_invested) > 0 ? (parseFloat(b.market_value) - parseFloat(b.net_invested)) / parseFloat(b.net_invested) : -Infinity
+        return pctB - pctA
+      }
+      return parseFloat(b.market_value) - parseFloat(a.market_value)
+    }
+
+    const renderRow = (h: DashboardHolding, cat?: AssetCategory) => {
+      const inst = instruments.find((i) => i.id === h.instrument_id) ?? {
+        id: h.instrument_id,
+        name: h.instrument_name,
+        instrument_type: h.instrument_type as Instrument['instrument_type'],
+        asset_category: h.asset_category,
+        household: householdId,
+        default_account: null,
+        symbol: '',
+        metadata: {},
+        is_active: true,
+      }
+      return (
+        <InstrumentRow key={h.instrument_id} instrument={inst} holding={h} category={cat}
+          onClick={() => setSheet({ type: 'holding_detail', holding: h, instrument: inst })}
+          onBuy={canWrite ? () => setSheet({ type: 'buy', instrumentId: inst.id }) : undefined}
+          onUpdateValue={canWrite ? () => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name }) : undefined}
+        />
+      )
+    }
+
+    if (groupBy === 'none') {
+      return <div className="grid gap-1">{[...activeHoldings].sort(sortFn).map(h => renderRow(h))}</div>
+    }
+
+    if (groupBy === 'type') {
+      const groups = new Map<string, DashboardHolding[]>()
+      for (const h of activeHoldings) {
+        const key = TYPE_LABELS[h.instrument_type] ?? h.instrument_type
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key)!.push(h)
+      }
+      return [...groups.entries()].sort((a, b) => {
+        const aVal = a[1].reduce((s, h) => s + parseFloat(h.market_value), 0)
+        const bVal = b[1].reduce((s, h) => s + parseFloat(h.market_value), 0)
+        return bVal - aVal
+      }).map(([label, group]) => {
+        const sorted = [...group].sort(sortFn)
+        const total = group.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
+        return (
+          <CategorySection key={label} name={label} color="#6366f1" totalValue={total} count={group.length}>
+            {sorted.map(h => renderRow(h))}
+          </CategorySection>
+        )
+      })
+    }
+
+    // groupBy === 'category'
+    const catMap = new Map<number | null, DashboardHolding[]>()
     catMap.set(null, [])
     for (const h of activeHoldings) {
       const catId = h.asset_category ?? null
@@ -444,17 +519,8 @@ export function HoldingsPage() {
       if (!group?.length) continue
       const total = group.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
       sections.push(
-        <CategorySection key={cat.id} name={cat.name} color={cat.color} totalValue={total}>
-          {group.map((h) => {
-            const inst = instruments.find((i) => i.id === h.instrument_id)
-            return inst ? (
-              <InstrumentRow key={h.instrument_id} instrument={inst} holding={h} category={cat}
-                onClick={() => setSheet({ type: 'holding_detail', holding: h, instrument: inst })}
-                onBuy={canWrite ? () => setSheet({ type: 'buy', instrumentId: inst.id }) : undefined}
-                onUpdateValue={canWrite ? () => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name }) : undefined}
-              />
-            ) : null
-          })}
+        <CategorySection key={cat.id} name={cat.name} color={cat.color} totalValue={total} count={group.length}>
+          {[...group].sort(sortFn).map(h => renderRow(h, cat))}
         </CategorySection>
       )
     }
@@ -462,45 +528,51 @@ export function HoldingsPage() {
     if (uncat.length > 0) {
       const total = uncat.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
       sections.push(
-        <CategorySection key="uncat" name="Uncategorised" color="#94a3b8" totalValue={total}>
-          {uncat.map((h) => {
-            const inst = instruments.find((i) => i.id === h.instrument_id)
-            return inst ? (
-              <InstrumentRow key={h.instrument_id} instrument={inst} holding={h}
-                onClick={() => setSheet({ type: 'holding_detail', holding: h, instrument: inst })}
-                onBuy={canWrite ? () => setSheet({ type: 'buy', instrumentId: inst.id }) : undefined}
-                onUpdateValue={canWrite ? () => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name }) : undefined}
-              />
-            ) : null
-          })}
+        <CategorySection key="uncat" name="Uncategorised" color="#94a3b8" totalValue={total} count={uncat.length}>
+          {[...uncat].sort(sortFn).map(h => renderRow(h))}
         </CategorySection>
       )
     }
     return sections
-  }, [activeHoldings, categories, instruments, canWrite])
+  }, [activeHoldings, categories, instruments, canWrite, groupBy, sortBy])
+
+  const pillCls = (active: boolean) =>
+    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`
 
   return (
     <div className="grid gap-3">
-      {/* toolbar: member filter + add button */}
-      <div className="flex items-center justify-between gap-2">
+      {/* toolbar */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {/* member filter */}
         {members.length > 1 && (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setActiveMemberId(null)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${activeMemberId === null ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`}>
-            All
-          </button>
-          {members.map((m) => (
-            <button key={m.id} type="button" onClick={() => setActiveMemberId(m.id)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${activeMemberId === m.id ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`}>
-              {m.label}
-            </button>
-          ))}
-        </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => setActiveMemberId(null)} className={pillCls(activeMemberId === null)}>All</button>
+            {members.map((m) => (
+              <button key={m.id} type="button" onClick={() => setActiveMemberId(m.id)} className={pillCls(activeMemberId === m.id)}>{m.label}</button>
+            ))}
+          </div>
         )}
-        <button type="button" onClick={() => setSheet({ type: 'buy' })} disabled={!canWrite}
-          className="ml-auto shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-          + Add Holding
-        </button>
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 ml-auto">
+          {/* Group by */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-[var(--text-muted)]">Group:</span>
+            {([['type', 'Type'], ['category', 'Category'], ['none', 'None']] as [HoldingGroupBy, string][]).map(([v, l]) => (
+              <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
+            ))}
+          </div>
+          {/* Sort by */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-[var(--text-muted)]">Sort:</span>
+            {([['value', 'Value'], ['gain', 'Gain ₹'], ['gainPct', 'Gain %'], ['invested', 'Invested'], ['name', 'Name']] as [HoldingSortBy, string][]).map(([v, l]) => (
+              <button key={v} type="button" onClick={() => setSortBy(v)} className={pillCls(sortBy === v)}>{l}</button>
+            ))}
+          </div>
+          <button type="button" onClick={() => setSheet({ type: 'buy' })} disabled={!canWrite}
+            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            + Add Holding
+          </button>
+        </div>
       </div>
 
       {holdingsLoading ? (
