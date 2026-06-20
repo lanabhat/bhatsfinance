@@ -14,6 +14,7 @@ export type DeleteEntity =
   | 'sip_mandate'
   | 'tax_record'
   | 'tax_projection'
+  | 'bulk_delete_instruments'
 
 const STORAGE_KEY = 'delete_permissions'
 
@@ -31,6 +32,7 @@ const DEFAULTS: Record<DeleteEntity, boolean> = {
   sip_mandate: true,
   tax_record: true,
   tax_projection: true,
+  bulk_delete_instruments: false,
 }
 
 function load(): Record<DeleteEntity, boolean> {

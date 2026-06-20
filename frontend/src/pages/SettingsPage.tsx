@@ -4,6 +4,7 @@ import { ImportWizard } from './ImportWizard'
 import { GrowwImportWizard } from '../components/imports/GrowwImportWizard'
 import { UpstoxConnect } from '../components/integrations/UpstoxConnect'
 import { useTerms } from '../context/TermsContext'
+import { deleteJsonResult } from '../api/http'
 import type { OptionItem } from '../types/domain'
 
 const ENTITY_LABELS: Array<{ key: DeleteEntity; label: string; warning?: string }> = [
@@ -18,6 +19,22 @@ const ENTITY_LABELS: Array<{ key: DeleteEntity; label: string; warning?: string 
   { key: 'sip_mandate', label: 'SIP Mandates' },
   { key: 'tax_record', label: 'Tax Records' },
   { key: 'tax_projection', label: 'Tax Projections' },
+  { key: 'bulk_delete_instruments', label: 'Bulk Delete Instruments', warning: 'Enables the bulk delete action below — use with caution' },
+]
+
+const INSTRUMENT_TYPE_OPTIONS = [
+  { value: 'equity', label: 'Equity' },
+  { value: 'mutual_fund', label: 'Mutual Fund' },
+  { value: 'fd', label: 'FD' },
+  { value: 'rd', label: 'RD' },
+  { value: 'epf', label: 'EPF' },
+  { value: 'ppf', label: 'PPF' },
+  { value: 'nps', label: 'NPS' },
+  { value: 'gold', label: 'Gold' },
+  { value: 'real_estate', label: 'Real Estate' },
+  { value: 'insurance', label: 'Insurance' },
+  { value: 'lending', label: 'Lending' },
+  { value: 'other', label: 'Other' },
 ]
 
 type Tab = 'display' | 'delete' | 'import' | 'groww' | 'upstox'
@@ -34,6 +51,35 @@ type Props = {
 export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOptions, accountOptions, instrumentOptions }: Props) {
   const [tab, setTab] = useState<Tab>('display')
   const { mode, setMode } = useTerms()
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkResult, setBulkResult] = useState<string | null>(null)
+  const [confirmText, setConfirmText] = useState('')
+
+  const toggleType = (v: string) =>
+    setSelectedTypes(prev => { const n = new Set(prev); n.has(v) ? n.delete(v) : n.add(v); return n })
+
+  const handleBulkDelete = async () => {
+    if (selectedTypes.size === 0) return
+    setBulkDeleting(true)
+    setBulkResult(null)
+    try {
+      const params = new URLSearchParams({ household_id: String(householdId) })
+      selectedTypes.forEach(t => params.append('instrument_type', t))
+      const res = await deleteJsonResult<{ deleted: number }>(`/api/instruments/bulk-delete?${params.toString()}`)
+      setBulkResult(`Deleted ${res.deleted} records (instruments + transactions + valuations).`)
+      setSelectedTypes(new Set())
+      setConfirmText('')
+    } catch {
+      setBulkResult('Delete failed — check the console.')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  const bulkEnabled = deleteConfig['bulk_delete_instruments']
+  const confirmWord = 'DELETE'
+  const canExecute = bulkEnabled && selectedTypes.size > 0 && confirmText === confirmWord
 
   const tabCls = (t: Tab) =>
     `px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === t ? 'bg-primary-600 text-white' : 'text-[var(--text-2)] hover:bg-[var(--surface-2)]'}`
@@ -139,6 +185,59 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
             ))}
           </tbody>
         </table>
+
+        {/* Bulk delete action — only shown when enabled */}
+        <div className={`mt-6 rounded-xl border p-4 transition-all ${bulkEnabled ? 'border-rose-300 bg-rose-50 dark:border-rose-800/50 dark:bg-rose-950/20' : 'border-[var(--border)] bg-[var(--surface-2)] opacity-50 pointer-events-none'}`}>
+          <p className="text-sm font-semibold text-rose-700 dark:text-rose-400 mb-1">Bulk Delete Instruments</p>
+          <p className="text-xs text-[var(--text-muted)] mb-3">
+            Permanently deletes all instruments of the selected types, including their transactions and valuations. This cannot be undone.
+          </p>
+
+          <div className="flex flex-wrap gap-2 mb-4">
+            {INSTRUMENT_TYPE_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => toggleType(opt.value)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  selectedTypes.has(opt.value)
+                    ? 'border-rose-500 bg-rose-500 text-white'
+                    : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-2)] hover:border-rose-400'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {selectedTypes.size > 0 && (
+            <div className="grid gap-3">
+              <p className="text-xs text-rose-700 dark:text-rose-400">
+                Type <strong>{confirmWord}</strong> to confirm deletion of{' '}
+                <strong>{Array.from(selectedTypes).map(t => INSTRUMENT_TYPE_OPTIONS.find(o => o.value === t)?.label ?? t).join(', ')}</strong>
+              </p>
+              <input
+                type="text"
+                value={confirmText}
+                onChange={e => setConfirmText(e.target.value)}
+                placeholder={confirmWord}
+                className="h-9 w-48 rounded-lg border border-rose-300 bg-[var(--surface)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400"
+              />
+              <button
+                type="button"
+                disabled={!canExecute || bulkDeleting}
+                onClick={handleBulkDelete}
+                className="w-fit rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {bulkDeleting ? 'Deleting…' : `Delete ${selectedTypes.size} type${selectedTypes.size !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          )}
+
+          {bulkResult && (
+            <p className="mt-3 text-xs font-medium text-emerald-700 dark:text-emerald-400">{bulkResult}</p>
+          )}
+        </div>
       </article>}
 
     </section>

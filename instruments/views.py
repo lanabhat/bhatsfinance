@@ -49,6 +49,22 @@ class InstrumentViewSet(viewsets.ModelViewSet):
     filterset_fields = ['household', 'instrument_type', 'is_active']
 
 
+class BulkDeleteInstrumentsView(APIView):
+    """Delete all instruments of specified types for a household. Cascades to transactions and valuations."""
+
+    def delete(self, request):
+        from rest_framework import status as http_status
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id is required.'}, status=http_status.HTTP_400_BAD_REQUEST)
+        types = request.query_params.getlist('instrument_type')
+        qs = Instrument.objects.filter(household_id=int(household_id))
+        if types:
+            qs = qs.filter(instrument_type__in=types)
+        count, _ = qs.delete()
+        return Response({'deleted': count})
+
+
 class InstrumentOwnershipViewSet(viewsets.ModelViewSet):
     queryset = InstrumentOwnership.objects.select_related('instrument', 'member').all()
     serializer_class = InstrumentOwnershipSerializer
