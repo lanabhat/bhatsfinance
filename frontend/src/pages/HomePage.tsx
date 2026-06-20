@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CoinSpinner } from '../components/common/CoinSpinner'
 import { CategoryBreakdownCard } from '../components/home/CategoryBreakdownCard'
 import { MaturingFDsCard } from '../components/home/MaturingFDsCard'
 import { MarkSipPaidSheet } from '../components/home/MarkSipPaidSheet'
@@ -134,15 +135,8 @@ export function HomePage({ onNavigate }: Props) {
 
   if (dashboardLoading && dashboard.holdings.length === 0) {
     return (
-      <div className="grid min-w-0 gap-5 animate-pulse">
-        {/* Hero skeleton */}
-        <div className="rounded-3xl bg-[var(--surface-2)] h-36" />
-        {/* Chart skeleton */}
-        <div className="rounded-2xl bg-[var(--surface-2)] h-48" />
-        {/* Cards skeleton */}
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-xl bg-[var(--surface-2)] h-16" />
-        ))}
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <CoinSpinner size={64} />
       </div>
     )
   }

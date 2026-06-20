@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CoinSpinner } from '../components/common/CoinSpinner'
 import { portfolioApi } from '../api/portfolioApi'
 import { useApp } from '../context/AppContext'
 import type { Account, AccountOwnership, Instrument, InstrumentOwnership } from '../types/domain'
@@ -26,15 +27,15 @@ function InstrumentOwnershipRow({
   const save = async () => {
     setSaving(true)
     try {
+      const fresh = await portfolioApi.listInstrumentOwnerships(instrument.id)
       if (memberId === '') {
-        // remove any existing ownerships for this instrument
-        await Promise.all(existing.map((o) => portfolioApi.deleteInstrumentOwnership(o.id)))
+        await Promise.all(fresh.map((o) => portfolioApi.deleteInstrumentOwnership(o.id)))
       } else {
         const mid = Number(memberId)
-        if (existing.length === 0) {
+        if (fresh.length === 0) {
           await portfolioApi.createInstrumentOwnership({ instrument: instrument.id, member: mid, allocation_percent: '100.00' })
         } else {
-          await Promise.all(existing.map((o) => portfolioApi.updateInstrumentOwnership(o.id, { member: mid })))
+          await Promise.all(fresh.map((o) => portfolioApi.updateInstrumentOwnership(o.id, { member: mid })))
         }
       }
       onSaved()
@@ -96,14 +97,15 @@ function AccountOwnershipRow({
   const save = async () => {
     setSaving(true)
     try {
+      const fresh = await portfolioApi.listAccountOwnerships(account.id)
       if (memberId === '') {
-        await Promise.all(existing.map((o) => portfolioApi.deleteAccountOwnership(o.id)))
+        await Promise.all(fresh.map((o) => portfolioApi.deleteAccountOwnership(o.id)))
       } else {
         const mid = Number(memberId)
-        if (existing.length === 0) {
+        if (fresh.length === 0) {
           await portfolioApi.createAccountOwnership({ account: account.id, member: mid, allocation_percent: '100.00' })
         } else {
-          await Promise.all(existing.map((o) => portfolioApi.updateAccountOwnership(o.id, { member: mid })))
+          await Promise.all(fresh.map((o) => portfolioApi.updateAccountOwnership(o.id, { member: mid })))
         }
       }
       onSaved()
@@ -218,34 +220,40 @@ export function MaintenancePage({ section: initSection }: { section?: Section } 
 
         <div className="px-4 py-1">
           {loading ? (
-            <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
+            <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
           ) : section === 'instruments' ? (
             instruments.length === 0 ? (
               <p className="py-6 text-center text-xs text-[var(--text-muted)]">No instruments yet.</p>
             ) : (
-              instruments.map((inst) => (
-                <InstrumentOwnershipRow
-                  key={inst.id}
-                  instrument={inst}
-                  ownerships={instrumentOwnerships}
-                  memberOptions={members}
-                  onSaved={load}
-                />
-              ))
+              instruments.map((inst) => {
+                const instOwner = instrumentOwnerships.find((o) => o.instrument === inst.id)?.member ?? null
+                return (
+                  <InstrumentOwnershipRow
+                    key={`${inst.id}-${instOwner}`}
+                    instrument={inst}
+                    ownerships={instrumentOwnerships}
+                    memberOptions={members}
+                    onSaved={load}
+                  />
+                )
+              })
             )
           ) : (
             accounts.length === 0 ? (
               <p className="py-6 text-center text-xs text-[var(--text-muted)]">No accounts yet.</p>
             ) : (
-              accounts.map((acct) => (
-                <AccountOwnershipRow
-                  key={acct.id}
-                  account={acct}
-                  ownerships={accountOwnerships}
-                  memberOptions={members}
-                  onSaved={load}
-                />
-              ))
+              accounts.map((acct) => {
+                const acctOwner = accountOwnerships.find((o) => o.account === acct.id)?.member ?? null
+                return (
+                  <AccountOwnershipRow
+                    key={`${acct.id}-${acctOwner}`}
+                    account={acct}
+                    ownerships={accountOwnerships}
+                    memberOptions={members}
+                    onSaved={load}
+                  />
+                )
+              })
             )
           )}
         </div>

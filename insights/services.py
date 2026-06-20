@@ -153,7 +153,8 @@ def compute_networth(household_id: int, as_of: date, member_id: int | None = Non
     # Account balances: use the most recent ValuationSnapshot on or before as_of
     # as the anchor balance, then add/subtract only transactions after that date.
     # Falls back to opening_balance + all transactions if no snapshot exists.
-    accounts_qs = Account.objects.filter(household_id=household_id, is_active=True)
+    # Broker accounts are excluded: their holdings are already counted via instruments.
+    accounts_qs = Account.objects.filter(household_id=household_id, is_active=True).exclude(account_type='broker')
     if account_allocation is not None:
         accounts_qs = accounts_qs.filter(id__in=account_allocation.keys())
 
@@ -203,7 +204,7 @@ def compute_member_accounts(household_id: int, as_of: date, member_id: int) -> l
     if not account_allocation:
         return []
 
-    accounts = Account.objects.filter(id__in=account_allocation.keys(), household_id=household_id, is_active=True)
+    accounts = Account.objects.filter(id__in=account_allocation.keys(), household_id=household_id, is_active=True).exclude(account_type='broker')
     result = []
     for account in accounts:
         snapshot = (
@@ -311,6 +312,98 @@ def compute_category_breakdown(household_id: int, as_of: date, member_id: int | 
             'allocation_percent': str(pct),
         })
     result.sort(key=lambda x: Decimal(x['market_value']), reverse=True)
+    return result
+
+
+def compute_holdings_history(household_id: int, instrument_type: str | None = None, member_id: int | None = None) -> list[dict]:
+    """Return a time series of {date, invested, current} for holdings of a given instrument type.
+
+    Data points are the distinct valuation dates present in ValuationSnapshot for matching
+    instruments. For each date we sum:
+      - net_invested: cumulative buy-minus-sell amounts up to that date
+      - current:      sum of latest ValuationSnapshot market_value per instrument as of that date
+    """
+    from django.db.models import Q
+
+    qs = ValuationSnapshot.objects.filter(
+        household_id=household_id,
+        instrument__isnull=False,
+    )
+    if instrument_type:
+        qs = qs.filter(instrument__instrument_type=instrument_type)
+
+    dates = sorted(qs.values_list('valuation_date', flat=True).distinct())
+    if not dates:
+        return []
+
+    # Pre-fetch all relevant transactions once
+    tx_qs = Transaction.objects.filter(
+        household_id=household_id,
+        instrument__isnull=False,
+    ).select_related('instrument').order_by('tx_date', 'id')
+    if instrument_type:
+        tx_qs = tx_qs.filter(instrument__instrument_type=instrument_type)
+
+    # Member allocation scaling
+    member_allocation: dict[int, Decimal] | None = None
+    household_instrument_share: dict[int, Decimal] | None = None
+    if member_id is not None:
+        from instruments.models import InstrumentOwnership
+        ownerships = InstrumentOwnership.objects.filter(member_id=member_id).values('instrument_id', 'allocation_percent')
+        member_allocation = {o['instrument_id']: Decimal(str(o['allocation_percent'])) / Decimal('100') for o in ownerships}
+        tx_qs = tx_qs.filter(instrument_id__in=member_allocation.keys())
+    else:
+        household_instrument_share, _ = _household_share_maps(household_id)
+
+    all_txs = list(tx_qs)
+
+    result = []
+    for d in dates:
+        # net_invested: sum transactions up to this date
+        net_invested = ZERO
+        instrument_ids_seen: set[int] = set()
+        for tx in all_txs:
+            if tx.tx_date > d:
+                break
+            net_invested += -_signed_amount(tx)
+            instrument_ids_seen.add(tx.instrument_id)
+
+        # current: latest snapshot per instrument as of this date
+        current = ZERO
+        for inst_id in instrument_ids_seen:
+            snap = (
+                ValuationSnapshot.objects
+                .filter(instrument_id=inst_id, valuation_date__lte=d)
+                .order_by('-valuation_date', '-id')
+                .first()
+            )
+            if snap is None:
+                continue
+            if snap.unit_price is not None:
+                # Need quantity up to this date
+                qty = sum(
+                    (_signed_quantity(tx) for tx in all_txs if tx.instrument_id == inst_id and tx.tx_date <= d),
+                    ZERO,
+                )
+                val = qty * snap.unit_price
+            elif snap.market_value is not None:
+                val = snap.market_value
+            else:
+                continue
+
+            factor = Decimal('1')
+            if member_allocation is not None:
+                factor = member_allocation.get(inst_id, Decimal('1'))
+            elif household_instrument_share is not None:
+                factor = household_instrument_share.get(inst_id, Decimal('1'))
+            current += val * factor
+
+        result.append({
+            'date': d.isoformat(),
+            'invested': float(net_invested.quantize(Decimal('0.01'))),
+            'current': float(current.quantize(Decimal('0.01'))),
+        })
+
     return result
 
 

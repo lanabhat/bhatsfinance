@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CoinSpinner } from '../components/common/CoinSpinner'
 import { fdDetailsApi } from '../api/fdDetailsApi'
 import { valuationApi } from '../api/valuationApi'
 import { useMaskedFmt } from '../components/common/Money'
@@ -214,29 +215,19 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
                 </div>
               )}
               {snapshotResult.needs_manual.length > 0 && (
-                <div className="grid gap-2">
-                  <p className="text-xs font-medium text-amber-700">⚠ Needs manual entry ({snapshotResult.needs_manual.length})</p>
-                  <div className="flex flex-wrap gap-1">
+                <details className="group">
+                  <summary className="cursor-pointer list-none text-xs text-[var(--text-muted)] hover:text-[var(--text)]">
+                    <span className="font-medium">↓ {snapshotResult.needs_manual.length} item{snapshotResult.needs_manual.length !== 1 ? 's' : ''} skipped</span>
+                    <span className="ml-1">(no data to compute from — add a manual valuation to include them next time)</span>
+                  </summary>
+                  <div className="mt-1.5 flex flex-wrap gap-1">
                     {snapshotResult.needs_manual.map((x, i) => (
-                      <span key={i} className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-900/25 dark:border-amber-800/40 dark:text-amber-300">
+                      <span key={i} className="rounded-full bg-[var(--surface-2)] border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
                         {x.name}
                       </span>
                     ))}
                   </div>
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 grid gap-1.5 dark:border-amber-800/40 dark:bg-amber-900/15">
-                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Why does this happen?</p>
-                    <p className="text-[11px] text-amber-700 leading-relaxed dark:text-amber-300">
-                      These items have no transactions, no opening balance, and no prior snapshot — so there's nothing to compute from.
-                    </p>
-                    <p className="text-xs font-semibold text-amber-800 mt-1 dark:text-amber-300">How to fix</p>
-                    <ol className="text-[11px] text-amber-700 leading-relaxed list-decimal list-inside space-y-1 dark:text-amber-300">
-                      <li>Click <strong>+ Add Valuation</strong> above.</li>
-                      <li>Select the account or instrument.</li>
-                      <li>Enter the current balance or market value.</li>
-                      <li>Save — future snapshots will use this as the starting point automatically.</li>
-                    </ol>
-                  </div>
-                </div>
+                </details>
               )}
               {snapshotResult.carried_forward.length > 0 && (
                 <div>
@@ -258,7 +249,7 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
       {/* List */}
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
         {loading ? (
-          <p className="py-10 text-center text-sm text-[var(--text-muted)]">Loading…</p>
+          <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
         ) : filtered.length === 0 ? (
           <p className="py-10 text-center text-sm text-[var(--text-muted)]">No valuations found.</p>
         ) : (

@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
+import { CoinSpinner } from '../components/common/CoinSpinner'
 import type { Member, OptionItem } from '../types/domain'
 import { householdApi } from '../api/householdApi'
 import {
@@ -1161,7 +1162,7 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
   if (statusLoading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
+        <CoinSpinner size={56} />
       </div>
     )
   }

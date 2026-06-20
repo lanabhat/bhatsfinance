@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CoinSpinner } from '../components/common/CoinSpinner'
 import { useMaskedFmt } from '../components/common/Money'
 import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
@@ -496,7 +497,7 @@ export function AccountsPage() {
       )}
 
       {loading ? (
-        <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
+        <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
       ) : accounts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
           <p className="text-3xl">🏦</p>
@@ -545,19 +546,20 @@ export function AccountsPage() {
               const currentMemberId = existing[0]?.member ?? acct.primary_member ?? null
               return (
                 <OwnershipRow
-                  key={acct.id}
+                  key={`${acct.id}-${currentMemberId}`}
                   name={acct.name}
                   subtitle={acct.account_type.replace(/_/g, ' ')}
                   currentMemberId={currentMemberId}
                   memberOptions={members}
                   onSave={async (memberId) => {
+                    const fresh = await portfolioApi.listAccountOwnerships(acct.id)
                     if (memberId === null) {
-                      await Promise.all(existing.map((o) => portfolioApi.deleteAccountOwnership(o.id)))
+                      await Promise.all(fresh.map((o) => portfolioApi.deleteAccountOwnership(o.id)))
                     } else {
-                      if (existing.length === 0) {
+                      if (fresh.length === 0) {
                         await portfolioApi.createAccountOwnership({ account: acct.id, member: memberId, allocation_percent: '100.00' })
                       } else {
-                        await Promise.all(existing.map((o) => portfolioApi.updateAccountOwnership(o.id, { member: memberId })))
+                        await Promise.all(fresh.map((o) => portfolioApi.updateAccountOwnership(o.id, { member: memberId })))
                       }
                     }
                     await load()

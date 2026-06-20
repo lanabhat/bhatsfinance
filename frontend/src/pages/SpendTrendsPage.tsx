@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CoinSpinner } from '../components/common/CoinSpinner'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { expenseApi } from '../api/expenseApi'
 import { normalizeApiError } from '../hooks/errorUtils'
@@ -122,7 +123,7 @@ export function SpendTrendsPage({ householdId }: Props) {
       <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
         <h3 className="mb-3 text-base font-semibold text-[var(--text)]">Monthly Breakdown</h3>
         {loading ? (
-          <p className="text-sm text-[var(--text-muted)]">Loading…</p>
+          <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
         ) : chartRows.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)]">No transactions in this window.</p>
         ) : (

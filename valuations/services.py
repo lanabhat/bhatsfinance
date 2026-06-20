@@ -133,7 +133,7 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
     from ledger.models import Transaction
     from django.db.models import Sum
 
-    accounts = Account.objects.filter(household_id=household_id, is_active=True)
+    accounts = Account.objects.filter(household_id=household_id, is_active=True).exclude(account_type='broker')
     for account in accounts:
         last = (
             ValuationSnapshot.objects

@@ -36,6 +36,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage'
 import { LoginPage } from './pages/LoginPage'
 import { PendingPage } from './pages/PendingPage'
 import { DeniedPage } from './pages/DeniedPage'
+import { CoinSpinner } from './components/common/CoinSpinner'
 
 type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'analytics' | 'settings' | 'instruments' | 'ledger' | 'cashflow' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail-sync' | 'gmail-rules' | 'gmail-staging' | 'sms-devices' | 'sms-test' | 'sms-messages' | 'sms-rules'
 
@@ -154,7 +155,7 @@ function AuthGate() {
   if (user.authenticated === false && user.loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--bg)]">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
+        <CoinSpinner size={72} />
       </div>
     )
   }

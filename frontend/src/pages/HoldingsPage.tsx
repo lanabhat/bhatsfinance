@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CoinSpinner } from '../components/common/CoinSpinner'
 import { postJson } from '../api/http'
 import { useMaskedFmt } from '../components/common/Money'
 import { ledgerApi } from '../api/ledgerApi'
@@ -576,7 +577,7 @@ export function HoldingsPage() {
       </div>
 
       {holdingsLoading ? (
-        <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
+        <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
       ) : activeHoldings.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
           <p className="text-3xl">📊</p>

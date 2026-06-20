@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CoinSpinner } from '../components/common/CoinSpinner'
 import { getJson, toQueryString, unwrapList, deleteJson } from '../api/http'
 import { useMaskedFmt } from '../components/common/Money'
 import { portfolioApi } from '../api/portfolioApi'
@@ -20,34 +21,49 @@ function OwnershipRow({ name, subtitle, currentMemberId, memberOptions, onSave }
 }) {
   const [memberId, setMemberId] = useState<string>(String(currentMemberId ?? ''))
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const isDirty = String(currentMemberId ?? '') !== memberId
 
   const save = async () => {
     setSaving(true)
-    try { await onSave(memberId === '' ? null : Number(memberId)) }
-    finally { setSaving(false) }
+    setError('')
+    try {
+      await onSave(memberId === '' ? null : Number(memberId))
+      console.log('[OwnershipRow] save succeeded')
+    } catch (e) {
+      console.error('[OwnershipRow] save threw', e)
+      const msg = e && typeof e === 'object' && 'non_field_errors' in e
+        ? (e as { non_field_errors: string[] }).non_field_errors[0]
+        : 'Save failed'
+      setError(msg)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="flex items-center gap-3 border-b border-[var(--border)] py-2.5 last:border-0">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-[var(--text)]">{name}</p>
-        <p className="text-xs text-[var(--text-muted)] capitalize">{subtitle}</p>
+    <div className="border-b border-[var(--border)] py-2.5 last:border-0">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-[var(--text)]">{name}</p>
+          <p className="text-xs text-[var(--text-muted)] capitalize">{subtitle}</p>
+        </div>
+        <select
+          value={memberId}
+          onChange={(e) => { setMemberId(e.target.value); setError('') }}
+          className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-2)] focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="">— Unassigned —</option>
+          {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+        {isDirty && (
+          <button type="button" disabled={saving} onClick={save}
+            className="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            {saving ? '…' : 'Save'}
+          </button>
+        )}
       </div>
-      <select
-        value={memberId}
-        onChange={(e) => setMemberId(e.target.value)}
-        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-2)] focus:outline-none focus:ring-2 focus:ring-primary-500"
-      >
-        <option value="">— Unassigned —</option>
-        {memberOptions.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-      </select>
-      {isDirty && (
-        <button type="button" disabled={saving} onClick={save}
-          className="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-          {saving ? '…' : 'Save'}
-        </button>
-      )}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   )
 }
@@ -219,7 +235,8 @@ export function InstrumentsPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const [i, o] = await Promise.all([portfolioApi.listInstruments(householdId), portfolioApi.listInstrumentOwnerships()])
+      const [i, o] = await Promise.all([portfolioApi.listInstruments(householdId), portfolioApi.listInstrumentOwnerships(undefined, 200)])
+      console.log('[load] instruments', i.length, 'ownerships', o.length, o)
       setInstruments(i); setOwnerships(o)
     } finally { setLoading(false) }
   }
@@ -296,7 +313,7 @@ export function InstrumentsPage() {
       </div>
 
       {loading ? (
-        <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
+        <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
       ) : instruments.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
           <p className="text-3xl">📋</p>
@@ -368,21 +385,28 @@ export function InstrumentsPage() {
               const currentMemberId = existing[0]?.member ?? null
               return (
                 <OwnershipRow
-                  key={inst.id}
+                  key={`${inst.id}-${currentMemberId}`}
                   name={inst.name}
                   subtitle={inst.instrument_type.replace(/_/g, ' ')}
                   currentMemberId={currentMemberId}
                   memberOptions={members}
                   onSave={async (memberId) => {
+                    console.log('[ownership] save start', { instId: inst.id, memberId })
+                    const fresh = await portfolioApi.listInstrumentOwnerships(inst.id)
+                    console.log('[ownership] fresh fetch result', fresh)
                     if (memberId === null) {
-                      await Promise.all(existing.map((o) => portfolioApi.deleteInstrumentOwnership(o.id)))
+                      console.log('[ownership] deleting', fresh.map(o => o.id))
+                      await Promise.all(fresh.map((o) => portfolioApi.deleteInstrumentOwnership(o.id)))
                     } else {
-                      if (existing.length === 0) {
+                      if (fresh.length === 0) {
+                        console.log('[ownership] creating new ownership', { instrument: inst.id, member: memberId })
                         await portfolioApi.createInstrumentOwnership({ instrument: inst.id, member: memberId, allocation_percent: '100.00' })
                       } else {
-                        await Promise.all(existing.map((o) => portfolioApi.updateInstrumentOwnership(o.id, { member: memberId })))
+                        console.log('[ownership] patching existing', fresh.map(o => ({ id: o.id, member: o.member })), '→ member', memberId)
+                        await Promise.all(fresh.map((o) => portfolioApi.updateInstrumentOwnership(o.id, { member: memberId })))
                       }
                     }
+                    console.log('[ownership] save done, reloading')
                     await load()
                   }}
                 />

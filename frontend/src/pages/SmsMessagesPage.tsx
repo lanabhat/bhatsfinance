@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CoinSpinner } from '../components/common/CoinSpinner'
 import type { InstrumentOption, OptionItem, SmsMessage } from '../types/domain'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { smsApi } from '../api/smsApi'
@@ -512,7 +513,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
       </div>
 
       {loading ? (
-        <p className="text-sm text-[var(--text-muted)]">Loading…</p>
+        <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
       ) : messages.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[var(--border)] px-6 py-10 text-center">
           <p className="text-sm font-medium text-[var(--text-2)]">No messages found</p>

@@ -41,8 +41,8 @@ export const portfolioApi = {
   async updateInstrument(id: number, payload: Partial<Omit<Instrument, 'id'>>) {
     return patchJson<Instrument>(`/api/instruments/${id}/`, payload)
   },
-  async listInstrumentOwnerships(instrumentId?: number) {
-    const q = toQueryString({ instrument: instrumentId })
+  async listInstrumentOwnerships(instrumentId?: number, pageSize?: number) {
+    const q = toQueryString({ instrument: instrumentId, page_size: pageSize })
     const data = await getJson<ApiListResponse<InstrumentOwnership>>(`/api/instrument-ownerships/?${q}`)
     return unwrapList(data)
   },
