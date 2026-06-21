@@ -8,12 +8,13 @@ import { MemberNetWorthRow } from '../components/home/MemberNetWorthRow'
 import { MemberWealthBreakdown } from '../components/home/MemberWealthBreakdown'
 import { NetWorthHero } from '../components/home/NetWorthHero'
 import { RecentHoldings } from '../components/home/RecentHoldings'
+import { SummaryTable } from '../components/home/SummaryTable'
 import { NetWorthTrendChart } from '../components/charts/NetWorthTrendChart'
 import { useMaskedFmt } from '../components/common/Money'
 import { useApp } from '../context/AppContext'
 import { fdDetailsApi } from '../api/fdDetailsApi'
 import { getJson, toQueryString } from '../api/http'
-import type { CategoryBreakdownItem, DashboardHolding, MaturingFD, MemberAccount, MissedSipAlert } from '../types/domain'
+import type { CategoryBreakdownItem, DashboardAccount, DashboardHolding, MaturingFD, MemberAccount, MissedSipAlert } from '../types/domain'
 
 const TYPE_ICONS: Record<string, string> = {
   mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡',
@@ -44,6 +45,8 @@ export function HomePage({ onNavigate }: Props) {
   const [memberHoldings, setMemberHoldings] = useState<DashboardHolding[]>([])
   const [memberAccounts, setMemberAccounts] = useState<MemberAccount[]>([])
   const [memberHoldingsLoading, setMemberHoldingsLoading] = useState(false)
+  const [allMemberHoldings, setAllMemberHoldings] = useState<Record<number, DashboardHolding[]>>({})
+  const [allMemberAccounts, setAllMemberAccounts] = useState<Record<number, DashboardAccount[]>>({})
   const [maturingFDs, setMaturingFDs] = useState<MaturingFD[]>([])
   const MATURING_WINDOW_DAYS = 180
   const [paidSheetTarget, setPaidSheetTarget] = useState<MissedSipAlert | null>(null)
@@ -63,11 +66,32 @@ export function HomePage({ onNavigate }: Props) {
     setMemberHoldingsLoading(true)
     const q = toQueryString({ household_id: householdId, as_of: asOf, member_id: expandedMemberId })
     getJson<{ holdings: DashboardHolding[]; accounts: MemberAccount[] }>(`/api/holdings?${q}`)
-      .then((d) => { if (active) { setMemberHoldings(d.holdings ?? []); setMemberAccounts(d.accounts ?? []) } })
+      .then((d) => {
+        if (active) {
+          setMemberHoldings(d.holdings ?? [])
+          setMemberAccounts(d.accounts ?? [])
+          setAllMemberHoldings(prev => ({ ...prev, [expandedMemberId]: d.holdings ?? [] }))
+          setAllMemberAccounts(prev => ({ ...prev, [expandedMemberId]: d.accounts ?? [] }))
+        }
+      })
       .catch(() => { if (active) { setMemberHoldings([]); setMemberAccounts([]) } })
       .finally(() => { if (active) setMemberHoldingsLoading(false) })
     return () => { active = false }
   }, [expandedMemberId, householdId, asOf])
+
+  const requestMemberHoldings = (memberId: number) => {
+    if (allMemberHoldings[memberId] !== undefined) return
+    const q = toQueryString({ household_id: householdId, as_of: asOf, member_id: memberId })
+    getJson<{ holdings: DashboardHolding[]; accounts: MemberAccount[] }>(`/api/holdings?${q}`)
+      .then((d) => {
+        setAllMemberHoldings(prev => ({ ...prev, [memberId]: d.holdings ?? [] }))
+        setAllMemberAccounts(prev => ({ ...prev, [memberId]: (d.accounts ?? []).map(a => ({ account_id: a.account_id, account_name: a.account_name, account_type: a.account_type, balance: a.balance })) }))
+      })
+      .catch(() => {
+        setAllMemberHoldings(prev => ({ ...prev, [memberId]: [] }))
+        setAllMemberAccounts(prev => ({ ...prev, [memberId]: [] }))
+      })
+  }
 
   // All instrument types present in holdings
   const presentTypes = useMemo(() => {
@@ -309,6 +333,18 @@ export function HomePage({ onNavigate }: Props) {
           accountOptions={accounts}
           onClose={() => setBulkSheetOpen(false)}
           onPaid={refreshDashboard}
+        />
+      )}
+
+      {dashboard.holdings.length > 0 && (
+        <SummaryTable
+          holdings={dashboard.holdings}
+          accounts={dashboard.accounts}
+          memberHoldings={allMemberHoldings}
+          memberAccounts={allMemberAccounts}
+          membersNetworth={dashboard.membersNetworth}
+          categoryBreakdown={dashboard.categoryBreakdown}
+          onRequestMemberHoldings={requestMemberHoldings}
         />
       )}
 

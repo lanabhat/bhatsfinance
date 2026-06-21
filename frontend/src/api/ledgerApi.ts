@@ -1,5 +1,5 @@
 import { deleteJson, getJson, patchJson, postJson, toQueryString, unwrapList } from './http'
-import type { ApiListResponse, DashboardPayload, Transaction, TransactionCorrectionInput } from '../types/domain'
+import type { ApiListResponse, DashboardAccount, DashboardPayload, Transaction, TransactionCorrectionInput } from '../types/domain'
 
 type TransactionCreatePayload = Omit<
   Transaction,
@@ -83,7 +83,7 @@ export const ledgerApi = {
   async deleteTransaction(id: number) { return deleteJson(`/api/transactions/${id}/`) },
   async fetchDashboard(householdId: number, asOf: string): Promise<DashboardPayload> {
     const q = toQueryString({ household_id: householdId, as_of: asOf })
-    const [holdings, networth, allocation, xirr, missed, history, catBreakdown, membersNw] = await Promise.all([
+    const [holdings, networth, allocation, xirr, missed, history, catBreakdown, membersNw, accts] = await Promise.all([
       getJson<{ holdings: DashboardPayload['holdings'] }>(`/api/holdings?${q}`),
       getJson<{ networth: string }>(`/api/networth?${q}`),
       getJson<{ allocation: DashboardPayload['allocation'] }>(`/api/allocation?${q}`),
@@ -92,6 +92,7 @@ export const ledgerApi = {
       getJson<{ history: DashboardPayload['networthHistory'] }>(`/api/networth/history?${q}`),
       getJson<{ breakdown: DashboardPayload['categoryBreakdown'] }>(`/api/category-breakdown?${q}`),
       getJson<{ members: DashboardPayload['membersNetworth'] }>(`/api/members-networth?${q}`),
+      getJson<{ accounts: DashboardAccount[] }>(`/api/household-accounts?${q}`),
     ])
 
     return {
@@ -103,6 +104,7 @@ export const ledgerApi = {
       networthHistory: history.history,
       categoryBreakdown: catBreakdown.breakdown,
       membersNetworth: membersNw.members,
+      accounts: accts.accounts,
     }
   },
 }

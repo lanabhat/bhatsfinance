@@ -16,6 +16,7 @@ const EMPTY_DASHBOARD: DashboardPayload = {
   networthHistory: [],
   categoryBreakdown: [],
   membersNetworth: [],
+  accounts: [],
 }
 
 type AppContextValue = {

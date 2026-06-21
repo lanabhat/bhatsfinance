@@ -369,6 +369,13 @@ export type MemberNetWorth = {
   include_in_networth: boolean
 }
 
+export type DashboardAccount = {
+  account_id: number
+  account_name: string
+  account_type: string
+  balance: string
+}
+
 export type DashboardPayload = {
   holdings: DashboardHolding[]
   allocation: DashboardAllocation[]
@@ -378,6 +385,7 @@ export type DashboardPayload = {
   networthHistory: NetWorthPoint[]
   categoryBreakdown: CategoryBreakdownItem[]
   membersNetworth: MemberNetWorth[]
+  accounts: DashboardAccount[]
 }
 
 export type FDDetails = {

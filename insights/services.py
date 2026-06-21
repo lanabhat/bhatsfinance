@@ -242,6 +242,47 @@ def compute_member_accounts(household_id: int, as_of: date, member_id: int) -> l
     return result
 
 
+def compute_household_accounts(household_id: int, as_of: date) -> list[dict]:
+    """Return balance for every active non-broker account in the household."""
+    from instruments.models import Account
+    from django.db.models import Sum
+
+    accounts_qs = Account.objects.filter(household_id=household_id, is_active=True).exclude(account_type='broker')
+    result = []
+    for account in accounts_qs:
+        snapshot = (
+            ValuationSnapshot.objects
+            .filter(account=account, valuation_date__lte=as_of)
+            .order_by('-valuation_date', '-id')
+            .first()
+        )
+        if snapshot:
+            anchor_balance = Decimal(str(snapshot.balance))
+            anchor_date = snapshot.valuation_date
+            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date, tx_date__lte=as_of)
+        else:
+            anchor_balance = account.opening_balance
+            anchor_date = None
+            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of)
+
+        inflow = Decimal(str(txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO))
+        outflow = Decimal(str(txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or ZERO))
+
+        if account.account_type == 'credit_card':
+            outstanding = max(outflow - inflow, ZERO)
+            balance = -outstanding
+        else:
+            balance = anchor_balance + inflow - outflow
+
+        result.append({
+            'account_id': account.id,
+            'account_name': account.name,
+            'account_type': account.account_type,
+            'balance': str(balance.quantize(Decimal('0.01'))),
+        })
+    return result
+
+
 def compute_members_networth(household_id: int, as_of: date) -> list[dict]:
     from core.models import Member
     members = Member.objects.filter(household_id=household_id, is_active=True)

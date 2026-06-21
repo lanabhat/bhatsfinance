@@ -5,7 +5,7 @@ from alerts.views import MissedSIPAlertsView, SIPMandateViewSet
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
 from ingestion.views import CSVImportView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView
-from insights.views import AllocationView, CategoryBreakdownView, CashFlowView, HoldingsHistoryView, HoldingsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, SpendAnalyticsView, XIRRView
+from insights.views import AllocationView, CategoryBreakdownView, CashFlowView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, SpendAnalyticsView, XIRRView
 from instruments.views import (
     AccountBalanceView,
     AccountOwnershipViewSet,
@@ -86,6 +86,7 @@ urlpatterns = router.urls + [
     path('csrf/', CsrfView.as_view(), name='csrf'),
     path('holdings', HoldingsView.as_view(), name='holdings'),
     path('holdings/history', HoldingsHistoryView.as_view(), name='holdings-history'),
+    path('household-accounts', HouseholdAccountsView.as_view(), name='household-accounts'),
     path('networth', NetWorthView.as_view(), name='networth'),
     path('networth/history', NetWorthHistoryView.as_view(), name='networth-history'),
     path('cashflow', CashFlowView.as_view(), name='cashflow'),
