@@ -93,6 +93,12 @@ export function HomePage({ onNavigate }: Props) {
       })
   }
 
+  // Pre-fetch all member holdings so Summary Table shows real data without clicking
+  useEffect(() => {
+    if (!householdId || dashboard.membersNetworth.length === 0) return
+    dashboard.membersNetworth.forEach(m => requestMemberHoldings(m.member_id))
+  }, [householdId, asOf, dashboard.membersNetworth])
+
   // All instrument types present in holdings
   const presentTypes = useMemo(() => {
     const seen = new Set<string>()
