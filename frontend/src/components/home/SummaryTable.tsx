@@ -59,6 +59,9 @@ function Chevron({ open }: { open: boolean }) {
   )
 }
 
+// hidden on mobile, shown sm+: Invested (col 3), Gain ₹ (col 4), Alloc % (col 6)
+const HIDE_MOBILE = 'hidden sm:table-cell'
+
 type ColHeaderProps = { label: string; col: SortCol; sortCol: SortCol; sortDir: 'asc' | 'desc'; onSort: (c: SortCol) => void; className?: string }
 function ColHeader({ label, col, sortCol, sortDir, onSort, className }: ColHeaderProps) {
   const active = sortCol === col
@@ -89,12 +92,12 @@ function InstrumentLeafRows({ instruments, totalCurrent, q }: { instruments: Das
           <tr key={h.instrument_id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]/50 transition-colors">
             <td className="pl-12 pr-2 py-1.5 text-xs text-[var(--text-2)]">{h.instrument_name}</td>
             <td className="px-2 py-1.5 text-right text-xs tabular-nums">{fmtINR(cur)}</td>
-            <td className="px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)]">{fmtINR(inv)}</td>
-            <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${gainColor(g)}`}>{g >= 0 ? '+' : ''}{fmtINR(g)}</td>
+            <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>{fmtINR(inv)}</td>
+            <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${gainColor(g)} ${HIDE_MOBILE}`}>{g >= 0 ? '+' : ''}{fmtINR(g)}</td>
             <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${gainColor(g)}`}>
               {inv > 0 ? `${g >= 0 ? '+' : ''}${((g / inv) * 100).toFixed(1)}%` : '—'}
             </td>
-            <td className="px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)]">
+            <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>
               {totalCurrent > 0 ? `${((cur / totalCurrent) * 100).toFixed(1)}%` : '—'}
             </td>
           </tr>
@@ -119,10 +122,10 @@ function AccountLeafRows({ accounts, totalCurrent, q }: { accounts: DashboardAcc
           <tr key={a.account_id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]/50 transition-colors">
             <td className="pl-12 pr-2 py-1.5 text-xs text-[var(--text-2)]">{a.account_name}</td>
             <td className="px-2 py-1.5 text-right text-xs tabular-nums">{fmtINR(bal)}</td>
+            <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>—</td>
+            <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>—</td>
             <td className="px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)]">—</td>
-            <td className="px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)]">—</td>
-            <td className="px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)]">—</td>
-            <td className="px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)]">
+            <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>
               {totalCurrent > 0 ? `${((bal / totalCurrent) * 100).toFixed(1)}%` : '—'}
             </td>
           </tr>
@@ -157,7 +160,6 @@ function ByTypeView({
     return hTotal + aTotal
   }, [holdings, accounts])
 
-  // Group instrument holdings by type
   const byType = useMemo(() => {
     const map = new Map<string, DashboardHolding[]>()
     for (const h of holdings) {
@@ -168,7 +170,6 @@ function ByTypeView({
     return map
   }, [holdings])
 
-  // Instrument-type rows
   const typeRows: Row[] = useMemo(() => {
     return [...byType.entries()].map(([type, hs]) => {
       const { current, invested } = sumHoldings(hs)
@@ -176,7 +177,6 @@ function ByTypeView({
     })
   }, [byType])
 
-  // Account group row (single row for all accounts combined)
   const accountsTotal = useMemo(() => sumAccounts(accounts), [accounts])
   const accountsRow: Row | null = accounts.length > 0
     ? { key: 'type:__accounts__', label: 'Savings & Accounts', current: accountsTotal, invested: 0 }
@@ -220,7 +220,6 @@ function ByTypeView({
         const type = row.key.replace('type:', '')
         const typeHoldings = isAccounts ? [] : (byType.get(type) ?? [])
 
-        // Sub-rows by member for this type
         const memberRows = isOpen && !isAccounts
           ? membersNetworth.map(m => {
               const mh = memberHoldings[m.member_id]
@@ -245,9 +244,7 @@ function ByTypeView({
               if (!allMembersLoaded) membersNetworth.forEach(m => onRequestMemberHoldings(m.member_id))
             }}
           >
-            {isOpen && !allMembersLoaded && (
-              <LoadingRow key={`${row.key}-load`} />
-            )}
+            {isOpen && !allMembersLoaded && <LoadingRow key={`${row.key}-load`} />}
             {isOpen && allMembersLoaded && memberRows.length === 0 && !isAccounts && (
               <InstrumentLeafRows key={`${row.key}-instr`} instruments={typeHoldings} totalCurrent={row.current} q={q} />
             )}
@@ -443,7 +440,6 @@ function ByCategoryView({
       const { current, invested } = sumHoldings(hs)
       return { key: `cat:${key}`, label, color, current, invested }
     })
-    // accounts as uncategorised group
     if (accounts.length > 0) {
       rows.push({ key: 'cat:__accounts__', label: 'Savings & Accounts', color: '#64748b', current: sumAccounts(accounts), invested: 0 })
     }
@@ -537,14 +533,14 @@ function ExpandableGroup({ row, isOpen, g, totalCurrent, fmtINR, colorDot, noGai
           {row.label}
         </td>
         <td className="px-2 py-2.5 text-right text-sm font-semibold tabular-nums">{fmtINR(row.current)}</td>
-        <td className="px-2 py-2.5 text-right text-sm tabular-nums text-[var(--text-muted)]">{noGain ? '—' : fmtINR(row.invested)}</td>
-        <td className={`px-2 py-2.5 text-right text-sm tabular-nums ${noGain ? 'text-[var(--text-muted)]' : gainColor(g)}`}>
+        <td className={`px-2 py-2.5 text-right text-sm tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>{noGain ? '—' : fmtINR(row.invested)}</td>
+        <td className={`px-2 py-2.5 text-right text-sm tabular-nums ${noGain ? 'text-[var(--text-muted)]' : gainColor(g)} ${HIDE_MOBILE}`}>
           {noGain ? '—' : `${g >= 0 ? '+' : ''}${fmtINR(g)}`}
         </td>
         <td className={`px-2 py-2.5 text-right text-sm tabular-nums ${noGain ? 'text-[var(--text-muted)]' : gainColor(g)}`}>
           {noGain || row.invested === 0 ? '—' : `${g >= 0 ? '+' : ''}${rowGainPct(row).toFixed(1)}%`}
         </td>
-        <td className="px-2 py-2.5 text-right text-sm tabular-nums text-[var(--text-muted)]">
+        <td className={`px-2 py-2.5 text-right text-sm tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>
           {totalCurrent > 0 ? `${((row.current / totalCurrent) * 100).toFixed(1)}%` : '—'}
         </td>
       </tr>
@@ -563,14 +559,14 @@ function SubExpandableGroup({ subKey, label, current, invested, g, parentCurrent
       <tr key={subKey} className="cursor-pointer border-t border-[var(--border)] bg-[var(--surface-2)] hover:opacity-80 transition-opacity" onClick={onClick}>
         <td className="py-1.5 pl-7 pr-2 text-xs font-medium text-[var(--text-2)]"><Chevron open={subOpen} />{label}</td>
         <td className="px-2 py-1.5 text-right text-xs tabular-nums">{fmtINR(current)}</td>
-        <td className="px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)]">{noGain ? '—' : fmtINR(invested)}</td>
-        <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${noGain ? 'text-[var(--text-muted)]' : gainColor(g)}`}>
+        <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>{noGain ? '—' : fmtINR(invested)}</td>
+        <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${noGain ? 'text-[var(--text-muted)]' : gainColor(g)} ${HIDE_MOBILE}`}>
           {noGain ? '—' : `${g >= 0 ? '+' : ''}${fmtINR(g)}`}
         </td>
         <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${noGain ? 'text-[var(--text-muted)]' : gainColor(g)}`}>
           {noGain || invested === 0 ? '—' : `${g >= 0 ? '+' : ''}${((g / invested) * 100).toFixed(1)}%`}
         </td>
-        <td className="px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)]">
+        <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>
           {parentCurrent > 0 ? `${((current / parentCurrent) * 100).toFixed(1)}%` : '—'}
         </td>
       </tr>
@@ -598,7 +594,7 @@ export function SummaryTable({
     <button
       type="button"
       onClick={() => setDimension(d)}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+      className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
         dimension === d ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
       }`}
     >
@@ -610,10 +606,11 @@ export function SummaryTable({
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      {/* Controls: stacked on mobile, side-by-side on sm+ */}
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Portfolio Summary</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex gap-1">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex flex-wrap gap-1">
             {dimPill('type', 'By Type')}
             {dimPill('member', 'By Member')}
             {dimPill('category', 'By Category')}
@@ -623,21 +620,22 @@ export function SummaryTable({
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search…"
-            className="h-7 w-36 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="h-7 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:w-32"
           />
         </div>
       </div>
 
+      {/* Table: 3 cols on mobile (Name, Current, Gain %), 6 cols on sm+ */}
       <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-        <table className="w-full min-w-[540px] border-collapse text-sm">
+        <table className="w-full min-w-[280px] border-collapse text-sm">
           <thead className="bg-[var(--surface-2)]">
             <tr>
               <ColHeader label="Name" col="name" {...sharedColProps} className="text-left pl-3" />
               <ColHeader label="Current" col="current" {...sharedColProps} />
-              <ColHeader label="Invested" col="invested" {...sharedColProps} />
-              <ColHeader label="Gain ₹" col="gain" {...sharedColProps} />
+              <ColHeader label="Invested" col="invested" {...sharedColProps} className={HIDE_MOBILE} />
+              <ColHeader label="Gain ₹" col="gain" {...sharedColProps} className={HIDE_MOBILE} />
               <ColHeader label="Gain %" col="gainPct" {...sharedColProps} />
-              <th className="whitespace-nowrap px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Alloc %</th>
+              <th className={`whitespace-nowrap px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] ${HIDE_MOBILE}`}>Alloc %</th>
             </tr>
           </thead>
           <tbody>

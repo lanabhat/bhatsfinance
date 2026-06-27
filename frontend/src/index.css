@@ -134,7 +134,6 @@ html {
 body {
   margin: 0;
   min-height: 100dvh;
-  max-width: 100vw;
   font-family: var(--font-sans);
   background: var(--bg);
   color: var(--text);
@@ -176,6 +175,19 @@ main {
 }
 @media (min-width: 768px) {
   .main-content { padding-bottom: 2.5rem; }
+}
+
+/* ─────────────────────────────────────────
+   Grid overflow guard
+   A bare `display:grid` with no explicit grid-template-columns creates a
+   single implicit column sized to `auto` (= max-content of its widest child).
+   Non-shrinkable children (charts, wide cards, nowrap text) then push that
+   column — and the whole page — past the viewport. Force any single-column
+   grid track inside the content area to minmax(0, 1fr) so it can shrink.
+   Multi-column grids (those that set grid-template-columns) are unaffected.
+   ───────────────────────────────────────── */
+.main-content :where(.grid) {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* ─────────────────────────────────────────
