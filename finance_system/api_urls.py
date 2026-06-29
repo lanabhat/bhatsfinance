@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from alerts.views import MissedSIPAlertsView, SIPMandateViewSet
+from insurance.views import InsurancePolicyViewSet, MissedPremiumRemindersView, VehicleClaimViewSet
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
 from ingestion.views import CSVImportView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView
@@ -74,6 +75,8 @@ router.register('valuations', ValuationSnapshotViewSet)
 router.register('fd-details', FDDetailsViewSet)
 router.register('asset-categories', AssetCategoryViewSet)
 router.register('sip-mandates', SIPMandateViewSet)
+router.register('insurance-policies', InsurancePolicyViewSet)
+router.register('vehicle-claims', VehicleClaimViewSet)
 router.register('tax-records', TaxRecordViewSet)
 router.register('tax-projections', TaxProjectionViewSet)
 router.register('expense-categories', ExpenseCategoryViewSet, basename='expense-category')
@@ -96,6 +99,7 @@ urlpatterns = router.urls + [
     path('category-breakdown', CategoryBreakdownView.as_view(), name='category-breakdown'),
     path('members-networth', MembersNetWorthView.as_view(), name='members-networth'),
     path('alerts/missed-sip', MissedSIPAlertsView.as_view(), name='missed-sip-alerts'),
+    path('alerts/missed-premiums', MissedPremiumRemindersView.as_view(), name='missed-premium-alerts'),
     path('imports/csv', CSVImportView.as_view(), name='imports-csv'),
     path('imports/preview', ImportPreviewView.as_view(), name='imports-preview'),
     path('imports/schemas', ImportSchemasView.as_view(), name='imports-schemas'),

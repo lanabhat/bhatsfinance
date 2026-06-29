@@ -4,6 +4,7 @@ import { CategoryBreakdownCard } from '../components/home/CategoryBreakdownCard'
 import { MaturingFDsCard } from '../components/home/MaturingFDsCard'
 import { MarkSipPaidSheet } from '../components/home/MarkSipPaidSheet'
 import { MarkAllSipsPaidSheet } from '../components/home/MarkAllSipsPaidSheet'
+import { MissedPremiumsCard } from '../components/home/MissedPremiumsCard'
 import { MemberNetWorthRow } from '../components/home/MemberNetWorthRow'
 import { MemberWealthBreakdown } from '../components/home/MemberWealthBreakdown'
 import { NetWorthHero } from '../components/home/NetWorthHero'
@@ -341,6 +342,12 @@ export function HomePage({ onNavigate }: Props) {
           onPaid={refreshDashboard}
         />
       )}
+
+      <MissedPremiumsCard
+        items={dashboard.missedPremiums}
+        accountOptions={accounts}
+        onPaid={refreshDashboard}
+      />
 
       {dashboard.holdings.length > 0 && (
         <SummaryTable

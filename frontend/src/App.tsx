@@ -120,7 +120,7 @@ function AppInner() {
       case 'alerts': return <AlertsPage householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} canDelete={canDelete} />
       case 'tax': return <TaxPage householdId={householdId} memberOptions={members} canDelete={canDelete} />
       case 'valuation': return <ValuationPage householdId={householdId} accountOptions={accounts} instrumentOptions={instruments} canDelete={canDelete} />
-      case 'insurance': return <InsurancePage />
+      case 'insurance': return <InsurancePage householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} canDelete={canDelete} />
       case 'help': return <HelpPage />
       case 'import': return <ImportWizard householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} />
       case 'maintenance': return <MaintenancePage />

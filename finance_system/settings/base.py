@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'gmail_ingestion',
     'sms_ingestion',
     'upstox_integration',
+    'insurance',
 ]
 
 MIDDLEWARE = [

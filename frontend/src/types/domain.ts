@@ -382,6 +382,7 @@ export type DashboardPayload = {
   networth: string
   xirr: number | null
   missedSip: MissedSipAlert[]
+  missedPremiums: MissedPremiumAlert[]
   networthHistory: NetWorthPoint[]
   categoryBreakdown: CategoryBreakdownItem[]
   membersNetworth: MemberNetWorth[]
@@ -465,6 +466,70 @@ export type ImportResult = {
   created: number
   skipped: number
   errors: ImportRowError[]
+}
+
+export type InsurancePolicy = {
+  id: number
+  household: number
+  member: number | null
+  member_name: string | null
+  nominee_name: string
+  nominee_relation: string
+  policy_type: 'life' | 'health' | 'vehicle' | 'govt_scheme' | 'other'
+  policy_subtype: string
+  policy_name: string
+  policy_number: string
+  insurer_name: string
+  sum_insured: string | null
+  premium_amount: string | null
+  premium_frequency: 'annual' | 'half_yearly' | 'quarterly' | 'monthly' | 'single' | 'na'
+  premium_due_day: number | null
+  premium_due_month: number | null
+  start_date: string
+  maturity_date: string | null
+  end_date: string | null
+  grace_days: number
+  is_active: boolean
+  is_employer_paid: boolean
+  account: number | null
+  account_name: string | null
+  notes: string
+  is_family_floater: boolean
+  covered_members: number[]
+  covered_member_names: string[]
+  vehicle_instrument: number | null
+  vehicle_type: 'car' | 'two_wheeler' | 'other' | ''
+  coverage_type: 'comprehensive' | 'third_party' | 'own_damage' | ''
+  idv_amount: string | null
+  ncb_percent: string | null
+  add_on_covers: string
+  vehicle_claims: VehicleClaim[]
+  created_at: string
+  updated_at: string
+}
+
+export type VehicleClaim = {
+  id: number
+  policy: number
+  claim_date: string
+  description: string
+  claim_amount: string
+  status: 'filed' | 'approved' | 'rejected' | 'settled'
+  settled_amount: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export type MissedPremiumAlert = {
+  policy_id: number
+  policy_name: string
+  policy_number: string
+  insurer_name: string
+  member_name: string | null
+  due_date: string
+  grace_end: string
+  premium_amount: string
 }
 
 export type TransactionCorrectionInput = {

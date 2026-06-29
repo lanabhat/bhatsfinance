@@ -57,6 +57,10 @@ class TransactionSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'idempotency_key': {'required': False, 'allow_blank': True},
+            'external_reference': {'required': False, 'allow_blank': True},
+        }
 
     def validate(self, attrs):
         tx_type = attrs.get('transaction_type')

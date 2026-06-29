@@ -82,6 +82,7 @@ def apply_import(household_id: int, import_type: str, rows: list,
         'instruments': _import_instruments,
         'accounts': _import_accounts,
         'members': _import_members,
+        'insurance_policies': _import_insurance_policies,
     }
     if import_type not in handlers:
         raise ValueError(f"Unknown import_type: {import_type!r}")
@@ -345,6 +346,105 @@ def _import_members(household, row, mapping, defaults):
         defaults={
             'email': email,
             'relation_type': relation,
+        },
+    )
+    return 'created' if created else 'skipped'
+
+
+def _import_insurance_policies(household, row, mapping, defaults):
+    from insurance.models import InsurancePolicy
+    from instruments.models import Account
+    from core.models import Member
+
+    def r(field):
+        return _resolve(row, mapping, defaults, field)
+
+    policy_name = r('policy_name').strip()
+    if not policy_name:
+        raise ValueError("policy_name is required")
+
+    policy_type = r('policy_type').strip().lower() or 'other'
+    valid_types = ('life', 'health', 'vehicle', 'govt_scheme', 'other')
+    if policy_type not in valid_types:
+        raise ValueError(f"policy_type must be one of {valid_types}, got {policy_type!r}")
+
+    start_date = _to_date(r('start_date'))
+
+    # Optional date fields
+    maturity_raw = r('maturity_date').strip()
+    maturity_date = _to_date(maturity_raw) if maturity_raw else None
+    end_raw = r('end_date').strip()
+    end_date = _to_date(end_raw) if end_raw else None
+
+    # Member lookup by name
+    member = None
+    member_name = r('member_name').strip()
+    if member_name:
+        member = _fuzzy_member(member_name, household.member_set.filter(is_active=True))
+
+    # Account lookup by name
+    account = None
+    account_name = r('account_name').strip()
+    if account_name:
+        try:
+            account = Account.objects.get(household=household, name=account_name)
+        except Account.DoesNotExist:
+            pass
+
+    premium_freq = r('premium_frequency').strip().lower() or 'annual'
+    valid_freqs = ('annual', 'half_yearly', 'quarterly', 'monthly', 'single', 'na')
+    if premium_freq not in valid_freqs:
+        premium_freq = 'annual'
+
+    vehicle_type = r('vehicle_type').strip().lower()
+    coverage_type = r('coverage_type').strip().lower()
+
+    due_day_raw = r('premium_due_day').strip()
+    due_day = int(due_day_raw) if due_day_raw else None
+    due_month_raw = r('premium_due_month').strip()
+    due_month = int(due_month_raw) if due_month_raw else None
+    grace_raw = r('grace_days').strip()
+    grace_days = int(grace_raw) if grace_raw else 30
+
+    employer_raw = r('is_employer_paid').strip().lower()
+    is_employer_paid = employer_raw in ('true', '1', 'yes')
+
+    sum_insured_raw = r('sum_insured').strip()
+    sum_insured = _money(sum_insured_raw) if sum_insured_raw else None
+    premium_raw = r('premium_amount').strip()
+    premium_amount = _money(premium_raw) if premium_raw else None
+    idv_raw = r('idv_amount').strip()
+    idv_amount = _money(idv_raw) if idv_raw else None
+    ncb_raw = r('ncb_percent').strip()
+    ncb_percent = _to_decimal(ncb_raw).quantize(Decimal('0.01')) if ncb_raw else None
+
+    _, created = InsurancePolicy.objects.get_or_create(
+        household=household,
+        policy_name=policy_name,
+        policy_type=policy_type,
+        defaults={
+            'policy_subtype': r('policy_subtype').strip(),
+            'policy_number': r('policy_number').strip(),
+            'insurer_name': r('insurer_name').strip(),
+            'member': member,
+            'nominee_name': r('nominee_name').strip(),
+            'nominee_relation': r('nominee_relation').strip(),
+            'sum_insured': sum_insured,
+            'premium_amount': premium_amount,
+            'premium_frequency': premium_freq,
+            'premium_due_day': due_day,
+            'premium_due_month': due_month,
+            'grace_days': grace_days,
+            'start_date': start_date,
+            'maturity_date': maturity_date,
+            'end_date': end_date,
+            'is_employer_paid': is_employer_paid,
+            'account': account,
+            'vehicle_type': vehicle_type,
+            'coverage_type': coverage_type,
+            'idv_amount': idv_amount,
+            'ncb_percent': ncb_percent,
+            'notes': r('notes').strip(),
         },
     )
     return 'created' if created else 'skipped'
