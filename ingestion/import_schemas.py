@@ -137,6 +137,8 @@ IMPORT_SCHEMAS = {
             'premium_frequency': 'annual',
             'grace_days': '30',
             'is_employer_paid': 'false',
+            'maturity_date': '',
+            'end_date': '',
         },
     },
     'members': {

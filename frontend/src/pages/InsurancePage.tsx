@@ -283,7 +283,7 @@ export function InsurancePage({ householdId, memberOptions, accountOptions, inst
             </a>
           )}
           <a
-            href="#import"
+            href="#/import"
             className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
           >
             Import CSV

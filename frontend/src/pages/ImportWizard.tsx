@@ -24,6 +24,7 @@ const IMPORT_TYPES = [
   { key: 'instruments', label: 'Instruments' },
   { key: 'accounts', label: 'Accounts' },
   { key: 'members', label: 'Members' },
+  { key: 'insurance_policies', label: 'Insurance Policies' },
 ]
 
 function downloadErrorCsv(errors: ImportRowError[]) {

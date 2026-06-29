@@ -43,6 +43,8 @@ def _to_date(val) -> date:
     if isinstance(val, date):
         return val
     s = str(val).strip()
+    if not s:
+        raise ValueError("Date value is empty")
     for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%Y', '%d-%b-%y'):
         try:
             return datetime.strptime(s, fmt).date()
@@ -202,7 +204,7 @@ def _import_valuations(household, row, mapping, defaults):
         # optionally link owner
         member_name = r('member_name').strip()
         if member_name:
-            members = household.member_set.filter(is_active=True)
+            members = household.members.filter(is_active=True)
             member = _fuzzy_member(member_name, members)
             if member:
                 from instruments.models import InstrumentOwnership
@@ -275,7 +277,7 @@ def _import_instruments(household, row, mapping, defaults):
 
     owner_name = r('owner_name').strip()
     if owner_name:
-        members = household.member_set.filter(is_active=True)
+        members = household.members.filter(is_active=True)
         member = _fuzzy_member(owner_name, members)
         if member:
             InstrumentOwnership.objects.get_or_create(
@@ -303,7 +305,7 @@ def _import_accounts(household, row, mapping, defaults):
     primary_member = None
     pm_name = r('primary_member_name').strip()
     if pm_name:
-        members = household.member_set.filter(is_active=True)
+        members = household.members.filter(is_active=True)
         primary_member = _fuzzy_member(pm_name, members)
 
     opening_balance = _to_decimal(r('opening_balance') or '0')
@@ -368,19 +370,23 @@ def _import_insurance_policies(household, row, mapping, defaults):
     if policy_type not in valid_types:
         raise ValueError(f"policy_type must be one of {valid_types}, got {policy_type!r}")
 
-    start_date = _to_date(r('start_date'))
+    def _opt_date(field):
+        val = r(field).strip()
+        return _to_date(val) if val else None
 
-    # Optional date fields
-    maturity_raw = r('maturity_date').strip()
-    maturity_date = _to_date(maturity_raw) if maturity_raw else None
-    end_raw = r('end_date').strip()
-    end_date = _to_date(end_raw) if end_raw else None
+    start_raw = r('start_date').strip()
+    if not start_raw:
+        raise ValueError("start_date is required")
+    start_date = _to_date(start_raw)
+
+    maturity_date = _opt_date('maturity_date')
+    end_date = _opt_date('end_date')
 
     # Member lookup by name
     member = None
     member_name = r('member_name').strip()
     if member_name:
-        member = _fuzzy_member(member_name, household.member_set.filter(is_active=True))
+        member = _fuzzy_member(member_name, household.members.filter(is_active=True))
 
     # Account lookup by name
     account = None
