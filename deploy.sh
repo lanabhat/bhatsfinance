@@ -4,19 +4,10 @@
 # Usage:
 #   ./deploy.sh
 #
-# Set PA_WSGI_FILE once (e.g. in ~/.bashrc) or pass it inline:
-#   PA_WSGI_FILE=/var/www/yourusername_pythonanywhere_com_wsgi.py ./deploy.sh
+# Pulls latest main, runs migrations and collectstatic. Restart the web
+# app manually from the PythonAnywhere dashboard afterwards.
 
 set -euo pipefail
-
-WSGI_FILE="${PA_WSGI_FILE:-}"
-
-if [ -z "$WSGI_FILE" ]; then
-  echo "PA_WSGI_FILE is not set."
-  echo "Set it to your WSGI config file path, e.g.:"
-  echo "  export PA_WSGI_FILE=/var/www/yourusername_pythonanywhere_com_wsgi.py"
-  exit 1
-fi
 
 echo "==> git pull"
 git pull
@@ -27,13 +18,11 @@ if [ -f ".venv/bin/activate" ]; then
   source .venv/bin/activate
 fi
 
-echo "==> collectstatic"
-python manage.py collectstatic --noinput
 
 echo "==> migrate"
 python manage.py migrate --noinput
 
-echo "==> reloading web app"
-touch "$WSGI_FILE"
+echo "==> collectstatic"
+python manage.py collectstatic --noinput
 
-echo "Done. Changes will be live within a few seconds."
+echo "Done. Restart the web app from the PythonAnywhere dashboard to apply changes."
