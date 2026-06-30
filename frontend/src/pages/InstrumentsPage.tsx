@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { getJson, toQueryString, unwrapList, deleteJson } from '../api/http'
-import { useMaskedFmt } from '../components/common/Money'
+import { Money } from '../components/common/Money'
 import { portfolioApi } from '../api/portfolioApi'
 import { AssetCategoryForm } from '../components/assets/AssetCategoryForm'
 import { InstrumentForm } from '../components/assets/InstrumentForm'
 import { InstrumentRow } from '../components/assets/InstrumentRow'
+import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
+import { useExpandable } from '../hooks/useExpandable'
 import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
@@ -58,7 +60,7 @@ function OwnershipRow({ name, subtitle, currentMemberId, memberOptions, onSave }
         </select>
         {isDirty && (
           <button type="button" disabled={saving} onClick={save}
-            className="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            className="shrink-0 rounded-lg bg-primary-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
             {saving ? '…' : 'Save'}
           </button>
         )}
@@ -112,8 +114,6 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
     catch { setError('Failed to delete instrument.'); setDeleting(false) }
   }
 
-  const fmt = useMaskedFmt()
-
   return (
     <div className="grid gap-4 px-5 py-4">
       <div className="rounded-xl bg-red-50 dark:bg-red-900/15 border border-red-200 p-3 text-center">
@@ -140,7 +140,7 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
               txs.slice(0, 5).map((t) => (
                 <div key={t.id} className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 last:border-0">
                   <p className="text-xs text-[var(--text-2)]">{t.tx_date} · {t.transaction_type}</p>
-                  <p className="text-xs font-medium text-[var(--text-2)]">{fmt(t.amount)}</p>
+                  <Money value={t.amount} className="text-xs font-medium text-[var(--text-2)]" />
                 </div>
               ))
             )}
@@ -164,7 +164,7 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
               valuations.slice(0, 5).map((v) => (
                 <div key={v.id} className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 last:border-0">
                   <p className="text-xs text-[var(--text-2)]">{v.valuation_date}</p>
-                  <p className="text-xs font-medium text-[var(--text-2)]">{v.market_value ? fmt(v.market_value) : v.unit_price ? `@ ${v.unit_price}` : '—'}</p>
+                  <p className="text-xs font-medium text-[var(--text-2)]">{v.market_value ? <Money value={v.market_value} /> : v.unit_price ? `@ ${v.unit_price}` : '—'}</p>
                 </div>
               ))
             )}
@@ -228,6 +228,7 @@ export function InstrumentsPage() {
   const [sortBy, setSortBy] = useState<SortBy>('name')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
+  const cardExpand = useExpandable<number>()
 
   const toggleGroup = (key: string) =>
     setCollapsed((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
@@ -281,13 +282,42 @@ export function InstrumentsPage() {
   const afterSave = async () => { close(); await load() }
 
   const pillCls = (active: boolean) =>
-    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`
+    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`
 
   const renderRow = (inst: Instrument) => {
     const cat = categories.find((c) => c.id === inst.asset_category)
+    const isExpanded = cardExpand.isExpanded(inst.id)
     return (
-      <InstrumentRow key={inst.id} instrument={inst} category={cat}
-        onClick={canWrite ? () => setSheet({ type: 'instrument', item: inst }) : undefined} />
+      <ExpandableGridCard
+        key={inst.id}
+        expanded={isExpanded}
+        onToggle={() => cardExpand.toggle(inst.id)}
+        className={isExpanded ? 'ring-2 ring-primary-400 ring-offset-1 rounded-xl' : ''}
+        collapsed={<InstrumentRow instrument={inst} category={cat} />}
+      >
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <dt className="text-xs text-[var(--text-muted)]">Owner</dt>
+              <dd className="text-[var(--text)]">{ownerMap.get(inst.id) ?? 'Unassigned'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--text-muted)]">Category</dt>
+              <dd className="text-[var(--text)]">{cat?.name ?? 'Uncategorised'}</dd>
+            </div>
+          </dl>
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={() => setSheet({ type: 'instrument', item: inst })} disabled={!canWrite}
+              className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
+              Edit
+            </button>
+            <button type="button" onClick={() => setSheet({ type: 'delete', instrument: inst })} disabled={!canWrite}
+              className="flex-1 rounded-lg border border-red-200 py-2 text-sm text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
+              Delete
+            </button>
+          </div>
+        </div>
+      </ExpandableGridCard>
     )
   }
 
@@ -307,7 +337,7 @@ export function InstrumentsPage() {
           ))}
         </div>
         <button type="button" onClick={() => setSheet({ type: 'instrument' })} disabled={!canWrite}
-          className="ml-auto shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          className="ml-auto shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
           + Add Instrument
         </button>
       </div>
@@ -321,7 +351,7 @@ export function InstrumentsPage() {
           <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first instrument.</p>
         </div>
       ) : groupBy === 'none' ? (
-        <div className="grid gap-2">{instruments.map(renderRow)}</div>
+        <div className="card-grid grid gap-3">{instruments.map(renderRow)}</div>
       ) : (
         <div className="grid gap-1">
           {Array.from(grouped.entries()).map(([label, { items, color }]) => {
@@ -340,7 +370,7 @@ export function InstrumentsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </button>
-                {isOpen && <div className="grid gap-2 pb-2">{items.map(renderRow)}</div>}
+                {isOpen && <div className="card-grid grid gap-3 pb-2">{items.map(renderRow)}</div>}
               </div>
             )
           })}
@@ -351,7 +381,7 @@ export function InstrumentsPage() {
       <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Categories</p>
-          <button type="button" onClick={() => setSheet({ type: 'category' })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-300 disabled:opacity-50">+ Add</button>
+          <button type="button" onClick={() => setSheet({ type: 'category' })} disabled={!canWrite} className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-300 disabled:opacity-50">+ Add</button>
         </div>
         {categories.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">No categories yet.</p>
@@ -362,7 +392,7 @@ export function InstrumentsPage() {
                 <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: cat.color }} />
                 <p className="flex-1 text-sm text-[var(--text-2)]">{cat.name}</p>
                 <p className="text-xs text-[var(--text-muted)]">{cat.instrument_count}</p>
-                <button type="button" onClick={() => setSheet({ type: 'category', item: cat })} disabled={!canWrite} className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-300 disabled:opacity-50">Edit</button>
+                <button type="button" onClick={() => setSheet({ type: 'category', item: cat })} disabled={!canWrite} className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-300 disabled:opacity-50">Edit</button>
               </div>
             ))}
           </div>

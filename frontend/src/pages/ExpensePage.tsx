@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { expenseApi } from '../api/expenseApi'
 import type { RecordTransactionPayload } from '../api/expenseApi'
-import { useMaskedFmt } from '../components/common/Money'
+import { Money } from '../components/common/Money'
 import { DeleteButton } from '../components/common/DeleteButton'
 import { QuickExpenseForm } from '../components/expenses/QuickExpenseForm'
 import { ReassignDialog } from '../components/expenses/ReassignDialog'
@@ -32,7 +32,6 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   const [showCategoryDrawer, setShowCategoryDrawer] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const fmt = useMaskedFmt()
 
   // Category management state
   const [editingCat, setEditingCat] = useState<ExpenseCategory | null>(null)
@@ -296,7 +295,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
                   <div className="flex-1 overflow-hidden rounded-full bg-[var(--surface-3)]" style={{ height: 6 }}>
                     <div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${pct}%` }} />
                   </div>
-                  <span className="w-20 shrink-0 text-right text-xs font-medium tabular-nums text-[var(--text-2)]">{fmt(total)}</span>
+                  <Money value={total} className="w-20 shrink-0 text-right text-xs font-medium tabular-nums text-[var(--text-2)]" />
                   <span className="w-8 shrink-0 text-right text-[10px] text-[var(--text-faint)]">{pct.toFixed(0)}%</span>
                 </div>
               )
@@ -305,7 +304,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
               <span className="w-5" />
               <span className="w-28 shrink-0 text-xs font-semibold text-[var(--text)]">Total</span>
               <div className="flex-1" />
-              <span className="w-20 shrink-0 text-right text-sm font-bold tabular-nums text-[var(--text)]">{fmt(monthlyTotal)}</span>
+              <Money value={monthlyTotal} className="w-20 shrink-0 text-right text-sm font-bold tabular-nums text-[var(--text)]" />
               <span className="w-8" />
             </div>
           </div>
@@ -332,9 +331,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                     {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
                   </span>
-                  <span className="text-[11px] font-semibold tabular-nums text-[var(--text-muted)]">
-                    {fmt(dayItems.reduce((s, x) => s + Number(x.amount), 0))}
-                  </span>
+                  <Money value={dayItems.reduce((s, x) => s + Number(x.amount), 0)} className="text-[11px] font-semibold tabular-nums text-[var(--text-muted)]" />
                 </div>
                 {dayItems.map(x => {
                   const cat = x.spend_category || 'other'
@@ -350,9 +347,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
                           {x.member ? ` · ${memberOptions.find(m => m.id === x.member)?.label ?? `Member #${x.member}`}` : ''}
                         </p>
                       </div>
-                      <span className="shrink-0 text-sm font-semibold tabular-nums text-[var(--text)]">
-                        {fmt(Number(x.amount))}
-                      </span>
+                      <Money value={Number(x.amount)} className="shrink-0 text-sm font-semibold tabular-nums text-[var(--text)]" />
                       {canWrite && (
                         <button
                           type="button"

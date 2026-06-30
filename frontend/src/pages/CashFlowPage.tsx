@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import { getJson, toQueryString } from '../api/http'
 import { CashFlowChart, type CashFlowPoint } from '../components/charts/CashFlowChart'
-import { useMaskedFmt } from '../components/common/Money'
+import { Money } from '../components/common/Money'
 import { normalizeApiError } from '../hooks/errorUtils'
 
 type Props = { householdId: number }
 
 export function CashFlowPage({ householdId }: Props) {
-  const fmt = useMaskedFmt()
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [data, setData] = useState<CashFlowPoint[]>([])
@@ -38,15 +37,15 @@ export function CashFlowPage({ householdId }: Props) {
       <section className="cards">
         <article className="card">
           <h2>Income</h2>
-          <strong>{fmt(totalIncome)}</strong>
+          <strong><Money value={totalIncome} /></strong>
         </article>
         <article className="card">
           <h2>Expense</h2>
-          <strong>{fmt(totalExpense)}</strong>
+          <strong><Money value={totalExpense} /></strong>
         </article>
         <article className="card">
           <h2>Investment</h2>
-          <strong>{fmt(totalInvestment)}</strong>
+          <strong><Money value={totalInvestment} /></strong>
         </article>
         <article className="card">
           <h2>Savings Rate</h2>
@@ -88,10 +87,10 @@ export function CashFlowPage({ householdId }: Props) {
             {data.map((r) => (
               <tr key={r.month}>
                 <td>{r.month}</td>
-                <td>{fmt(r.income)}</td>
-                <td>{fmt(r.expense)}</td>
-                <td>{fmt(r.investment)}</td>
-                <td style={{ color: r.savings >= 0 ? '#10b981' : '#f43f5e' }}>{fmt(r.savings)}</td>
+                <td><Money value={r.income} /></td>
+                <td><Money value={r.expense} /></td>
+                <td><Money value={r.investment} /></td>
+                <td style={{ color: r.savings >= 0 ? '#10b981' : '#f43f5e' }}><Money value={r.savings} /></td>
               </tr>
             ))}
           </tbody>

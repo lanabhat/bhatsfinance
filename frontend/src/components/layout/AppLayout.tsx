@@ -164,14 +164,12 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-[var(--bg)]">
-      {/* Ambient gradient backdrop */}
-      <div className="ambient-bg" aria-hidden="true" />
       {/* ── Desktop sidebar ── */}
       <aside className={`fixed inset-y-0 left-0 z-30 hidden ${sidebarWidth} flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-[width] duration-200 ease-out md:flex`}>
         {/* Logo */}
         <div className={`flex h-14 shrink-0 items-center border-b border-[var(--border)] ${expanded ? 'gap-2.5 px-4' : 'justify-center'}`}>
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-xs font-bold text-white shadow-sm">W</span>
-          {expanded && <span className="truncate text-sm font-semibold tracking-tight text-[var(--text)]">Wealth</span>}
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-xs font-bold text-white shadow-sm">W</span>
+          {expanded && <span className="font-serif truncate text-sm font-semibold tracking-tight text-[var(--text)]">Wealth</span>}
         </div>
         {/* Nav items */}
         <nav className={`flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto py-3 ${expanded ? 'px-2' : 'items-center'}`}>
@@ -255,10 +253,10 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
       {/* ── Main content ── */}
       <div className={`relative z-10 transition-[margin] duration-200 ease-out ${mainOffset}`}>
         {/* Header */}
-        <header className="sticky top-0 z-20 flex h-14 min-w-0 items-center justify-between border-b border-[var(--glass-border)] bg-[var(--glass-surface)] px-4 pt-safe backdrop-blur-xl md:px-6 md:pt-0">
+        <header className="sticky top-0 z-20 flex h-14 min-w-0 items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-4 pt-safe md:px-6 md:pt-0">
           <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 text-xs font-bold text-white md:hidden">W</span>
-            <h1 className="text-base font-semibold tracking-tight text-[var(--text)]">{pageTitle}</h1>
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-600 text-xs font-bold text-white md:hidden">W</span>
+            <h1 className="font-serif text-base font-semibold tracking-tight text-[var(--text)]">{pageTitle}</h1>
           </div>
           <div className="flex items-center gap-1.5">
             {/* Theme toggle */}
@@ -380,7 +378,7 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
       </div>
 
       {/* ── Mobile bottom nav ── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-[var(--glass-border)] bg-[var(--glass-surface)] pb-safe backdrop-blur-xl md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-[var(--border)] bg-[var(--surface)] pb-safe md:hidden">
         {MOBILE_TABS.map((tab) => {
           const active = route === tab.key
           return (

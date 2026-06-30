@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { fdDetailsApi } from '../api/fdDetailsApi'
 import { valuationApi } from '../api/valuationApi'
-import { useMaskedFmt } from '../components/common/Money'
+import { Money } from '../components/common/Money'
 import { DeleteButton } from '../components/common/DeleteButton'
 import { Drawer } from '../components/ui/Drawer'
 import { Button } from '../components/ui/Button'
@@ -38,7 +38,6 @@ type GroupFilter = 'all' | 'account' | 'instrument'
 
 export function ValuationPage({ householdId, accountOptions, instrumentOptions, canDelete }: Props) {
   const { canWrite } = useAuth()
-  const fmt = useMaskedFmt()
 
   const [items, setItems] = useState<ValuationSnapshot[]>([])
   const [loading, setLoading] = useState(false)
@@ -197,7 +196,7 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
                 ].map((s) => (
                   <div key={s.label} className="rounded-lg bg-[var(--surface)] border border-indigo-100 px-3 py-2 dark:border-indigo-900/40">
                     <p className="text-[11px] text-[var(--text-muted)]">{s.label}</p>
-                    <p className="text-base font-bold text-[var(--text)]">{fmt(s.value)}</p>
+                    <Money value={s.value} className="text-base font-bold text-[var(--text)]" />
                   </div>
                 ))}
               </div>
@@ -208,7 +207,7 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
                   <div className="flex flex-wrap gap-1">
                     {snapshotResult.auto_computed.map((x, i) => (
                       <span key={i} className="rounded-full bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-200 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/25 dark:border-emerald-800/40 dark:text-emerald-300">
-                        {x.name} — {fmt(x.value)}
+                        {x.name} — <Money value={x.value} />
                       </span>
                     ))}
                   </div>
@@ -278,13 +277,13 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-[var(--text-2)]">
-                    {x.market_value ? fmt(x.market_value) : '—'}
+                    {x.market_value ? <Money value={x.market_value} /> : '—'}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-[var(--text-2)]">
-                    {x.balance ? fmt(x.balance) : '—'}
+                    {x.balance ? <Money value={x.balance} /> : '—'}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-[var(--text-muted)] text-xs">
-                    {x.unit_price ? fmt(x.unit_price) : '—'}
+                    {x.unit_price ? <Money value={x.unit_price} /> : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <Badge label={x.source} color={x.source === 'manual' ? 'slate' : x.source === 'api' ? 'blue' : 'green'} />

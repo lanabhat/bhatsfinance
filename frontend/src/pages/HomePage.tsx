@@ -5,17 +5,23 @@ import { MaturingFDsCard } from '../components/home/MaturingFDsCard'
 import { MarkSipPaidSheet } from '../components/home/MarkSipPaidSheet'
 import { MarkAllSipsPaidSheet } from '../components/home/MarkAllSipsPaidSheet'
 import { MissedPremiumsCard } from '../components/home/MissedPremiumsCard'
+import { InsuranceSummaryCard } from '../components/home/InsuranceSummaryCard'
 import { MemberNetWorthRow } from '../components/home/MemberNetWorthRow'
+import { MemberViewSelector } from '../components/home/MemberViewSelector'
 import { MemberWealthBreakdown } from '../components/home/MemberWealthBreakdown'
 import { NetWorthHero } from '../components/home/NetWorthHero'
 import { RecentHoldings } from '../components/home/RecentHoldings'
 import { SummaryTable } from '../components/home/SummaryTable'
 import { NetWorthTrendChart } from '../components/charts/NetWorthTrendChart'
-import { useMaskedFmt } from '../components/common/Money'
+import { AllocationDonutChart } from '../components/charts/AllocationDonutChart'
+import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
+import { useExpandable } from '../hooks/useExpandable'
+import { Money } from '../components/common/Money'
 import { useApp } from '../context/AppContext'
 import { fdDetailsApi } from '../api/fdDetailsApi'
+import { insuranceApi } from '../api/insuranceApi'
 import { getJson, toQueryString } from '../api/http'
-import type { CategoryBreakdownItem, DashboardAccount, DashboardHolding, MaturingFD, MemberAccount, MissedSipAlert } from '../types/domain'
+import type { CategoryBreakdownItem, DashboardHolding, InsuranceSummary, MaturingFD, MemberAccount, MissedSipAlert } from '../types/domain'
 
 const TYPE_ICONS: Record<string, string> = {
   mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡',
@@ -39,19 +45,17 @@ function saveExcluded(s: Set<string>) {
 type Props = { onNavigate: (route: string) => void }
 
 export function HomePage({ onNavigate }: Props) {
-  const fmtINR = useMaskedFmt()
   const { householdId, dashboard, dashboardLoading, asOf, setAsOf, refreshDashboard, accounts, categories } = useApp()
   const [excluded, setExcluded] = useState<Set<string>>(loadExcluded)
-  const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null)
-  const [memberHoldings, setMemberHoldings] = useState<DashboardHolding[]>([])
-  const [memberAccounts, setMemberAccounts] = useState<MemberAccount[]>([])
-  const [memberHoldingsLoading, setMemberHoldingsLoading] = useState(false)
+  const [viewMemberId, setViewMemberId] = useState<number | null>(null)
+  const memberExpand = useExpandable<number>()
   const [allMemberHoldings, setAllMemberHoldings] = useState<Record<number, DashboardHolding[]>>({})
-  const [allMemberAccounts, setAllMemberAccounts] = useState<Record<number, DashboardAccount[]>>({})
+  const [allMemberAccounts, setAllMemberAccounts] = useState<Record<number, MemberAccount[]>>({})
   const [maturingFDs, setMaturingFDs] = useState<MaturingFD[]>([])
   const MATURING_WINDOW_DAYS = 180
   const [paidSheetTarget, setPaidSheetTarget] = useState<MissedSipAlert | null>(null)
   const [bulkSheetOpen, setBulkSheetOpen] = useState(false)
+  const [insuranceSummary, setInsuranceSummary] = useState<InsuranceSummary | null>(null)
 
   useEffect(() => {
     let active = true
@@ -62,23 +66,12 @@ export function HomePage({ onNavigate }: Props) {
   }, [householdId])
 
   useEffect(() => {
-    if (expandedMemberId === null) { setMemberHoldings([]); setMemberAccounts([]); return }
     let active = true
-    setMemberHoldingsLoading(true)
-    const q = toQueryString({ household_id: householdId, as_of: asOf, member_id: expandedMemberId })
-    getJson<{ holdings: DashboardHolding[]; accounts: MemberAccount[] }>(`/api/holdings?${q}`)
-      .then((d) => {
-        if (active) {
-          setMemberHoldings(d.holdings ?? [])
-          setMemberAccounts(d.accounts ?? [])
-          setAllMemberHoldings(prev => ({ ...prev, [expandedMemberId]: d.holdings ?? [] }))
-          setAllMemberAccounts(prev => ({ ...prev, [expandedMemberId]: d.accounts ?? [] }))
-        }
-      })
-      .catch(() => { if (active) { setMemberHoldings([]); setMemberAccounts([]) } })
-      .finally(() => { if (active) setMemberHoldingsLoading(false) })
+    insuranceApi.fetchSummary(householdId)
+      .then((s) => { if (active) setInsuranceSummary(s) })
+      .catch(() => { if (active) setInsuranceSummary(null) })
     return () => { active = false }
-  }, [expandedMemberId, householdId, asOf])
+  }, [householdId])
 
   const requestMemberHoldings = (memberId: number) => {
     if (allMemberHoldings[memberId] !== undefined) return
@@ -86,7 +79,7 @@ export function HomePage({ onNavigate }: Props) {
     getJson<{ holdings: DashboardHolding[]; accounts: MemberAccount[] }>(`/api/holdings?${q}`)
       .then((d) => {
         setAllMemberHoldings(prev => ({ ...prev, [memberId]: d.holdings ?? [] }))
-        setAllMemberAccounts(prev => ({ ...prev, [memberId]: (d.accounts ?? []).map(a => ({ account_id: a.account_id, account_name: a.account_name, account_type: a.account_type, balance: a.balance })) }))
+        setAllMemberAccounts(prev => ({ ...prev, [memberId]: d.accounts ?? [] }))
       })
       .catch(() => {
         setAllMemberHoldings(prev => ({ ...prev, [memberId]: [] }))
@@ -100,12 +93,28 @@ export function HomePage({ onNavigate }: Props) {
     dashboard.membersNetworth.forEach(m => requestMemberHoldings(m.member_id))
   }, [householdId, asOf, dashboard.membersNetworth])
 
+  // Member-scoped base holdings/accounts: when a member is selected via the
+  // "Viewing" selector, every downstream figure (KPI, donut, type filter,
+  // breakdown) is computed from that member's data instead of the household's.
+  const isMemberView = viewMemberId !== null
+  const baseHoldings = useMemo(
+    () => (isMemberView ? (allMemberHoldings[viewMemberId] ?? []) : dashboard.holdings),
+    [isMemberView, viewMemberId, allMemberHoldings, dashboard.holdings],
+  )
+  const baseAccountsForMember = useMemo(
+    () => (isMemberView ? (allMemberAccounts[viewMemberId] ?? []) : null),
+    [isMemberView, viewMemberId, allMemberAccounts],
+  )
+  const baseNetworth = isMemberView
+    ? dashboard.membersNetworth.find((m) => m.member_id === viewMemberId)?.networth ?? '0'
+    : dashboard.networth
+
   // All instrument types present in holdings
   const presentTypes = useMemo(() => {
     const seen = new Set<string>()
-    for (const h of dashboard.holdings) seen.add(h.instrument_type)
+    for (const h of baseHoldings) seen.add(h.instrument_type)
     return [...seen].sort()
-  }, [dashboard.holdings])
+  }, [baseHoldings])
 
   const toggleType = (type: string) => {
     setExcluded((prev) => {
@@ -118,21 +127,23 @@ export function HomePage({ onNavigate }: Props) {
   }
 
   const activeHoldings = useMemo(
-    () => dashboard.holdings.filter((h) => !excluded.has(h.instrument_type)),
-    [dashboard.holdings, excluded],
+    () => baseHoldings.filter((h) => !excluded.has(h.instrument_type)),
+    [baseHoldings, excluded],
   )
 
   const filteredNetworth = useMemo(() => {
-    if (excluded.size === 0) return null // show full networth from dashboard
+    if (excluded.size === 0 && !isMemberView) return null // show full networth from dashboard
     const holdingsTotal = activeHoldings.reduce((s, h) => s + parseFloat(h.market_value), 0)
-    // accounts are not filtered — only instrument holdings are excluded
-    const fullHoldingsTotal = dashboard.holdings.reduce((s, h) => s + parseFloat(h.market_value), 0)
-    const accountsTotal = parseFloat(dashboard.networth) - fullHoldingsTotal
+    // accounts are not filtered by type — only instrument holdings are excluded
+    const fullHoldingsTotal = baseHoldings.reduce((s, h) => s + parseFloat(h.market_value), 0)
+    const accountsTotal = isMemberView
+      ? (baseAccountsForMember ?? []).reduce((s, a) => s + parseFloat(a.balance), 0)
+      : parseFloat(dashboard.networth) - fullHoldingsTotal
     return String(holdingsTotal + accountsTotal)
-  }, [excluded, activeHoldings, dashboard])
+  }, [excluded, activeHoldings, baseHoldings, isMemberView, baseAccountsForMember, dashboard])
 
   const filteredBreakdown = useMemo((): CategoryBreakdownItem[] => {
-    if (excluded.size === 0) return dashboard.categoryBreakdown
+    if (excluded.size === 0 && !isMemberView) return dashboard.categoryBreakdown
     // Recompute breakdown from active holdings only
     const byCategory = new Map<number | null, { name: string; color: string; icon: string; total: number }>()
     for (const h of activeHoldings) {
@@ -159,9 +170,9 @@ export function HomePage({ onNavigate }: Props) {
         allocation_percent: total > 0 ? String(((v.total / total) * 100).toFixed(2)) : '0',
       }))
       .sort((a, b) => parseFloat(b.market_value) - parseFloat(a.market_value))
-  }, [excluded, activeHoldings, dashboard])
+  }, [excluded, activeHoldings, dashboard, isMemberView])
 
-  const displayNetworth = filteredNetworth ?? dashboard.networth
+  const displayNetworth = filteredNetworth ?? baseNetworth
   const isFiltered = excluded.size > 0
 
   if (dashboardLoading && dashboard.holdings.length === 0) {
@@ -174,14 +185,22 @@ export function HomePage({ onNavigate }: Props) {
 
   return (
     <div className="grid min-w-0 gap-5">
-      <NetWorthHero
-        networth={displayNetworth}
-        xirr={isFiltered ? null : dashboard.xirr}
-        asOf={asOf}
-        onDateChange={setAsOf}
-        onRefresh={refreshDashboard}
-        loading={dashboardLoading}
-      />
+      <MemberViewSelector members={dashboard.membersNetworth} selected={viewMemberId} onSelect={setViewMemberId} />
+
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+        <NetWorthHero
+          networth={displayNetworth}
+          xirr={isFiltered || isMemberView ? null : dashboard.xirr}
+          asOf={asOf}
+          onDateChange={setAsOf}
+          onRefresh={refreshDashboard}
+          loading={dashboardLoading}
+          label={isMemberView ? `${dashboard.membersNetworth.find((m) => m.member_id === viewMemberId)?.member_name}'s Net Worth` : 'Total Net Worth'}
+        />
+        {filteredBreakdown.length > 0 && (
+          <AllocationDonutChart items={filteredBreakdown} />
+        )}
+      </div>
 
       {/* Asset type filter pills */}
       {presentTypes.length > 0 && (
@@ -190,7 +209,7 @@ export function HomePage({ onNavigate }: Props) {
             <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Filter by Type</h2>
             {isFiltered && (
               <button type="button" onClick={() => { setExcluded(new Set()); saveExcluded(new Set()) }}
-                className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-300">
+                className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-300">
                 Reset
               </button>
             )}
@@ -207,20 +226,20 @@ export function HomePage({ onNavigate }: Props) {
                   onClick={() => toggleType(type)}
                   className={`flex min-w-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
                     active
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-primary-600 text-white'
                       : 'bg-[var(--surface-2)] text-[var(--text-muted)] line-through'
                   }`}
                 >
                   <span className="shrink-0">{TYPE_ICONS[type] ?? '💼'}</span>
                   <span className="truncate max-w-[8rem]">{type.replace(/_/g, ' ')}</span>
-                  {active && <span className="shrink-0 opacity-70">{fmtINR(value)}</span>}
+                  {active && <Money value={value} className="shrink-0 opacity-70" />}
                 </button>
               )
             })}
           </div>
           {isFiltered && (
             <p className="mt-2 text-xs text-[var(--text-muted)]">
-              Showing {fmtINR(parseFloat(displayNetworth))} of {fmtINR(parseFloat(dashboard.networth))} total net worth
+              Showing <Money value={parseFloat(displayNetworth)} /> of <Money value={parseFloat(dashboard.networth)} /> total net worth
             </p>
           )}
         </div>
@@ -239,39 +258,37 @@ export function HomePage({ onNavigate }: Props) {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">By Member</h2>
-            <span className="text-[10px] text-[var(--text-muted)]">Tap a row to see breakdown</span>
+            <span className="text-[10px] text-[var(--text-muted)]">Tap a card to see breakdown</span>
           </div>
-          <div className="grid gap-2">
+          <div className="card-grid grid gap-3">
             {dashboard.membersNetworth.map((m) => {
-              const isExpanded = expandedMemberId === m.member_id
+              const isExpanded = memberExpand.isExpanded(m.member_id)
+              const holdings = allMemberHoldings[m.member_id] ?? []
+              const memberAccts = allMemberAccounts[m.member_id] ?? []
+              const loading = allMemberHoldings[m.member_id] === undefined
               return (
-                <div key={m.member_id}>
-                  <button
-                    type="button"
-                    onClick={() => setExpandedMemberId(isExpanded ? null : m.member_id)}
-                    className={`block w-full text-left transition-shadow ${isExpanded ? 'ring-2 ring-primary-400 ring-offset-1 rounded-xl' : 'hover:opacity-90'}`}
-                  >
-                    <MemberNetWorthRow member={m} householdTotal={parseFloat(dashboard.networth)} />
-                  </button>
-                  {isExpanded && (
-                    <div className="mt-2 sm:ml-3 sm:border-l-2 border-primary-200 sm:pl-3">
-                      {memberHoldingsLoading ? (
-                        <p className="py-2 text-xs text-[var(--text-muted)]">Loading {m.member_name}'s breakdown…</p>
-                      ) : memberHoldings.length === 0 && memberAccounts.length === 0 ? (
-                        <p className="py-2 text-xs text-[var(--text-muted)]">No holdings or accounts recorded for {m.member_name}.</p>
-                      ) : (
-                        <MemberWealthBreakdown
-                          memberName={m.member_name}
-                          holdings={memberHoldings}
-                          accounts={memberAccounts}
-                          memberTotal={parseFloat(m.networth)}
-                          householdTotal={parseFloat(dashboard.networth)}
-                          categories={categories}
-                        />
-                      )}
-                    </div>
+                <ExpandableGridCard
+                  key={m.member_id}
+                  expanded={isExpanded}
+                  onToggle={() => memberExpand.toggle(m.member_id)}
+                  className={isExpanded ? 'ring-2 ring-primary-400 ring-offset-1 rounded-xl' : ''}
+                  collapsed={<MemberNetWorthRow member={m} householdTotal={parseFloat(dashboard.networth)} />}
+                >
+                  {loading ? (
+                    <p className="py-2 text-xs text-[var(--text-muted)]">Loading {m.member_name}'s breakdown…</p>
+                  ) : holdings.length === 0 && memberAccts.length === 0 ? (
+                    <p className="py-2 text-xs text-[var(--text-muted)]">No holdings or accounts recorded for {m.member_name}.</p>
+                  ) : (
+                    <MemberWealthBreakdown
+                      memberName={m.member_name}
+                      holdings={holdings}
+                      accounts={memberAccts}
+                      memberTotal={parseFloat(m.networth)}
+                      householdTotal={parseFloat(dashboard.networth)}
+                      categories={categories}
+                    />
                   )}
-                </div>
+                </ExpandableGridCard>
               )
             })}
           </div>
@@ -311,7 +328,7 @@ export function HomePage({ onNavigate }: Props) {
                   <p className="truncate text-sm font-medium text-[var(--text)]">{sip.instrument}</p>
                   <p className="text-xs text-[var(--text-muted)]">Due {sip.due_date} · {sip.account}</p>
                 </div>
-                <p className="shrink-0 text-sm font-bold text-amber-700 dark:text-amber-300">{fmtINR(sip.expected_amount)}</p>
+                <Money value={sip.expected_amount} className="shrink-0 text-sm font-bold text-amber-700 dark:text-amber-300" />
                 <button
                   type="button"
                   onClick={() => setPaidSheetTarget(sip)}
@@ -348,6 +365,8 @@ export function HomePage({ onNavigate }: Props) {
         accountOptions={accounts}
         onPaid={refreshDashboard}
       />
+
+      <InsuranceSummaryCard summary={insuranceSummary} />
 
       {dashboard.holdings.length > 0 && (
         <SummaryTable

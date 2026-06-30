@@ -1,4 +1,4 @@
-import { useMaskedFmt } from '../common/Money'
+import { Money } from '../common/Money'
 import type { MemberNetWorth, DashboardHolding } from '../../types/domain'
 
 type Props = {
@@ -9,8 +9,6 @@ type Props = {
 }
 
 export function MemberKpiStrip({ members, holdingsByMember, selectedMemberId, onSelect }: Props) {
-  const fmt = useMaskedFmt()
-
   return (
     <div className="flex flex-wrap gap-3">
       {members.filter(m => m.include_in_networth).map(m => {
@@ -37,10 +35,10 @@ export function MemberKpiStrip({ members, holdingsByMember, selectedMemberId, on
               {m.member_name}
               <span className="ml-1 normal-case font-normal">({m.relation_type})</span>
             </span>
-            <span className="text-lg font-bold text-[var(--text)]">{fmt(current)}</span>
+            <span className="text-lg font-bold text-[var(--text)]"><Money value={current} /></span>
             {gainPct !== null && (
               <span className={`text-xs font-medium ${positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                {positive ? '+' : ''}{fmt(gain)} ({positive ? '+' : ''}{gainPct.toFixed(1)}%)
+                {positive ? '+' : ''}<Money value={gain} /> ({positive ? '+' : ''}{gainPct.toFixed(1)}%)
               </span>
             )}
           </button>

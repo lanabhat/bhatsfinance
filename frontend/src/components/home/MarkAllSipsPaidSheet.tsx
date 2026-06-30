@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { alertsApi } from '../../api/alertsApi'
 import { DateField, SelectField } from '../common/FormField'
-import { useMaskedFmt } from '../common/Money'
+import { Money } from '../common/Money'
 import { normalizeApiError } from '../../hooks/errorUtils'
 import type { MissedSipAlert, OptionItem } from '../../types/domain'
 
@@ -17,7 +17,6 @@ const ACCOUNT_MODE = {
 } as const
 
 export function MarkAllSipsPaidSheet({ alerts, accountOptions, onClose, onPaid }: Props) {
-  const fmtINR = useMaskedFmt()
   const [paidOn, setPaidOn] = useState(new Date().toISOString().slice(0, 10))
   const [deduct, setDeduct] = useState(true)
   const [updateHolding, setUpdateHolding] = useState(true)
@@ -65,7 +64,7 @@ export function MarkAllSipsPaidSheet({ alerts, accountOptions, onClose, onPaid }
           <div>
             <p className="text-base font-semibold text-[var(--text)]">Mark all SIPs as paid</p>
             <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-              {alerts.length} item{alerts.length === 1 ? '' : 's'} · total {fmtINR(totalAmount)}
+              {alerts.length} item{alerts.length === 1 ? '' : 's'} · total <Money value={totalAmount} />
             </p>
           </div>
           <button type="button" onClick={onClose} className="text-xl text-[var(--text-muted)] hover:text-[var(--text-2)]">&times;</button>
@@ -117,7 +116,7 @@ export function MarkAllSipsPaidSheet({ alerts, accountOptions, onClose, onPaid }
               {alerts.map((a) => (
                 <li key={`${a.mandate_id}-${a.due_date}`} className="flex justify-between">
                   <span className="truncate">{a.instrument} · {a.due_date}</span>
-                  <span className="ml-2 shrink-0">{fmtINR(a.expected_amount)}</span>
+                  <span className="ml-2 shrink-0"><Money value={a.expected_amount} /></span>
                 </li>
               ))}
             </ul>

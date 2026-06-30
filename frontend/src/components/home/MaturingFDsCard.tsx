@@ -1,4 +1,4 @@
-import { useMaskedFmt } from '../common/Money'
+import { Money } from '../common/Money'
 import type { MaturingFD } from '../../types/domain'
 
 type Props = {
@@ -15,7 +15,6 @@ function formatRemaining(days: number): string {
 }
 
 export function MaturingFDsCard({ items, windowDays }: Props) {
-  const fmtINR = useMaskedFmt()
   if (items.length === 0) return null
 
   return (
@@ -41,7 +40,7 @@ export function MaturingFDsCard({ items, windowDays }: Props) {
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-sm font-bold text-amber-800 dark:text-amber-300">{fmtINR(fd.maturity_value)}</p>
+                  <p className="text-sm font-bold text-amber-800 dark:text-amber-300"><Money value={fd.maturity_value} /></p>
                   <p className="text-xs text-[var(--text-muted)]">{formatRemaining(fd.days_remaining)}</p>
                 </div>
               </div>
@@ -49,7 +48,7 @@ export function MaturingFDsCard({ items, windowDays }: Props) {
                 <div className="h-1.5 rounded-full bg-amber-500 transition-all" style={{ width: `${elapsedPct}%` }} />
               </div>
               <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--text-muted)]">
-                <span>now: {fmtINR(fd.current_value)}</span>
+                <span>now: <Money value={fd.current_value} /></span>
                 <span>{Math.round(elapsedPct)}% of tenure elapsed</span>
               </div>
             </div>

@@ -1,37 +1,41 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
 @import "@fontsource/inter/700.css";
+@import "@fontsource/spectral/500.css";
+@import "@fontsource/spectral/600.css";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Spectral", Georgia, serif;
 
-  /* Primary — indigo */
-  --color-primary-50:  #eef2ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #6366f1;
-  --color-primary-600: #4f46e5;
-  --color-primary-700: #4338ca;
-  --color-primary-800: #3730a3;
-  --color-primary-900: #312e81;
+  /* Primary — rust */
+  --color-primary-50:  #fdf3ec;
+  --color-primary-100: #f7e2cf;
+  --color-primary-200: #f1e3d3;
+  --color-primary-300: #e3a87c;
+  --color-primary-400: #d17d44;
+  --color-primary-500: #c0652c;
+  --color-primary-600: #b4521f;
+  --color-primary-700: #95421a;
+  --color-primary-800: #743315;
+  --color-primary-900: #4d2310;
 
   /* Positive (inflow / gain) */
-  --color-positive-50:  #ecfdf5;
-  --color-positive-100: #d1fae5;
-  --color-positive-500: #10b981;
-  --color-positive-600: #059669;
-  --color-positive-700: #047857;
+  --color-positive-50:  #e3efe6;
+  --color-positive-100: #c5e1cc;
+  --color-positive-500: #2f7d4f;
+  --color-positive-600: #266841;
+  --color-positive-700: #1e5333;
 
   /* Negative (outflow / loss) */
-  --color-negative-50:  #fff1f2;
-  --color-negative-100: #ffe4e6;
-  --color-negative-500: #f43f5e;
-  --color-negative-600: #e11d48;
-  --color-negative-700: #be123c;
+  --color-negative-50:  #f5e2df;
+  --color-negative-100: #ebc5bf;
+  --color-negative-500: #b23b2e;
+  --color-negative-600: #963024;
+  --color-negative-700: #79261c;
 
   /* Accent — amber */
   --color-accent-50:  #fffbeb;
@@ -45,79 +49,89 @@
    ───────────────────────────────────────── */
 
 :root {
-  --bg:          #f7f7f8;
-  --surface:     #ffffff;
-  --surface-2:   #f4f4f5;
-  --surface-3:   #e4e4e7;
-  --border:      #e4e4e7;
-  --border-2:    #d4d4d8;
-  --text:        #18181b;
-  --text-2:      #3f3f46;
-  --text-muted:  #71717a;
-  --text-faint:  #a1a1aa;
-  --positive:    #10b981;
-  --negative:    #f43f5e;
-  --primary:     #4f46e5;
-  --primary-light: #e0e7ff;
+  --bg:          #f4eee3;
+  --surface:     #fffdf9;
+  --surface-2:   #faf4ea;
+  --surface-3:   #f1e3d3;
+  --border:      #e7ddca;
+  --border-2:    #d6c8ac;
+  --text:        #2a231a;
+  --text-2:      #5c5345;
+  --text-muted:  #8a7f6d;
+  --text-faint:  #ab9f8b;
+  --positive:    #2f7d4f;
+  --negative:    #b23b2e;
+  --primary:     #b4521f;
+  --primary-light: #f1e3d3;
+
+  --hero-bg:    #2a231a;
+  --hero-fg:    #f6efe2;
+  --hero-muted: #b6a892;
+  --hero-line:  rgba(246, 239, 226, .14);
 
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 20px;
 
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-hover: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
-  --shadow-modal: 0 20px 60px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-card: 0 1px 2px rgba(60,45,25,.05), 0 10px 28px -16px rgba(60,45,25,.18);
+  --shadow-hover: 0 2px 4px rgba(60,45,25,.06), 0 14px 32px -16px rgba(60,45,25,.22);
+  --shadow-modal: 0 2px 4px rgba(60,45,25,.06), 0 24px 50px -20px rgba(60,45,25,.32);
 
-  /* ── Glass design system (light) ── */
-  --glass-surface: rgba(255, 255, 255, 0.72);
-  --glass-surface-2: rgba(255, 255, 255, 0.55);
-  --glass-border: rgba(255, 255, 255, 0.6);
+  /* ── Glass design system (light) — defined for backward compat, not applied in new components ── */
+  --glass-surface: rgba(255, 253, 249, 0.72);
+  --glass-surface-2: rgba(255, 253, 249, 0.55);
+  --glass-border: rgba(255, 253, 249, 0.6);
   --glass-blur: 16px;
-  --glass-shadow: 0 8px 32px rgba(17, 24, 39, 0.08), 0 1px 2px rgba(17, 24, 39, 0.04);
+  --glass-shadow: 0 8px 32px rgba(42, 35, 26, 0.08), 0 1px 2px rgba(42, 35, 26, 0.04);
   /* Ambient gradient blobs behind the app */
-  --ambient-1: rgba(99, 102, 241, 0.18);   /* indigo */
-  --ambient-2: rgba(168, 85, 247, 0.14);   /* violet */
-  --ambient-3: rgba(16, 185, 129, 0.10);   /* emerald */
+  --ambient-1: rgba(180, 82, 31, 0.16);
+  --ambient-2: rgba(180, 82, 31, 0.10);
+  --ambient-3: rgba(47, 125, 79, 0.08);
   /* Signature accent gradient */
-  --gradient-accent: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
-  --gradient-positive: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  --gradient-accent: linear-gradient(135deg, #b4521f 0%, #c0652c 50%, #d17d44 100%);
+  --gradient-positive: linear-gradient(135deg, #2f7d4f 0%, #4a9c6c 100%);
   /* Glow for hero numbers / focal points */
-  --glow-primary: 0 0 24px rgba(99, 102, 241, 0.35);
+  --glow-primary: 0 0 24px rgba(180, 82, 31, 0.30);
 }
 
 .dark {
-  --bg:          #0f0f10;
-  --surface:     #18181b;
-  --surface-2:   #27272a;
-  --surface-3:   #3f3f46;
-  --border:      #3f3f46;
-  --border-2:    #52525b;
-  --text:        #fafafa;
-  --text-2:      #e4e4e7;
-  --text-muted:  #a1a1aa;
-  --text-faint:  #71717a;
-  --positive:    #34d399;
-  --negative:    #fb7185;
-  --primary:     #818cf8;
-  --primary-light: #312e81;
+  --bg:          #171310;
+  --surface:     #211c16;
+  --surface-2:   #2a241c;
+  --surface-3:   #33281d;
+  --border:      #352d22;
+  --border-2:    #463a2b;
+  --text:        #f3ecdf;
+  --text-2:      #cbc0ac;
+  --text-muted:  #9b8f7b;
+  --text-faint:  #756b5a;
+  --positive:    #74c08c;
+  --negative:    #e88c7c;
+  --primary:     #e3925a;
+  --primary-light: #33281d;
 
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-hover: 0 4px 16px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
-  --shadow-modal: 0 20px 60px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.4);
+  --hero-bg:    #0f0c08;
+  --hero-fg:    #f3ecdf;
+  --hero-muted: #9b8f7b;
+  --hero-line:  rgba(243, 236, 223, .12);
 
-  /* ── Glass design system (dark) ── */
-  --glass-surface: rgba(30, 30, 35, 0.62);
-  --glass-surface-2: rgba(40, 40, 47, 0.5);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --shadow-card: 0 1px 2px rgba(0,0,0,.35), 0 12px 30px -16px rgba(0,0,0,.6);
+  --shadow-hover: 0 2px 6px rgba(0,0,0,.4), 0 16px 36px -16px rgba(0,0,0,.65);
+  --shadow-modal: 0 2px 6px rgba(0,0,0,.4), 0 28px 56px -22px rgba(0,0,0,.75);
+
+  /* ── Glass design system (dark) — defined for backward compat, not applied in new components ── */
+  --glass-surface: rgba(33, 28, 22, 0.62);
+  --glass-surface-2: rgba(42, 36, 28, 0.5);
+  --glass-border: rgba(243, 236, 223, 0.08);
   --glass-blur: 18px;
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --ambient-1: rgba(99, 102, 241, 0.22);
-  --ambient-2: rgba(168, 85, 247, 0.18);
-  --ambient-3: rgba(16, 185, 129, 0.10);
-  --gradient-accent: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
-  --gradient-positive: linear-gradient(135deg, #10b981 0%, #34d399 100%);
-  --glow-primary: 0 0 28px rgba(129, 140, 248, 0.45);
+  --ambient-1: rgba(227, 146, 90, 0.20);
+  --ambient-2: rgba(227, 146, 90, 0.14);
+  --ambient-3: rgba(116, 192, 140, 0.10);
+  --gradient-accent: linear-gradient(135deg, #b4521f 0%, #c0652c 50%, #d17d44 100%);
+  --gradient-positive: linear-gradient(135deg, #2f7d4f 0%, #4a9c6c 100%);
+  --glow-primary: 0 0 28px rgba(227, 146, 90, 0.40);
 }
 
 /* ─────────────────────────────────────────
@@ -185,14 +199,34 @@ main {
    column — and the whole page — past the viewport. Force any single-column
    grid track inside the content area to minmax(0, 1fr) so it can shrink.
    Multi-column grids (those that set grid-template-columns) are unaffected.
+   Declared in @layer base so Tailwind's utilities layer (grid-cols-*,
+   sm:grid-cols-*, etc.) — and .card-grid below — both win over it; Tailwind
+   v4 emits its own classes inside layers, and unlayered rules always beat
+   layered ones regardless of media query or specificity, so this guard must
+   live in a layer too or it silently overrides every responsive grid.
    ───────────────────────────────────────── */
-.main-content :where(.grid) {
-  grid-template-columns: minmax(0, 1fr);
+@layer base {
+  .main-content :where(.grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* ─────────────────────────────────────────
    Component layer
    ───────────────────────────────────────── */
+
+/* Compact card grid — auto-fit columns. Declared unlayered (not in
+   @layer components) so it beats the unlayered overflow guard above:
+   layered rules always lose to unlayered ones in the cascade regardless
+   of specificity, so putting this inside @layer made the guard win. */
+.card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+/* Applied to a card inside .card-grid when expanded: breaks out to a full
+   width row, pushing subsequent rows down; siblings reflow to fill the gap. */
+.grid-card-expanded {
+  grid-column: 1 / -1;
+}
 
 @layer components {
   /* Card — the fundamental surface */
@@ -297,9 +331,10 @@ main {
 
   /* Typography utilities */
   .hero-number {
+    font-family: var(--font-serif);
     font-size: 2rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
     line-height: 1;
     color: var(--text);
   }
@@ -307,7 +342,8 @@ main {
     .hero-number { font-size: 2.25rem; }
   }
   .section-title {
-    font-size: 1rem;
+    font-family: var(--font-serif);
+    font-size: 1.0625rem;
     font-weight: 600;
     color: var(--text);
     letter-spacing: -0.01em;
@@ -381,6 +417,11 @@ main {
     height: 100%;
     border-radius: 9999px;
     transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Expand-in-place panel mount animation */
+  .expand-panel {
+    animation: expand-in 0.2s ease-out;
   }
 
   /* FAB */
@@ -493,6 +534,11 @@ main {
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes expand-in {
+  from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 

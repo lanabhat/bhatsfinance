@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMaskedFmt } from '../common/Money'
+import { Money } from '../common/Money'
 
 type Props = {
   name: string
@@ -8,11 +8,11 @@ type Props = {
   count?: number
   children: React.ReactNode
   defaultOpen?: boolean
+  gridChildren?: boolean
 }
 
 
-export function CategorySection({ name, color, totalValue, count, children, defaultOpen = true }: Props) {
-  const fmtINR = useMaskedFmt()
+export function CategorySection({ name, color, totalValue, count, children, defaultOpen = true, gridChildren = false }: Props) {
   const [open, setOpen] = useState(defaultOpen)
 
   return (
@@ -28,7 +28,7 @@ export function CategorySection({ name, color, totalValue, count, children, defa
           {count !== undefined && (
             <span className="rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">{count}</span>
           )}
-          {totalValue && <span className="text-xs text-[var(--text-muted)]">· {fmtINR(totalValue)}</span>}
+          {totalValue && <span className="text-xs text-[var(--text-muted)]">· <Money value={totalValue} /></span>}
         </div>
         <svg
           viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
@@ -37,7 +37,7 @@ export function CategorySection({ name, color, totalValue, count, children, defa
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
         </svg>
       </button>
-      {open && <div className="grid gap-2 pb-2">{children}</div>}
+      {open && <div className={`grid gap-2 pb-2 ${gridChildren ? 'card-grid' : ''}`}>{children}</div>}
     </div>
   )
 }

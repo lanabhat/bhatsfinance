@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useMaskedFmt } from '../common/Money'
+import { Money, useMaskedFmt } from '../common/Money'
 import type { CategoryBreakdownItem, DashboardAccount, DashboardHolding, MemberNetWorth } from '../../types/domain'
 
 const TYPE_LABELS: Record<string, string> = {
@@ -77,7 +77,6 @@ function ColHeader({ label, col, sortCol, sortDir, onSort, className }: ColHeade
 
 // Leaf rows for instruments
 function InstrumentLeafRows({ instruments, totalCurrent, q }: { instruments: DashboardHolding[]; totalCurrent: number; q: string }) {
-  const fmtINR = useMaskedFmt()
   const filtered = q
     ? instruments.filter(h => matchesSearch(h.instrument_name, q) || matchesSearch(TYPE_LABELS[h.instrument_type] ?? h.instrument_type, q))
     : instruments
@@ -91,9 +90,9 @@ function InstrumentLeafRows({ instruments, totalCurrent, q }: { instruments: Das
         return (
           <tr key={h.instrument_id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]/50 transition-colors">
             <td className="pl-12 pr-2 py-1.5 text-xs text-[var(--text-2)]">{h.instrument_name}</td>
-            <td className="px-2 py-1.5 text-right text-xs tabular-nums">{fmtINR(cur)}</td>
-            <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>{fmtINR(inv)}</td>
-            <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${gainColor(g)} ${HIDE_MOBILE}`}>{g >= 0 ? '+' : ''}{fmtINR(g)}</td>
+            <td className="px-2 py-1.5 text-right text-xs tabular-nums"><Money value={cur} /></td>
+            <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}><Money value={inv} /></td>
+            <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${gainColor(g)} ${HIDE_MOBILE}`}>{g >= 0 ? '+' : ''}<Money value={g} /></td>
             <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${gainColor(g)}`}>
               {inv > 0 ? `${g >= 0 ? '+' : ''}${((g / inv) * 100).toFixed(1)}%` : '—'}
             </td>
@@ -109,7 +108,6 @@ function InstrumentLeafRows({ instruments, totalCurrent, q }: { instruments: Das
 
 // Leaf rows for accounts (no gain columns)
 function AccountLeafRows({ accounts, totalCurrent, q }: { accounts: DashboardAccount[]; totalCurrent: number; q: string }) {
-  const fmtINR = useMaskedFmt()
   const filtered = q
     ? accounts.filter(a => matchesSearch(a.account_name, q) || matchesSearch(ACCT_TYPE_LABELS[a.account_type] ?? a.account_type, q))
     : accounts
@@ -121,7 +119,7 @@ function AccountLeafRows({ accounts, totalCurrent, q }: { accounts: DashboardAcc
         return (
           <tr key={a.account_id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]/50 transition-colors">
             <td className="pl-12 pr-2 py-1.5 text-xs text-[var(--text-2)]">{a.account_name}</td>
-            <td className="px-2 py-1.5 text-right text-xs tabular-nums">{fmtINR(bal)}</td>
+            <td className="px-2 py-1.5 text-right text-xs tabular-nums"><Money value={bal} /></td>
             <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>—</td>
             <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>—</td>
             <td className="px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)]">—</td>
@@ -532,8 +530,8 @@ function ExpandableGroup({ row, isOpen, g, totalCurrent, fmtINR, colorDot, noGai
           {colorDot && <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: colorDot }} />}
           {row.label}
         </td>
-        <td className="px-2 py-2.5 text-right text-sm font-semibold tabular-nums">{fmtINR(row.current)}</td>
-        <td className={`px-2 py-2.5 text-right text-sm tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>{noGain ? '—' : fmtINR(row.invested)}</td>
+        <td className="px-2 py-2.5 text-right text-sm font-semibold tabular-nums"><Money value={row.current} /></td>
+        <td className={`px-2 py-2.5 text-right text-sm tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>{noGain ? '—' : <Money value={row.invested} />}</td>
         <td className={`px-2 py-2.5 text-right text-sm tabular-nums ${noGain ? 'text-[var(--text-muted)]' : gainColor(g)} ${HIDE_MOBILE}`}>
           {noGain ? '—' : `${g >= 0 ? '+' : ''}${fmtINR(g)}`}
         </td>
@@ -558,8 +556,8 @@ function SubExpandableGroup({ subKey, label, current, invested, g, parentCurrent
     <>
       <tr key={subKey} className="cursor-pointer border-t border-[var(--border)] bg-[var(--surface-2)] hover:opacity-80 transition-opacity" onClick={onClick}>
         <td className="py-1.5 pl-7 pr-2 text-xs font-medium text-[var(--text-2)]"><Chevron open={subOpen} />{label}</td>
-        <td className="px-2 py-1.5 text-right text-xs tabular-nums">{fmtINR(current)}</td>
-        <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>{noGain ? '—' : fmtINR(invested)}</td>
+        <td className="px-2 py-1.5 text-right text-xs tabular-nums"><Money value={current} /></td>
+        <td className={`px-2 py-1.5 text-right text-xs tabular-nums text-[var(--text-muted)] ${HIDE_MOBILE}`}>{noGain ? '—' : <Money value={invested} />}</td>
         <td className={`px-2 py-1.5 text-right text-xs tabular-nums ${noGain ? 'text-[var(--text-muted)]' : gainColor(g)} ${HIDE_MOBILE}`}>
           {noGain ? '—' : `${g >= 0 ? '+' : ''}${fmtINR(g)}`}
         </td>

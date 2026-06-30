@@ -1,5 +1,5 @@
 import { deleteJson, getJson, patchJson, postJson, toQueryString, unwrapList } from './http'
-import type { ApiListResponse, InsurancePolicy, MissedPremiumAlert, VehicleClaim } from '../types/domain'
+import type { ApiListResponse, InsurancePolicy, InsuranceSummary, MissedPremiumAlert, VehicleClaim } from '../types/domain'
 
 export const insuranceApi = {
   async listPolicies(householdId: number) {
@@ -51,5 +51,9 @@ export const insuranceApi = {
   },
   async deleteClaim(id: number) {
     return deleteJson(`/api/vehicle-claims/${id}/`)
+  },
+
+  async fetchSummary(householdId: number): Promise<InsuranceSummary> {
+    return getJson<InsuranceSummary>(`/api/insurance-summary?household_id=${householdId}`)
   },
 }

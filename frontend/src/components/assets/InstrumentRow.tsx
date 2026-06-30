@@ -1,4 +1,4 @@
-import { useMaskedFmt } from '../common/Money'
+import { Money } from '../common/Money'
 import type { AssetCategory, DashboardHolding, Instrument } from '../../types/domain'
 
 type Props = {
@@ -18,7 +18,6 @@ const TYPE_ICONS: Record<string, string> = {
 
 
 export function InstrumentRow({ instrument, holding, category, onClick, onBuy, onUpdateValue }: Props) {
-  const fmtINR = useMaskedFmt()
   const borderColor = category?.color ?? '#94a3b8'
   const hasActions = onBuy || onUpdateValue
 
@@ -37,9 +36,9 @@ export function InstrumentRow({ instrument, holding, category, onClick, onBuy, o
         </div>
         {holding && (
           <div className="max-w-[52%] shrink-0 text-right">
-            <p className="truncate text-[13px] font-bold text-[var(--text)]">{fmtINR(holding.market_value)}</p>
+            <p><Money value={holding.market_value} className="truncate text-[13px] font-bold text-[var(--text)]" /></p>
             {holding.net_invested && parseFloat(holding.net_invested) > 0 && (
-              <p className="truncate text-[11px] text-[var(--text-muted)]">inv {fmtINR(holding.net_invested)}</p>
+              <p className="truncate text-[11px] text-[var(--text-muted)]">inv <Money value={holding.net_invested} /></p>
             )}
           </div>
         )}
@@ -50,7 +49,7 @@ export function InstrumentRow({ instrument, holding, category, onClick, onBuy, o
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onBuy() }}
-              className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--text-2)] hover:border-indigo-400 hover:text-indigo-700 dark:text-indigo-300"
+              className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--text-2)] hover:border-primary-400 hover:text-primary-700 dark:text-primary-300"
             >
               + Buy
             </button>
@@ -59,7 +58,7 @@ export function InstrumentRow({ instrument, holding, category, onClick, onBuy, o
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onUpdateValue() }}
-              className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--text-2)] hover:border-indigo-400 hover:text-indigo-700 dark:text-indigo-300"
+              className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-medium text-[var(--text-2)] hover:border-primary-400 hover:text-primary-700 dark:text-primary-300"
             >
               Update Value
             </button>

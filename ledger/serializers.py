@@ -58,8 +58,8 @@ class TransactionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
         extra_kwargs = {
-            'idempotency_key': {'required': False, 'allow_blank': True},
-            'external_reference': {'required': False, 'allow_blank': True},
+            'idempotency_key': {'required': False, 'allow_blank': True, 'default': ''},
+            'external_reference': {'required': False, 'allow_blank': True, 'default': ''},
         }
 
     def validate(self, attrs):

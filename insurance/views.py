@@ -1,5 +1,6 @@
 import csv
-from datetime import date
+from collections import Counter
+from datetime import date, timedelta
 from decimal import Decimal
 from io import StringIO
 
@@ -12,7 +13,7 @@ from rest_framework.views import APIView
 
 from insurance.models import InsurancePolicy, InsurancePremiumAck, VehicleClaim
 from insurance.serializers import InsurancePolicySerializer, VehicleClaimSerializer
-from insurance.services import generate_missed_premium_reminders
+from insurance.services import generate_missed_premium_reminders, _first_due_date, _next_due_date
 from ledger.models import Transaction
 
 
@@ -157,3 +158,58 @@ class MissedPremiumRemindersView(APIView):
         as_of = date.fromisoformat(as_of_str) if as_of_str else date.today()
         data = generate_missed_premium_reminders(household_id=int(household_id), as_of=as_of)
         return Response({'as_of': as_of, 'missed': data})
+
+
+class InsuranceSummaryView(APIView):
+    FREQ_MULT = {'annual': 1, 'half_yearly': 2, 'quarterly': 4, 'monthly': 12, 'single': 0, 'na': 0}
+    RENEWAL_WINDOW_DAYS = 60
+
+    def get(self, request):
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        as_of = date.today()
+        policies = list(
+            InsurancePolicy.objects.filter(household_id=int(household_id), is_active=True)
+            .select_related('member')
+        )
+
+        by_type = dict(Counter(p.policy_type for p in policies))
+
+        total_sum_insured = sum(p.sum_insured or 0 for p in policies)
+
+        total_annual_premium = sum(
+            (p.premium_amount or 0) * self.FREQ_MULT.get(p.premium_frequency, 1)
+            for p in policies
+            if not p.is_employer_paid and p.premium_frequency not in ('single', 'na')
+        )
+
+        cutoff = as_of + timedelta(days=self.RENEWAL_WINDOW_DAYS)
+        upcoming = []
+        for p in policies:
+            if p.premium_frequency in ('single', 'na'):
+                continue
+            current = _first_due_date(p)
+            # Walk forward to find the next due date on or after today
+            while current < as_of:
+                current = _next_due_date(current, p.premium_frequency, p.premium_due_day, p.premium_due_month)
+            if current <= cutoff:
+                upcoming.append({
+                    'policy_id': p.id,
+                    'policy_name': p.policy_name,
+                    'policy_type': p.policy_type,
+                    'insurer_name': p.insurer_name,
+                    'due_date': current.isoformat(),
+                    'premium_amount': str(p.premium_amount) if p.premium_amount else '0',
+                })
+
+        upcoming.sort(key=lambda x: x['due_date'])
+
+        return Response({
+            'total_active': len(policies),
+            'by_type': by_type,
+            'total_sum_insured': str(total_sum_insured),
+            'total_annual_premium': str(total_annual_premium),
+            'upcoming_renewals': upcoming,
+        })

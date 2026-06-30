@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { useMaskedFmt } from '../common/Money'
+import { Money } from '../common/Money'
+import { typeColor } from '../../lib/assetColors'
 import type { AssetCategory, DashboardHolding, MemberAccount } from '../../types/domain'
 
 type Props = {
@@ -20,14 +21,6 @@ type Bucket = {
   items: { name: string; value: number }[]
 }
 
-const TYPE_COLOR: Record<string, string> = {
-  mutual_fund: '#6366f1', equity: '#0ea5e9', fd: '#f59e0b', rd: '#f97316',
-  epf: '#10b981', ppf: '#14b8a6', nps: '#8b5cf6', gold: '#eab308',
-  real_estate: '#ec4899', sip: '#6366f1', insurance: '#64748b',
-  cash: '#22c55e', other: '#94a3b8', vehicle: '#84cc16', liability: '#ef4444',
-  savings: '#22c55e',
-}
-
 const TYPE_ICON: Record<string, string> = {
   mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡️',
   ppf: '🛡️', nps: '🛡️', gold: '🪙', real_estate: '🏠', sip: '🔄',
@@ -36,8 +29,6 @@ const TYPE_ICON: Record<string, string> = {
 }
 
 export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTotal, householdTotal, categories }: Props) {
-  const fmt = useMaskedFmt()
-
   const categoryMap = useMemo(() => {
     const m = new Map<number, AssetCategory>()
     categories.forEach((c) => m.set(c.id, c))
@@ -67,7 +58,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
       } else {
         key = `type_${h.instrument_type}`
         label = h.instrument_type.replace(/_/g, ' ')
-        color = TYPE_COLOR[h.instrument_type] || '#94a3b8'
+        color = typeColor(h.instrument_type)
         icon = TYPE_ICON[h.instrument_type] || '💼'
       }
       const bucket = getOrCreate(key, label, color, icon)
@@ -80,7 +71,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
     const negativeAccounts = accounts.filter((a) => parseFloat(a.balance) < 0)
 
     if (positiveAccounts.length > 0) {
-      const bucket = getOrCreate('savings', 'Savings & Cash', '#22c55e', '🏦')
+      const bucket = getOrCreate('savings', 'Savings & Cash', typeColor('savings'), '🏦')
       for (const a of positiveAccounts) {
         const bal = parseFloat(a.balance)
         bucket.value += bal
@@ -88,7 +79,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
       }
     }
     if (negativeAccounts.length > 0) {
-      const bucket = getOrCreate('liability_cc', 'Credit Card', '#ef4444', '💳')
+      const bucket = getOrCreate('liability_cc', 'Credit Card', typeColor('liability_cc'), '💳')
       for (const a of negativeAccounts) {
         const bal = parseFloat(a.balance) // negative
         bucket.value += bal
@@ -147,7 +138,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
                 </span>
                 {/* value */}
                 <span className={`text-xs font-semibold tabular-nums w-20 text-right shrink-0 ${isNeg ? 'text-red-600' : 'text-[var(--text)]'}`}>
-                  {fmt(b.value)}
+                  <Money value={b.value} />
                 </span>
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3 w-3 shrink-0 text-[var(--text-faint)] group-open:rotate-90 transition-transform">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 4l4 4-4 4" />
@@ -172,7 +163,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
                       <span className="text-[10px] tabular-nums text-[var(--text-muted)] w-12 text-right hidden sm:block shrink-0">
                         {Math.abs(pctOfHH).toFixed(1)}% HH
                       </span>
-                      <span className="text-[11px] tabular-nums text-[var(--text-2)] w-20 text-right shrink-0">{fmt(item.value)}</span>
+                      <span className="text-[11px] tabular-nums text-[var(--text-2)] w-20 text-right shrink-0"><Money value={item.value} /></span>
                       <span className="w-3 shrink-0" />
                     </div>
                   )

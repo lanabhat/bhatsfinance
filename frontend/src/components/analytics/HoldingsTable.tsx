@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useMaskedFmt } from '../common/Money'
+import { Money } from '../common/Money'
 import type { DashboardHolding, CategoryBreakdownItem } from '../../types/domain'
 
 type SortKey = 'name' | 'type' | 'category' | 'invested' | 'current' | 'gain' | 'gainPct'
@@ -18,7 +18,6 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 export function HoldingsTable({ holdings, categoryBreakdown }: Props) {
-  const fmt = useMaskedFmt()
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('gainPct')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -108,10 +107,10 @@ export function HoldingsTable({ holdings, categoryBreakdown }: Props) {
                   <td className="max-w-[200px] truncate px-3 py-2.5 font-medium text-[var(--text)]" title={r.instrument_name}>{r.instrument_name}</td>
                   <td className="px-3 py-2.5 text-[var(--text-muted)]">{TYPE_LABELS[r.instrument_type] ?? r.instrument_type}</td>
                   <td className="px-3 py-2.5 text-[var(--text-muted)]">{r.catName}</td>
-                  <td className="px-3 py-2.5 text-[var(--text)]">{fmt(r.invested)}</td>
-                  <td className="px-3 py-2.5 text-[var(--text)]">{fmt(r.current)}</td>
+                  <td className="px-3 py-2.5 text-[var(--text)]"><Money value={r.invested} /></td>
+                  <td className="px-3 py-2.5 text-[var(--text)]"><Money value={r.current} /></td>
                   <td className={`px-3 py-2.5 font-medium ${pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                    {pos ? '+' : ''}{fmt(r.gain)}
+                    {pos ? '+' : ''}<Money value={r.gain} />
                   </td>
                   <td className={`px-3 py-2.5 font-medium ${pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
                     {r.gainPct !== null ? `${pos ? '+' : ''}${r.gainPct.toFixed(1)}%` : '—'}

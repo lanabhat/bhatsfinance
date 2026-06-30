@@ -552,3 +552,18 @@ export type TransactionCorrectionInput = {
     notes?: string
   }
 }
+
+export type InsuranceSummary = {
+  total_active: number
+  by_type: Record<string, number>
+  total_sum_insured: string
+  total_annual_premium: string
+  upcoming_renewals: {
+    policy_id: number
+    policy_name: string
+    policy_type: string
+    insurer_name: string
+    due_date: string
+    premium_amount: string
+  }[]
+}

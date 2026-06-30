@@ -3,7 +3,7 @@ import { CoinSpinner } from '../components/common/CoinSpinner'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { expenseApi } from '../api/expenseApi'
 import { normalizeApiError } from '../hooks/errorUtils'
-import { useMaskedFmt } from '../components/common/Money'
+import { Money, useMaskedFmt } from '../components/common/Money'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useChartTheme, ChartTooltip } from '../components/charts/chartTheme'
 import type { SpendAnalytics } from '../types/domain'
@@ -111,7 +111,7 @@ export function SpendTrendsPage({ householdId }: Props) {
           <div key={c.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
             <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">{c.label}</p>
             <p className="mt-1.5 text-2xl font-bold leading-none" style={{ color: c.color }}>
-              {fmtINR(c.value)}
+              <Money value={c.value} />
             </p>
           </div>
         ))}
@@ -143,7 +143,7 @@ export function SpendTrendsPage({ householdId }: Props) {
       </article>
 
       {/* Spend drill-down by category */}
-      <SpendCategoryBreakdown householdId={householdId} months={months} fmtINR={fmtINR} />
+      <SpendCategoryBreakdown householdId={householdId} months={months} />
 
       {/* By member */}
       {data && data.by_member.length > 0 && (
@@ -157,7 +157,7 @@ export function SpendTrendsPage({ householdId }: Props) {
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <span className="font-medium text-[var(--text)]">{row.name}</span>
                     <span>
-                      <strong className="text-[var(--text)]">{fmtINR(row.amount)}</strong>
+                      <strong className="text-[var(--text)]"><Money value={row.amount} /></strong>
                       <span className="ml-2 text-xs text-[var(--text-muted)]">{pct.toFixed(1)}%</span>
                     </span>
                   </div>
@@ -176,8 +176,8 @@ export function SpendTrendsPage({ householdId }: Props) {
 
 // Separate spend-by-category breakdown pulled with classification=spend
 function SpendCategoryBreakdown({
-  householdId, months, fmtINR,
-}: { householdId: number; months: number; fmtINR: (v: number) => string }) {
+  householdId, months,
+}: { householdId: number; months: number }) {
   const [data, setData] = useState<SpendAnalytics | null>(null)
   useEffect(() => {
     let active = true
@@ -202,7 +202,7 @@ function SpendCategoryBreakdown({
               <div className="mb-1 flex items-center justify-between text-sm">
                 <span className="font-medium text-[var(--text)]">{row.label || row.category || 'Uncategorised'}</span>
                 <span>
-                  <strong className="text-[var(--text)]">{fmtINR(row.amount)}</strong>
+                  <strong className="text-[var(--text)]"><Money value={row.amount} /></strong>
                   <span className="ml-2 text-xs text-[var(--text-muted)]">{pct.toFixed(1)}%</span>
                 </span>
               </div>

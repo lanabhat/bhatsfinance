@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { useApp } from '../context/AppContext'
 import { fetchAnalytics, fetchHoldingsHistory } from '../api/analyticsApi'
-import { useMaskedFmt } from '../components/common/Money'
+import { Money, useMaskedFmt } from '../components/common/Money'
 import { KpiCard } from '../components/analytics/KpiCard'
 import { MemberKpiStrip } from '../components/analytics/MemberKpiStrip'
 import { HoldingsTable } from '../components/analytics/HoldingsTable'
@@ -298,12 +298,12 @@ export function AnalyticsPage() {
                     {v.color && <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: v.color }} />}
                     <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] truncate">{name}</p>
                   </div>
-                  <p className="text-xl font-bold text-[var(--text)]">{fmt(v.current)}</p>
+                  <p className="text-xl font-bold text-[var(--text)]"><Money value={v.current} /></p>
                   <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-                    <span className="text-[var(--text-muted)]">Invested <span className="font-medium text-[var(--text)]">{fmt(v.invested)}</span></span>
+                    <span className="text-[var(--text-muted)]">Invested <span className="font-medium text-[var(--text)]"><Money value={v.invested} /></span></span>
                     {gainPct !== null && (
                       <span className={`font-medium ${pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                        {pos ? '+' : ''}{fmt(gain)} ({pos ? '+' : ''}{gainPct.toFixed(1)}%)
+                        {pos ? '+' : ''}<Money value={gain} /> ({pos ? '+' : ''}{gainPct.toFixed(1)}%)
                       </span>
                     )}
                   </div>
@@ -339,7 +339,7 @@ export function AnalyticsPage() {
                 <div key={c.category_id ?? c.category_name} className="flex items-center gap-3">
                   <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: c.color || '#6366f1' }} />
                   <span className="flex-1 truncate text-sm text-[var(--text)]">{c.category_name}</span>
-                  <span className="text-sm font-medium text-[var(--text)]">{fmt(parseFloat(c.market_value))}</span>
+                  <span className="text-sm font-medium text-[var(--text)]"><Money value={parseFloat(c.market_value)} /></span>
                   <span className="w-10 text-right text-xs text-[var(--text-muted)]">{parseFloat(c.allocation_percent).toFixed(1)}%</span>
                 </div>
               ))}

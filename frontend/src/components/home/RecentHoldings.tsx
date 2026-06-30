@@ -1,4 +1,4 @@
-import { useMaskedFmt } from '../common/Money'
+import { Money } from '../common/Money'
 import type { DashboardHolding } from '../../types/domain'
 
 type Props = {
@@ -14,7 +14,6 @@ const TYPE_ICONS: Record<string, string> = {
 
 
 export function RecentHoldings({ holdings, onViewAll }: Props) {
-  const fmtINR = useMaskedFmt()
   const top = [...holdings].sort((a, b) => parseFloat(b.market_value) - parseFloat(a.market_value)).slice(0, 5)
   if (!top.length) return null
 
@@ -44,7 +43,7 @@ export function RecentHoldings({ holdings, onViewAll }: Props) {
                   <p className="text-xs text-[var(--text-muted)]">{h.instrument_type.replace(/_/g, ' ')}</p>
                 </div>
                 <div className="shrink-0 max-w-[40%] text-right">
-                  <p className="text-sm font-bold text-[var(--text)]">{fmtINR(h.market_value)}</p>
+                  <p className="text-sm font-bold text-[var(--text)]"><Money value={h.market_value} /></p>
                   <div className="flex items-center justify-end gap-1.5">
                     <span className="text-xs text-[var(--text-muted)]">{pct.toFixed(1)}%</span>
                     {gainPct !== null && (

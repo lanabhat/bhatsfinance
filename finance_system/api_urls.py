@@ -2,7 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from alerts.views import MissedSIPAlertsView, SIPMandateViewSet
-from insurance.views import InsurancePolicyViewSet, MissedPremiumRemindersView, VehicleClaimViewSet
+from insurance.views import InsurancePolicyViewSet, InsuranceSummaryView, MissedPremiumRemindersView, VehicleClaimViewSet
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
 from ingestion.views import CSVImportView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView
@@ -100,6 +100,7 @@ urlpatterns = router.urls + [
     path('members-networth', MembersNetWorthView.as_view(), name='members-networth'),
     path('alerts/missed-sip', MissedSIPAlertsView.as_view(), name='missed-sip-alerts'),
     path('alerts/missed-premiums', MissedPremiumRemindersView.as_view(), name='missed-premium-alerts'),
+    path('insurance-summary', InsuranceSummaryView.as_view(), name='insurance-summary'),
     path('imports/csv', CSVImportView.as_view(), name='imports-csv'),
     path('imports/preview', ImportPreviewView.as_view(), name='imports-preview'),
     path('imports/schemas', ImportSchemasView.as_view(), name='imports-schemas'),

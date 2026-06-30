@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { postJson } from '../api/http'
-import { useMaskedFmt } from '../components/common/Money'
 import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
 import { CategorySection } from '../components/assets/CategorySection'
 import { InstrumentForm } from '../components/assets/InstrumentForm'
 import { InstrumentRow } from '../components/assets/InstrumentRow'
+import { InstrumentExpandedDetail } from '../components/assets/InstrumentExpandedDetail'
 import { AssetCategoryForm } from '../components/assets/AssetCategoryForm'
+import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
+import { useExpandable } from '../hooks/useExpandable'
 import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
-import type { AssetCategory, DashboardHolding, Instrument, InstrumentOwnership, Transaction } from '../types/domain'
+import type { AssetCategory, DashboardHolding, Instrument } from '../types/domain'
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -55,7 +57,7 @@ function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCa
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2 border-t border-[var(--border)] pt-3">
         <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
-        <button type="button" disabled={saving} onClick={save} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
+        <button type="button" disabled={saving} onClick={save} className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
   )
@@ -130,11 +132,11 @@ function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
                 <option value="">— Select —</option>
                 {instruments.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
               </select>
-              <button type="button" onClick={() => setShowNewInst(true)} className="shrink-0 rounded-lg border border-dashed border-indigo-400 px-3 text-xs text-indigo-600 hover:bg-indigo-50 dark:bg-indigo-900/15">+ New</button>
+              <button type="button" onClick={() => setShowNewInst(true)} className="shrink-0 rounded-lg border border-dashed border-primary-400 px-3 text-xs text-primary-600 hover:bg-primary-50 dark:bg-primary-900/15">+ New</button>
             </div>
           ) : (
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/15 p-3 space-y-2">
-              <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">New Instrument</p>
+            <div className="rounded-xl border border-primary-200 bg-primary-50 dark:bg-primary-900/15 p-3 space-y-2">
+              <p className="text-xs font-medium text-primary-700 dark:text-primary-300">New Instrument</p>
               <input placeholder="Name" value={newInstName} onChange={(e) => setNewInstName(e.target.value)} className={INP} />
               <select value={newInstType} onChange={(e) => setNewInstType(e.target.value as Instrument['instrument_type'])} className={INP}>
                 {INSTRUMENT_TYPES_OPTS.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
@@ -180,217 +182,7 @@ function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2 border-t border-[var(--border)] pt-3">
         <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
-        <button type="button" disabled={saving} onClick={save} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Saving…' : 'Record Buy'}</button>
-      </div>
-    </div>
-  )
-}
-
-// ── holding detail sheet ──────────────────────────────────────────────────────
-function BuyHistoryEditor({ transaction, onSave, onCancel }: {
-  transaction: Transaction
-  onSave: () => Promise<void>
-  onCancel: () => void
-}) {
-  const [form, setForm] = useState({
-    tx_date: transaction.tx_date,
-    amount: transaction.amount,
-    quantity: transaction.quantity ?? '',
-    price_per_unit: transaction.price_per_unit ?? '',
-    external_reference: transaction.external_reference ?? '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-
-  const save = async () => {
-    setSaving(true)
-    setError('')
-    try {
-      await ledgerApi.updateTransaction(transaction.id, {
-        household: transaction.household,
-        member: transaction.member,
-        account: transaction.account,
-        instrument: transaction.instrument,
-        tx_date: form.tx_date,
-        amount: form.amount,
-        quantity: form.quantity || null,
-        price_per_unit: form.price_per_unit || null,
-        fees: transaction.fees,
-        taxes: transaction.taxes,
-        currency: transaction.currency,
-        direction: transaction.direction,
-        transaction_type: transaction.transaction_type,
-        external_reference: form.external_reference,
-        idempotency_key: transaction.idempotency_key,
-        metadata: transaction.metadata,
-      })
-      await onSave()
-    } catch {
-      setError('Failed to update buy entry.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="border-t border-[var(--border)] px-5 py-4">
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Edit Buy Entry</p>
-      <div className="grid gap-3">
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Date</label>
-            <input type="date" value={form.tx_date} onChange={(e) => setForm((p) => ({ ...p, tx_date: e.target.value }))} className={INP} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Amount</label>
-            <input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} className={INP} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Quantity</label>
-            <input type="number" min="0" step="0.000001" value={form.quantity} onChange={(e) => setForm((p) => ({ ...p, quantity: e.target.value }))} className={INP} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Price per unit</label>
-            <input type="number" min="0" step="0.000001" value={form.price_per_unit} onChange={(e) => setForm((p) => ({ ...p, price_per_unit: e.target.value }))} className={INP} />
-          </div>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Reference</label>
-          <input value={form.external_reference} onChange={(e) => setForm((p) => ({ ...p, external_reference: e.target.value }))} className={INP} />
-        </div>
-        {error ? <p className="text-xs text-red-500">{error}</p> : null}
-        <div className="flex gap-2">
-          <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
-          <button type="button" disabled={saving} onClick={() => void save()} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function HoldingDetailSheet({ householdId, holding, instrument, onBuy, onUpdateValue, onEdit, onClose, onTransactionsChanged }: {
-  householdId: number; holding: DashboardHolding; instrument: Instrument
-  onBuy: () => void; onUpdateValue: () => void; onEdit: () => void; onClose: () => void; onTransactionsChanged: () => Promise<void>
-}) {
-  const { canWrite } = useAuth()
-  const { members } = useApp()
-  const [txs, setTxs] = useState<Transaction[]>([])
-  const [loading, setLoading] = useState(true)
-  const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
-  const [editingTx, setEditingTx] = useState<Transaction | null>(null)
-  const [busyTxId, setBusyTxId] = useState<number | null>(null)
-  const [actionError, setActionError] = useState('')
-
-  const loadHistory = async () => {
-    setLoading(true)
-    const [t, o] = await Promise.all([
-      ledgerApi.listTransactionsForInstrument(householdId, instrument.id),
-      portfolioApi.listInstrumentOwnerships(instrument.id),
-    ])
-    setTxs(t)
-    setOwnerships(o)
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    void loadHistory()
-  }, [householdId, instrument.id])
-
-  const handleDeleteBuy = async (tx: Transaction) => {
-    if (!confirm(`Delete buy entry from ${tx.tx_date}?`)) return
-    setBusyTxId(tx.id)
-    setActionError('')
-    try {
-      await ledgerApi.deleteTransaction(tx.id)
-      await loadHistory()
-      await onTransactionsChanged()
-    } catch {
-      setActionError('Failed to delete buy entry.')
-    } finally {
-      setBusyTxId(null)
-    }
-  }
-
-  const buys = txs.filter((t) => t.transaction_type === 'buy')
-  const gain = parseFloat(holding.market_value) - parseFloat(holding.net_invested)
-  const gainPct = parseFloat(holding.net_invested) > 0 ? ((gain / parseFloat(holding.net_invested)) * 100).toFixed(1) : null
-
-  const fmt = useMaskedFmt()
-
-  const ownerLabel = ownerships.length > 0
-    ? ownerships.map((o) => members.find((m) => m.id === o.member)?.label ?? `#${o.member}`).join(', ')
-    : 'Unassigned'
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-t-2xl bg-[var(--surface)] shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between border-b border-[var(--border)] px-5 py-4">
-          <div>
-            <p className="text-base font-semibold text-[var(--text)]">{instrument.name}</p>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)] capitalize">{instrument.instrument_type.replace(/_/g, ' ')} · {ownerLabel}</p>
-          </div>
-          <button type="button" onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-2)]">✕</button>
-        </div>
-        <div className="grid grid-cols-3 gap-px bg-[var(--surface-2)] border-b border-[var(--border)]">
-          {[
-            { label: 'Current Value', value: fmt(holding.market_value) },
-            { label: 'Invested', value: fmt(holding.net_invested) },
-            { label: 'Gain / Loss', value: gainPct ? `${gain >= 0 ? '+' : ''}${gainPct}%` : '—' },
-          ].map((s) => (
-            <div key={s.label} className="bg-[var(--surface)] px-4 py-3 text-center">
-              <p className={`text-sm font-bold ${s.label === 'Gain / Loss' ? (gain >= 0 ? 'text-emerald-600' : 'text-red-500') : 'text-[var(--text)]'}`}>{s.value}</p>
-              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{s.label}</p>
-            </div>
-          ))}
-        </div>
-        <div className="max-h-52 overflow-y-auto px-5 py-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Buy History</p>
-          {actionError ? <p className="mb-2 text-xs text-red-500">{actionError}</p> : null}
-          {loading ? <p className="py-3 text-center text-xs text-[var(--text-muted)]">Loading...</p>
-          : buys.length === 0 ? <p className="py-3 text-center text-xs text-[var(--text-muted)]">No buy transactions recorded.</p>
-          : buys.map((t) => (
-            <div key={t.id} className="flex items-center justify-between border-b border-[var(--border)] py-2 last:border-0">
-              <div>
-                <p className="text-xs font-medium text-[var(--text-2)]">{t.tx_date}</p>
-                {t.quantity && <p className="text-xs text-[var(--text-muted)]">{parseFloat(t.quantity).toFixed(4)} units</p>}
-                {t.external_reference ? <p className="text-xs text-[var(--text-muted)]">{t.external_reference}</p> : null}
-              </div>
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold text-[var(--text)]">{fmt(t.amount)}</p>
-                {canWrite ? (
-                  <>
-                    <button type="button" onClick={() => setEditingTx(t)} className="rounded border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--text-2)] hover:bg-[var(--surface-2)]">
-                      Edit
-                    </button>
-                    <button type="button" disabled={busyTxId === t.id} onClick={() => void handleDeleteBuy(t)} className="rounded border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
-                      Delete
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
-        {editingTx ? (
-          <BuyHistoryEditor
-            transaction={editingTx}
-            onSave={async () => {
-              setEditingTx(null)
-              await loadHistory()
-              await onTransactionsChanged()
-            }}
-            onCancel={() => setEditingTx(null)}
-          />
-        ) : null}
-        <div className="flex gap-2 border-t border-[var(--border)] p-4">
-          <button type="button" onClick={onBuy} disabled={!canWrite} className="flex-1 rounded-xl border border-indigo-300 py-2.5 text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:bg-indigo-900/15 disabled:opacity-50">+ Buy More</button>
-          <button type="button" onClick={onUpdateValue} disabled={!canWrite} className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">Update Value</button>
-          <button type="button" onClick={onEdit} disabled={!canWrite} className="rounded-xl border border-[var(--border)] px-3 py-2.5 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50" title="Edit instrument">✏️</button>
-        </div>
+        <button type="button" disabled={saving} onClick={save} className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">{saving ? 'Saving…' : 'Record Buy'}</button>
       </div>
     </div>
   )
@@ -401,7 +193,6 @@ type SheetState =
   | { type: 'none' }
   | { type: 'valuation'; instrumentId: number; instrumentName: string }
   | { type: 'buy'; instrumentId?: number }
-  | { type: 'holding_detail'; holding: DashboardHolding; instrument: Instrument }
   | { type: 'edit_instrument'; instrument: Instrument }
   | { type: 'category'; item?: AssetCategory }
 
@@ -425,6 +216,7 @@ export function HoldingsPage() {
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
   const [groupBy, setGroupBy] = useState<HoldingGroupBy>('type')
   const [sortBy, setSortBy] = useState<HoldingSortBy>('value')
+  const cardExpand = useExpandable<number>()
 
   const loadInstruments = () => portfolioApi.listInstruments(householdId).then(setInstruments).catch(() => {})
 
@@ -471,17 +263,35 @@ export function HoldingsPage() {
         metadata: {},
         is_active: true,
       }
+      const isExpanded = cardExpand.isExpanded(h.instrument_id)
       return (
-        <InstrumentRow key={h.instrument_id} instrument={inst} holding={h} category={cat}
-          onClick={() => setSheet({ type: 'holding_detail', holding: h, instrument: inst })}
-          onBuy={canWrite ? () => setSheet({ type: 'buy', instrumentId: inst.id }) : undefined}
-          onUpdateValue={canWrite ? () => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name }) : undefined}
-        />
+        <ExpandableGridCard
+          key={h.instrument_id}
+          expanded={isExpanded}
+          onToggle={() => cardExpand.toggle(h.instrument_id)}
+          className={isExpanded ? 'ring-2 ring-primary-400 ring-offset-1 rounded-xl' : ''}
+          collapsed={
+            <InstrumentRow instrument={inst} holding={h} category={cat}
+              onBuy={canWrite ? () => setSheet({ type: 'buy', instrumentId: inst.id }) : undefined}
+              onUpdateValue={canWrite ? () => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name }) : undefined}
+            />
+          }
+        >
+          <InstrumentExpandedDetail
+            householdId={householdId}
+            holding={h}
+            instrument={inst}
+            onBuy={() => setSheet({ type: 'buy', instrumentId: inst.id })}
+            onUpdateValue={() => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name })}
+            onEdit={() => setSheet({ type: 'edit_instrument', instrument: inst })}
+            onTransactionsChanged={async () => { await refreshDashboard(); await loadInstruments() }}
+          />
+        </ExpandableGridCard>
       )
     }
 
     if (groupBy === 'none') {
-      return <div className="grid gap-1">{[...activeHoldings].sort(sortFn).map(h => renderRow(h))}</div>
+      return <div className="card-grid grid gap-3">{[...activeHoldings].sort(sortFn).map(h => renderRow(h))}</div>
     }
 
     if (groupBy === 'type') {
@@ -499,7 +309,7 @@ export function HoldingsPage() {
         const sorted = [...group].sort(sortFn)
         const total = group.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
         return (
-          <CategorySection key={label} name={label} color="#6366f1" totalValue={total} count={group.length}>
+          <CategorySection key={label} name={label} color="#b4521f" totalValue={total} count={group.length} gridChildren>
             {sorted.map(h => renderRow(h))}
           </CategorySection>
         )
@@ -520,7 +330,7 @@ export function HoldingsPage() {
       if (!group?.length) continue
       const total = group.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
       sections.push(
-        <CategorySection key={cat.id} name={cat.name} color={cat.color} totalValue={total} count={group.length}>
+        <CategorySection key={cat.id} name={cat.name} color={cat.color} totalValue={total} count={group.length} gridChildren>
           {[...group].sort(sortFn).map(h => renderRow(h, cat))}
         </CategorySection>
       )
@@ -529,16 +339,16 @@ export function HoldingsPage() {
     if (uncat.length > 0) {
       const total = uncat.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
       sections.push(
-        <CategorySection key="uncat" name="Uncategorised" color="#94a3b8" totalValue={total} count={uncat.length}>
+        <CategorySection key="uncat" name="Uncategorised" color="#94a3b8" totalValue={total} count={uncat.length} gridChildren>
           {[...uncat].sort(sortFn).map(h => renderRow(h))}
         </CategorySection>
       )
     }
     return sections
-  }, [activeHoldings, categories, instruments, canWrite, groupBy, sortBy])
+  }, [activeHoldings, categories, instruments, canWrite, groupBy, sortBy, householdId, cardExpand, refreshDashboard, loadInstruments])
 
   const pillCls = (active: boolean) =>
-    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`
+    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`
 
   return (
     <div className="grid gap-3">
@@ -570,7 +380,7 @@ export function HoldingsPage() {
             ))}
           </div>
           <button type="button" onClick={() => setSheet({ type: 'buy' })} disabled={!canWrite}
-            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            className="shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
             + Add Holding
           </button>
         </div>
@@ -598,14 +408,6 @@ export function HoldingsPage() {
         <Sheet title="Update Value" onClose={close}>
           <ValuationForm householdId={householdId} instrumentId={sheet.instrumentId} instrumentName={sheet.instrumentName} onSave={afterValuation} onCancel={close} />
         </Sheet>
-      )}
-      {sheet.type === 'holding_detail' && (
-        <HoldingDetailSheet householdId={householdId} holding={sheet.holding} instrument={sheet.instrument}
-          onBuy={() => setSheet({ type: 'buy', instrumentId: sheet.instrument.id })}
-          onUpdateValue={() => setSheet({ type: 'valuation', instrumentId: sheet.instrument.id, instrumentName: sheet.instrument.name })}
-          onEdit={() => setSheet({ type: 'edit_instrument', instrument: sheet.instrument })}
-          onTransactionsChanged={async () => { await refreshDashboard(); await loadInstruments() }}
-          onClose={close} />
       )}
       {sheet.type === 'edit_instrument' && (
         <Sheet title="Edit Instrument" onClose={close}>

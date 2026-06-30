@@ -1,4 +1,4 @@
-import { useMaskedFmt } from '../common/Money'
+import { Money } from '../common/Money'
 import type { MemberNetWorth } from '../../types/domain'
 
 
@@ -16,7 +16,6 @@ type Props = {
 }
 
 export function MemberNetWorthRow({ member, householdTotal }: Props) {
-  const fmtINR = useMaskedFmt()
   const colorClass = RELATION_COLOR[member.relation_type] ?? RELATION_COLOR.other
   const initials = member.member_name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
   const excluded = !member.include_in_networth
@@ -26,25 +25,27 @@ export function MemberNetWorthRow({ member, householdTotal }: Props) {
     : null
 
   return (
-    <div className={`tap flex min-w-0 items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-card)] ${excluded ? 'opacity-50 grayscale' : ''}`}>
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm font-semibold text-[var(--text-2)]">
-        {initials}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-[var(--text)]">{member.member_name}</p>
-        <div className="mt-0.5 flex items-center gap-1.5">
-          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${colorClass}`}>
-            {member.relation_type}
-          </span>
-          {excluded && (
-            <span className="inline-block rounded-full bg-[var(--surface-3)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">
-              excluded
+    <div className={`tap min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-card)] ${excluded ? 'opacity-50 grayscale' : ''}`}>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm font-semibold text-[var(--text-2)]">
+          {initials}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-[var(--text)]">{member.member_name}</p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${colorClass}`}>
+              {member.relation_type}
             </span>
-          )}
+            {excluded && (
+              <span className="inline-block rounded-full bg-[var(--surface-3)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">
+                excluded
+              </span>
+            )}
+          </div>
         </div>
       </div>
-      <div className="shrink-0 max-w-[48%] text-right">
-        <p className="text-base font-bold text-[var(--text)] tabular-nums">{fmtINR(member.networth)}</p>
+      <div className="mt-2.5 flex items-end justify-between">
+        <Money value={member.networth} className="text-lg font-bold text-[var(--text)] tabular-nums" />
         {sharePct !== null && (
           <p className="text-xs text-[var(--text-faint)]">{sharePct.toFixed(1)}% of hh</p>
         )}

@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
-import { useMaskedFmt } from '../components/common/Money'
 import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
-import { accountApi } from '../api/accountApi'
 import { AccountCard } from '../components/assets/AccountCard'
+import { AccountExpandedDetail } from '../components/assets/AccountExpandedDetail'
+import { UpdateBalanceForm } from '../components/assets/UpdateBalanceForm'
+import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
+import { useExpandable } from '../hooks/useExpandable'
 import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
-import type { Account, AccountBalance, AccountOwnership, Transaction } from '../types/domain'
+import type { Account, AccountOwnership } from '../types/domain'
 
 // ── shared ownership row ──────────────────────────────────────────────────────
 function OwnershipRow({ name, subtitle, currentMemberId, memberOptions, onSave }: {
@@ -44,7 +46,7 @@ function OwnershipRow({ name, subtitle, currentMemberId, memberOptions, onSave }
       </select>
       {isDirty && (
         <button type="button" disabled={saving} onClick={save}
-          className="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          className="shrink-0 rounded-lg bg-primary-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
           {saving ? '…' : 'Save'}
         </button>
       )}
@@ -126,7 +128,7 @@ function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
       </>)}
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2 pt-2">
-        <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+        <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
           {saving ? 'Saving…' : account ? 'Update' : 'Add Account'}
         </button>
         <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
@@ -134,10 +136,10 @@ function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
       {account && onDelete && (
         <div className="border-t border-[var(--border)] pt-3">
           {!confirmDelete ? (
-            <button type="button" onClick={() => setConfirmDelete(true)} className="w-full rounded-lg border border-red-200 py-2 text-sm text-red-500 hover:bg-red-50 dark:bg-red-900/15">Delete Account</button>
+            <button type="button" onClick={() => setConfirmDelete(true)} className="w-full rounded-lg border border-red-200 dark:border-red-800/50 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/15">Delete Account</button>
           ) : (
-            <div className="rounded-lg bg-red-50 dark:bg-red-900/15 p-3 text-center">
-              <p className="mb-2 text-xs text-red-600">Delete this account and all its transaction history?</p>
+            <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-3 text-center">
+              <p className="mb-2 text-xs text-red-600 dark:text-red-400">Delete this account and all its transaction history?</p>
               <div className="flex gap-2">
                 <button type="button" onClick={onDelete} className="flex-1 rounded-lg bg-red-500 py-1.5 text-xs font-medium text-white hover:bg-red-600">Yes, delete</button>
                 <button type="button" onClick={() => setConfirmDelete(false)} className="flex-1 rounded-lg border border-[var(--border)] py-1.5 text-xs text-[var(--text-2)]">Cancel</button>
@@ -148,10 +150,6 @@ function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
       )}
     </form>
   )
-}
-
-function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })
 }
 
 function CCSpendForm({ account, householdId, onSave, onCancel, mode }: {
@@ -210,7 +208,7 @@ function CCSpendForm({ account, householdId, onSave, onCancel, mode }: {
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2 pt-2">
         <button type="submit" disabled={saving}
-          className={`flex-1 rounded-lg py-2 text-sm font-medium text-white disabled:opacity-50 ${mode === 'spend' ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+          className={`flex-1 rounded-lg py-2 text-sm font-medium text-white disabled:opacity-50 ${mode === 'spend' ? 'bg-rose-500 hover:bg-rose-600' : 'bg-primary-600 hover:bg-primary-700'}`}>
           {saving ? 'Saving…' : mode === 'spend' ? 'Record Spend' : 'Record Payment'}
         </button>
         <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
@@ -219,155 +217,13 @@ function CCSpendForm({ account, householdId, onSave, onCancel, mode }: {
   )
 }
 
-function CardDetailSheet({ account, householdId, onEdit, onClose }: {
-  account: Account; householdId: number; onEdit: () => void; onClose: () => void
-}) {
-  const fmtINR = useMaskedFmt()
-  const fmtVal = fmtINR
-  const { canWrite } = useAuth()
-  const [balance, setBalance] = useState<AccountBalance | null>(null)
-  const [txs, setTxs] = useState<Transaction[]>([])
-  const [loading, setLoading] = useState(true)
-  const [subSheet, setSubSheet] = useState<'spend' | 'payment' | null>(null)
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const [b, t] = await Promise.all([
-        accountApi.getBalance(account.id),
-        ledgerApi.listTransactionsForAccount(householdId, account.id),
-      ])
-      setBalance(b)
-      setTxs(t.sort((a, b) => b.tx_date.localeCompare(a.tx_date)))
-    } finally { setLoading(false) }
-  }
-
-  useEffect(() => { void load() }, [account.id])
-
-  // Group transactions by statement month (YYYY-MM)
-  const grouped = useMemo(() => {
-    const m = new Map<string, Transaction[]>()
-    for (const tx of txs) {
-      const key = tx.tx_date.slice(0, 7)
-      if (!m.has(key)) m.set(key, [])
-      m.get(key)!.push(tx)
-    }
-    return m
-  }, [txs])
-
-  const outstandingRaw = balance?.outstanding ?? 0
-  const outstanding = outstandingRaw > 0 ? outstandingRaw : 0
-  const limit = balance?.credit_limit ?? 0
-  const available = balance?.available ?? null
-  const utilPct = limit > 0 ? Math.min((outstanding / limit) * 100, 100) : 0
-
-  if (subSheet) {
-    return (
-      <Sheet title={subSheet === 'spend' ? 'Record Spend' : 'Record Payment'} onClose={() => setSubSheet(null)}>
-        <CCSpendForm account={account} householdId={householdId} mode={subSheet}
-          onSave={async () => { setSubSheet(null); await load() }}
-          onCancel={() => setSubSheet(null)} />
-      </Sheet>
-    )
-  }
-
-  return (
-    <Sheet title={account.name} onClose={onClose} tall>
-      {/* Header stats */}
-      <div className="mb-4 rounded-xl bg-rose-50 dark:bg-rose-900/15 p-4">
-        <div className="flex items-end justify-between">
-          <div>
-            <p className="text-xs text-[var(--text-muted)]">Outstanding</p>
-            <p className="text-2xl font-black text-rose-600">{outstanding > 0 ? fmtINR(-outstanding) : '₹0'}</p>
-          </div>
-          {limit > 0 && (
-            <div className="text-right">
-              <p className="text-xs text-[var(--text-muted)]">Available</p>
-              <p className="text-base font-bold text-[var(--text-2)]">{available != null ? fmtVal(available) : '—'}</p>
-              <p className="text-xs text-[var(--text-muted)]">of {fmtVal(limit)} limit</p>
-            </div>
-          )}
-        </div>
-        {limit > 0 && (
-          <div className="fill-bar mt-3">
-            <div className="fill-bar-inner bg-rose-400" style={{ width: `${utilPct}%` }} />
-          </div>
-        )}
-        {account.statement_due_day && (
-          <p className="mt-2 text-xs text-[var(--text-muted)]">Payment due: {account.statement_due_day}th of each month</p>
-        )}
-      </div>
-
-      {/* Action buttons */}
-      <div className="mb-4 flex gap-2">
-        <button type="button" onClick={() => setSubSheet('spend')} disabled={!canWrite}
-          className="flex-1 rounded-lg bg-rose-500 py-2 text-sm font-medium text-white hover:bg-rose-600 disabled:opacity-50">
-          + Record Spend
-        </button>
-        <button type="button" onClick={() => setSubSheet('payment')} disabled={!canWrite}
-          className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-          Pay Bill
-        </button>
-        <button type="button" onClick={onEdit} disabled={!canWrite}
-          className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
-          Edit
-        </button>
-      </div>
-
-      {/* Transaction history */}
-      {loading ? (
-        <p className="py-6 text-center text-xs text-[var(--text-muted)]">Loading…</p>
-      ) : txs.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center">
-          <p className="text-2xl">💳</p>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">No transactions yet</p>
-          <p className="text-xs text-[var(--text-muted)]">Tap "Record Spend" to add your first entry.</p>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {Array.from(grouped.entries()).map(([month, monthTxs]) => {
-            const monthSpend = monthTxs.filter(t => t.direction === 'outflow').reduce((s, t) => s + parseFloat(t.amount), 0)
-            const monthPaid = monthTxs.filter(t => t.direction === 'inflow').reduce((s, t) => s + parseFloat(t.amount), 0)
-            const label = new Date(month + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
-            return (
-              <div key={month}>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
-                  <div className="flex gap-2 text-xs">
-                    {monthSpend > 0 && <span className="text-rose-500">{fmtINR(-monthSpend)}</span>}
-                    {monthPaid > 0 && <span className="text-indigo-600">{fmtINR(monthPaid)}</span>}
-                  </div>
-                </div>
-                <div className="grid gap-1">
-                  {monthTxs.map(tx => (
-                    <div key={tx.id} className="flex items-center justify-between rounded-lg bg-[var(--surface)] px-3 py-2.5 shadow-sm">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-[var(--text)]">
-                          {tx.external_reference || tx.transaction_type.replace(/_/g, ' ')}
-                        </p>
-                        <p className="text-xs text-[var(--text-muted)]">{fmtDate(tx.tx_date)}</p>
-                      </div>
-                      <p className={`ml-3 shrink-0 text-sm font-semibold ${tx.direction === 'outflow' ? 'text-rose-600' : 'text-indigo-600'}`}>
-                        {fmtINR(tx.direction === 'outflow' ? -parseFloat(tx.amount) : parseFloat(tx.amount))}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </Sheet>
-  )
-}
-
 type GroupBy = 'none' | 'owner' | 'type'
 type SortBy = 'name' | 'type' | 'institution'
 type SheetState =
   | { type: 'none' }
   | { type: 'account'; item?: Account }
-  | { type: 'card_detail'; item: Account }
+  | { type: 'cc_spend'; item: Account; mode: 'spend' | 'payment' }
+  | { type: 'update_balance'; item: Account }
 
 export function AccountsPage() {
   const { canWrite } = useAuth()
@@ -379,6 +235,7 @@ export function AccountsPage() {
   const [sortBy, setSortBy] = useState<SortBy>('name')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
+  const cardExpand = useExpandable<number>()
 
   const toggleGroup = (key: string) =>
     setCollapsed((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
@@ -440,19 +297,31 @@ export function AccountsPage() {
     catch { alert('Failed to delete account.') }
   }
 
-  const handleCardClick = (a: Account) => {
-    if (a.account_type === 'credit_card') {
-      setSheet({ type: 'card_detail', item: a })
-    } else {
-      setSheet({ type: 'account', item: a })
-    }
-  }
-
   const pillCls = (active: boolean) =>
-    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-indigo-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`
+    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`
 
   const renderList = (list: Account[]) =>
-    list.map((a) => <AccountCard key={a.id} account={a} onClick={() => handleCardClick(a)} />)
+    list.map((a) => {
+      const isExpanded = cardExpand.isExpanded(a.id)
+      return (
+        <ExpandableGridCard
+          key={a.id}
+          expanded={isExpanded}
+          onToggle={() => cardExpand.toggle(a.id)}
+          className={isExpanded ? 'ring-2 ring-primary-400 ring-offset-1 rounded-xl' : ''}
+          collapsed={<AccountCard account={a} />}
+        >
+          <AccountExpandedDetail
+            account={a}
+            householdId={householdId}
+            onEdit={() => setSheet({ type: 'account', item: a })}
+            onRecordSpend={() => setSheet({ type: 'cc_spend', item: a, mode: 'spend' })}
+            onRecordPayment={() => setSheet({ type: 'cc_spend', item: a, mode: 'payment' })}
+            onUpdateBalance={() => setSheet({ type: 'update_balance', item: a })}
+          />
+        </ExpandableGridCard>
+      )
+    })
 
   return (
     <div className="grid grid-cols-1 min-w-0 gap-3">
@@ -470,7 +339,7 @@ export function AccountsPage() {
           ))}
         </div>
         <button type="button" onClick={() => setSheet({ type: 'account' })} disabled={!canWrite}
-          className="ml-auto shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          className="ml-auto shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
           + Add Account
         </button>
       </div>
@@ -505,7 +374,7 @@ export function AccountsPage() {
           <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first account.</p>
         </div>
       ) : groupBy === 'none' ? (
-        <div className="grid grid-cols-1 min-w-0 gap-2">{renderList(sortedAccounts)}</div>
+        <div className="card-grid grid min-w-0 gap-3">{renderList(sortedAccounts)}</div>
       ) : (
         <div className="flex w-full min-w-0 max-w-full flex-col gap-1 overflow-hidden">
           {Array.from(grouped.entries()).map(([label, group]) => {
@@ -523,7 +392,7 @@ export function AccountsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </button>
-                {isOpen && <div className="grid gap-2 pb-2">{renderList(group)}</div>}
+                {isOpen && <div className="card-grid grid gap-3 pb-2">{renderList(group)}</div>}
               </div>
             )
           })}
@@ -578,13 +447,17 @@ export function AccountsPage() {
         </Sheet>
       )}
 
-      {sheet.type === 'card_detail' && (
-        <CardDetailSheet
-          account={sheet.item}
-          householdId={householdId}
-          onEdit={() => setSheet({ type: 'account', item: sheet.type === 'card_detail' ? sheet.item : undefined })}
-          onClose={close}
-        />
+      {sheet.type === 'cc_spend' && (
+        <Sheet title={sheet.mode === 'spend' ? 'Record Spend' : 'Record Payment'} onClose={close}>
+          <CCSpendForm account={sheet.item} householdId={householdId} mode={sheet.mode}
+            onSave={afterSave} onCancel={close} />
+        </Sheet>
+      )}
+
+      {sheet.type === 'update_balance' && (
+        <Sheet title={`Update Balance — ${sheet.item.name}`} onClose={close}>
+          <UpdateBalanceForm account={sheet.item} householdId={householdId} onSave={afterSave} onCancel={close} />
+        </Sheet>
       )}
     </div>
   )
