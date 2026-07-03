@@ -25,6 +25,72 @@ export type GrowwFileResult = {
   error?: string
 }
 
+export type FDAdviceMemberPreview = { id: number; name: string; relation?: string }
+
+export type FDAdviceFilePreview = {
+  filename: string
+  doc_type: 'fd_advice' | 'rd_statement' | ''
+  bank_name: string
+  account_number: string
+  member_name_raw: string
+  annual_rate: string
+  investment_date: string
+  parser_used: string
+  warnings: string[]
+  // FD-only
+  principal: string
+  maturity_date: string
+  maturity_value: string
+  compounding: 'simple' | 'monthly' | 'quarterly' | 'half_yearly' | 'annually'
+  tenure_days: number | null
+  // RD-only
+  installment_amount: string
+  current_balance: string
+  installment_count_observed: number
+  statement_date: string
+  matched_member: { id: number; name: string; relation?: string; confidence: number } | null
+  members: FDAdviceMemberPreview[]
+  error?: string
+  error_code?: 'bad_password' | string
+}
+
+export type FDAdviceConfirmedItem = {
+  filename: string
+  doc_type: 'fd_advice' | 'rd_statement'
+  member_id: number | null
+  bank_name: string
+  account_number: string
+  instrument_name?: string
+  annual_rate: string
+  investment_date: string
+  compounding: string
+  // FD-only
+  principal?: string
+  maturity_date?: string
+  maturity_value?: string
+  // RD-only — account_id is required for RD statements: it's the real
+  // account future installments will be debited from via RDMandate. It is
+  // NOT used for the historical backfilled installments, which are recorded
+  // without an account link to avoid double-counting money that already
+  // left the account in the past.
+  installment_amount?: string
+  current_balance?: string
+  tenure_months?: number
+  installment_count_observed?: number
+  account_id?: number
+}
+
+export type FDAdviceFileResult = {
+  filename: string
+  instrument_id?: number
+  instrument_name?: string
+  mandate_id?: number
+  installments_backfilled?: number
+  created?: boolean
+  fd_details_created?: boolean
+  error?: string
+}
+
 const BASE = '/api'
 
 async function getCsrf(): Promise<string> {
@@ -91,4 +157,24 @@ export const importApi = {
     for (const f of files) fd.append('files', f)
     return postForm<GrowwFileResult[]>(`${BASE}/imports/groww-apply`, fd)
   },
+
+  previewFDAdviceFiles: async (
+    householdId: number,
+    files: File[],
+    passwords?: Record<string, string>,
+    savePasswords?: Record<string, boolean>,
+  ): Promise<FDAdviceFilePreview[]> => {
+    const fd = new FormData()
+    fd.append('household_id', String(householdId))
+    if (passwords && Object.keys(passwords).length > 0) fd.append('passwords', JSON.stringify(passwords))
+    if (savePasswords && Object.keys(savePasswords).length > 0) fd.append('save_passwords', JSON.stringify(savePasswords))
+    for (const f of files) fd.append('files', f)
+    return postForm<FDAdviceFilePreview[]>(`${BASE}/imports/fd-advice-preview`, fd)
+  },
+
+  applyFDAdviceImport: (
+    householdId: number,
+    items: FDAdviceConfirmedItem[],
+  ): Promise<FDAdviceFileResult[]> =>
+    httpPost(`${BASE}/imports/fd-advice-apply`, { household_id: householdId, items }),
 }

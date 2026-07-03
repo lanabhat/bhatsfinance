@@ -303,4 +303,180 @@ class GrowwApplyView(APIView):
             except Exception as e:
                 all_results.append({'filename': f.name, 'member_name': member.full_name, 'error': str(e)})
 
+
+class FDAdvicePreviewView(APIView):
+    """
+    Step 1: decrypt + parse one or more FD advice / RD statement PDFs and
+    return extracted, user-editable fields per file, plus a fuzzy-matched
+    member suggestion. Saved household passwords are tried automatically
+    before falling back to any explicitly supplied password.
+    """
+
+    def post(self, request):
+        import json
+
+        from core.models import Household
+        from ingestion.fd_parser import FDParseError, parse_deposit_text
+        from ingestion.models import SavedPdfPassword
+        from ingestion.pdf_decrypt import IncorrectPasswordError, decrypt_and_extract_text
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'error': 'household_id is required'}, status=400)
+
+        try:
+            household = Household.objects.get(pk=int(household_id))
+        except Household.DoesNotExist:
+            return Response({'error': 'Household not found'}, status=404)
+
+        try:
+            passwords = json.loads(request.data.get('passwords', '{}'))
+        except Exception:
+            passwords = {}
+        try:
+            save_passwords = json.loads(request.data.get('save_passwords', '{}'))
+        except Exception:
+            save_passwords = {}
+
+        members = household.members.filter(is_active=True)
+        member_names = {m.full_name.lower(): m for m in members}
+        member_list = [{'id': m.id, 'name': m.full_name, 'relation': m.relation_type} for m in members]
+
+        saved_passwords = list(
+            SavedPdfPassword.objects.filter(household=household).order_by('-last_used_at', '-created_at')
+        )
+
+        files = request.FILES.getlist('files')
+        if not files:
+            single = request.FILES.get('file')
+            if single:
+                files = [single]
+        if not files:
+            return Response({'error': 'No files provided'}, status=400)
+
+        results = []
+        for f in files:
+            file_bytes = f.read()
+
+            candidates: list[tuple[str, object]] = []
+            supplied = passwords.get(f.name)
+            if supplied is not None:
+                candidates.append((supplied, None))
+            for saved in saved_passwords:
+                candidates.append((saved.password, saved))
+            if not candidates:
+                candidates.append(('', None))
+
+            text = None
+            matched_saved = None
+            winning_password = None
+            password_error = None
+            corrupt_error = None
+            for pw, saved_obj in candidates:
+                try:
+                    text = decrypt_and_extract_text(file_bytes, pw)
+                    matched_saved = saved_obj
+                    winning_password = pw
+                    break
+                except IncorrectPasswordError as e:
+                    password_error = e
+                    continue
+                except ValueError as e:
+                    corrupt_error = e
+                    break
+
+            if text is None:
+                if corrupt_error is not None:
+                    results.append({'filename': f.name, 'error': str(corrupt_error)})
+                else:
+                    results.append({'filename': f.name, 'error': str(password_error) if password_error else 'Could not read PDF.', 'error_code': 'bad_password'})
+                continue
+
+            if matched_saved is not None:
+                from django.utils import timezone
+                matched_saved.last_used_at = timezone.now()
+                matched_saved.save(update_fields=['last_used_at'])
+            elif supplied is not None and save_passwords.get(f.name, True):
+                from django.utils import timezone
+                already_saved = any(s.password == winning_password for s in saved_passwords)
+                if not already_saved:
+                    new_saved = SavedPdfPassword.objects.create(
+                        household=household,
+                        password=winning_password,
+                        last_used_at=timezone.now(),
+                    )
+                    saved_passwords.insert(0, new_saved)
+
+            try:
+                parsed = parse_deposit_text(text)
+            except FDParseError as e:
+                results.append({'filename': f.name, 'error': str(e)})
+                continue
+
+            matched_member, confidence = _fuzzy_match_member(parsed.get('member_name_raw', ''), member_names)
+
+            results.append({
+                'filename': f.name,
+                **parsed,
+                'matched_member': (
+                    {'id': matched_member.id, 'name': matched_member.full_name,
+                     'relation': matched_member.relation_type, 'confidence': confidence}
+                    if matched_member else None
+                ),
+                'members': member_list,
+            })
+
+        return Response(results)
+
+
+class FDAdviceApplyView(APIView):
+    """Step 2: commit records from user-confirmed/edited FD/RD field values."""
+
+    def post(self, request):
+        from ingestion.universal_importer import apply_fd_advice_import, apply_rd_statement_import
+        from core.models import Household, Member
+        from instruments.models import Account
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'error': 'household_id is required'}, status=400)
+
+        try:
+            household = Household.objects.get(pk=int(household_id))
+        except Household.DoesNotExist:
+            return Response({'error': 'Household not found'}, status=404)
+
+        items = request.data.get('items', [])
+        if not items:
+            return Response({'error': 'items is required'}, status=400)
+
+        all_results = []
+        for item in items:
+            member = None
+            member_id = item.get('member_id')
+            if member_id:
+                try:
+                    member = Member.objects.get(pk=member_id, household=household)
+                except Member.DoesNotExist:
+                    pass
+
+            try:
+                if item.get('doc_type') == 'rd_statement':
+                    account_id = item.get('account_id')
+                    if not account_id:
+                        raise ValueError('account_id is required for RD statement imports (select the account future installments will be paid from).')
+                    try:
+                        account = Account.objects.get(pk=account_id, household=household)
+                    except Account.DoesNotExist:
+                        raise ValueError(f'Account {account_id} not found')
+                    result = apply_rd_statement_import(household, member, item, account)
+                else:
+                    result = apply_fd_advice_import(household, member, item)
+                result['filename'] = item.get('filename', '')
+                all_results.append(result)
+            except Exception as e:
+                all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
+
+        return Response(all_results, status=201)
+
         return Response(all_results, status=201)

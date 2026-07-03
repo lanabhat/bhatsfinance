@@ -1,6 +1,5 @@
 from datetime import date, timedelta
 
-from django.db.models import Sum
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -79,49 +78,30 @@ class AccountBalanceView(APIView):
     """Compute current balance / credit card outstanding for a single account."""
 
     def get(self, request, pk):
+        from instruments.services import compute_account_balance
+
         try:
             account = Account.objects.get(pk=pk)
         except Account.DoesNotExist:
             return Response({'error': 'Account not found'}, status=404)
 
-        from ledger.models import Transaction
-        from valuations.models import ValuationSnapshot
-
-        # Use the most recent balance snapshot as the anchor; fall back to opening_balance
-        snapshot = (
-            ValuationSnapshot.objects
-            .filter(account=account)
-            .order_by('-valuation_date', '-id')
-            .first()
-        )
-        if snapshot:
-            anchor_balance = float(snapshot.balance)
-            anchor_date = snapshot.valuation_date
-            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date)
-        else:
-            anchor_balance = float(account.opening_balance)
-            anchor_date = None
-            txs = Transaction.objects.filter(account=account)
-
-        total_inflow = txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or 0
-        total_outflow = txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or 0
-        current_balance = anchor_balance + float(total_inflow) - float(total_outflow)
+        balance = compute_account_balance(account)
 
         data = {
             'account_id': account.pk,
             'account_name': account.name,
             'account_type': account.account_type,
             'opening_balance': float(account.opening_balance),
-            'anchor_balance': anchor_balance,
-            'anchor_date': anchor_date.isoformat() if anchor_date else None,
-            'total_inflow': float(total_inflow),
-            'total_outflow': float(total_outflow),
-            'current_balance': current_balance,
+            'anchor_balance': balance['anchor_balance_float'],
+            'anchor_date': balance['anchor_date'].isoformat() if balance['anchor_date'] else None,
+            'total_inflow': balance['total_inflow_float'],
+            'total_outflow': balance['total_outflow_float'],
+            'current_balance': balance['current_balance_float'],
         }
 
         if account.account_type == Account.AccountType.CREDIT_CARD:
             credit_limit = float(account.credit_limit) if account.credit_limit else 0
-            outstanding = float(total_outflow) - float(total_inflow)
+            outstanding = balance['total_outflow_float'] - balance['total_inflow_float']
             available = credit_limit - outstanding if credit_limit else None
             data.update({
                 'credit_limit': credit_limit,

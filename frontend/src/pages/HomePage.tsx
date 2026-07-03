@@ -5,6 +5,7 @@ import { MaturingFDsCard } from '../components/home/MaturingFDsCard'
 import { MarkSipPaidSheet } from '../components/home/MarkSipPaidSheet'
 import { MarkAllSipsPaidSheet } from '../components/home/MarkAllSipsPaidSheet'
 import { MissedPremiumsCard } from '../components/home/MissedPremiumsCard'
+import { MissedRDsCard } from '../components/home/MissedRDsCard'
 import { InsuranceSummaryCard } from '../components/home/InsuranceSummaryCard'
 import { MemberNetWorthRow } from '../components/home/MemberNetWorthRow'
 import { MemberViewSelector } from '../components/home/MemberViewSelector'
@@ -359,6 +360,12 @@ export function HomePage({ onNavigate }: Props) {
           onPaid={refreshDashboard}
         />
       )}
+
+      <MissedRDsCard
+        items={dashboard.missedRD}
+        accountOptions={accounts}
+        onPaid={refreshDashboard}
+      />
 
       <MissedPremiumsCard
         items={dashboard.missedPremiums}

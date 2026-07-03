@@ -53,6 +53,14 @@ def _to_date(val) -> date:
     raise ValueError(f"Cannot parse date: {val!r}")
 
 
+def _add_months(base: date, months: int) -> date:
+    month_index = base.month - 1 + months
+    year = base.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(base.day, 28)
+    return date(year, month, day)
+
+
 def _fuzzy_member(name: str, members):
     """Fuzzy match a name string against member queryset. Returns member or None."""
     if not name:
@@ -478,6 +486,254 @@ def _get_asset_category(household, name: str):
         return AssetCategory.objects.get(household=household, name__iexact=name)
     except AssetCategory.DoesNotExist:
         return None
+
+
+def apply_fd_advice_import(household, member, item: dict) -> dict:
+    """
+    Create/update an Instrument(type='fd') + FDDetails + InstrumentOwnership
+    from a user-confirmed FD advice import item.
+
+    Idempotent: get_or_create on the Instrument name, update_or_create on
+    FDDetails (keyed on the OneToOne instrument), so re-importing a
+    corrected/re-issued advice updates rather than errors.
+    """
+    from instruments.models import FDDetails, Instrument, InstrumentOwnership
+    from ledger.models import Transaction
+    from valuations.models import ValuationSnapshot
+    from valuations.services import _compute_fd_value
+
+    bank_name = (item.get('bank_name') or '').strip() or 'Bank'
+    account_number = (item.get('account_number') or '').strip()
+
+    instrument_name = (item.get('instrument_name') or '').strip()
+    if not instrument_name:
+        instrument_name = f'{bank_name} FD {account_number}' if account_number else f'{bank_name} FD'
+
+    fd_category = _get_asset_category(household, 'Fixed Deposit')
+
+    with db_transaction.atomic():
+        instrument, inst_created = Instrument.objects.get_or_create(
+            household=household,
+            name=instrument_name,
+            defaults={
+                'instrument_type': Instrument.InstrumentType.FD,
+                'symbol': account_number,
+                'asset_category': fd_category,
+            },
+        )
+        if not inst_created and not instrument.asset_category and fd_category:
+            instrument.asset_category = fd_category
+            instrument.save(update_fields=['asset_category'])
+
+        investment_date = _to_date(item['investment_date'])
+        principal = _to_decimal(item['principal'])
+
+        maturity_value_raw = item.get('maturity_value')
+        fd_details, fd_created = FDDetails.objects.update_or_create(
+            instrument=instrument,
+            defaults={
+                'principal': principal,
+                'annual_rate': _to_decimal(item['annual_rate']),
+                'investment_date': investment_date,
+                'maturity_date': _to_date(item['maturity_date']),
+                'compounding': item.get('compounding') or 'quarterly',
+                'maturity_value': _money(maturity_value_raw) if maturity_value_raw else None,
+            },
+        )
+
+        if member:
+            InstrumentOwnership.objects.get_or_create(
+                instrument=instrument,
+                member=member,
+                defaults={'allocation_percent': Decimal('100')},
+            )
+
+        # Holdings are derived from Transaction history, so the deposit that
+        # funded this FD must be recorded — mirrors the manual "Add FD" flow's
+        # gap being filled the same way Groww/Upstox imports create an
+        # initial buy transaction. Only create it once per instrument.
+        # account is intentionally left unset: these FDs were opened in the
+        # past, and the user's real savings account balances already reflect
+        # that money having left long ago — debiting a real account here would
+        # double-count it against the account's current (already-reduced) balance.
+        if principal > 0 and not Transaction.objects.filter(instrument=instrument, household=household).exists():
+            Transaction.objects.create(
+                household=household,
+                instrument=instrument,
+                account=None,
+                member=member,
+                tx_date=investment_date,
+                amount=principal,
+                direction=Transaction.Direction.OUTFLOW,
+                transaction_type=Transaction.TransactionType.DEPOSIT,
+                currency='INR',
+                source=Transaction.SourceType.CSV,
+            )
+
+        # Holdings/Net Worth read market_value from the latest ValuationSnapshot,
+        # falling back to net_invested (principal) if none exists — without this,
+        # an imported FD shows at its original principal instead of its accrued
+        # current value even though FDDetails has everything needed to compute it.
+        today = date.today()
+        current_value = _compute_fd_value(fd_details, today)
+        ValuationSnapshot.objects.update_or_create(
+            household=household,
+            instrument=instrument,
+            account=None,
+            valuation_date=today,
+            defaults={'market_value': current_value, 'source': ValuationSnapshot.SourceType.CSV},
+        )
+
+    return {
+        'instrument_id': instrument.id,
+        'instrument_name': instrument.name,
+        'created': inst_created,
+        'fd_details_created': fd_created,
+    }
+
+
+def apply_rd_statement_import(household, member, item: dict, account) -> dict:
+    """
+    Create/update an Instrument(type='rd') + FDDetails (for maturity display)
+    + InstrumentOwnership + RDMandate (for ongoing installment tracking) from
+    a user-confirmed RD statement import item. Backfills RDPaymentAck records
+    for installments the statement already proves were paid, so future
+    missed-installment checks only flag genuinely future/unpaid months.
+
+    `account` is a real, user-selected Account (instruments.models.Account)
+    that future installments will be debited from via RDMandate.mark-paid —
+    it is NOT used for the historical backfilled transactions below, since
+    those installments were already paid in the past and the account's
+    current balance already reflects that money having left.
+    """
+    from alerts.models import RDMandate, RDPaymentAck
+    from ingestion.rd_maturity import compute_rd_maturity
+    from instruments.models import FDDetails, Instrument, InstrumentOwnership
+    from ledger.models import Transaction
+    from valuations.models import ValuationSnapshot
+
+    bank_name = (item.get('bank_name') or '').strip() or 'Bank'
+    account_number = (item.get('account_number') or '').strip()
+
+    instrument_name = (item.get('instrument_name') or '').strip()
+    if not instrument_name:
+        instrument_name = f'{bank_name} RD {account_number}' if account_number else f'{bank_name} RD'
+
+    investment_date = _to_date(item['investment_date'])
+    tenure_months = int(item['tenure_months'])
+    annual_rate = _to_decimal(item['annual_rate'])
+    installment_amount = _to_decimal(item['installment_amount'])
+    compounding = item.get('compounding') or 'quarterly'
+
+    maturity_date = _add_months(investment_date, tenure_months)
+    maturity_value = compute_rd_maturity(installment_amount, annual_rate, tenure_months, compounding)
+
+    current_balance_raw = item.get('current_balance')
+    principal_display = _money(current_balance_raw) if current_balance_raw else installment_amount
+
+    installments_backfilled = 0
+    rd_category = _get_asset_category(household, 'Recurring Deposit')
+
+    with db_transaction.atomic():
+        instrument, inst_created = Instrument.objects.get_or_create(
+            household=household,
+            name=instrument_name,
+            defaults={
+                'instrument_type': Instrument.InstrumentType.RD,
+                'symbol': account_number,
+                'asset_category': rd_category,
+            },
+        )
+        if not inst_created and not instrument.asset_category and rd_category:
+            instrument.asset_category = rd_category
+            instrument.save(update_fields=['asset_category'])
+
+        FDDetails.objects.update_or_create(
+            instrument=instrument,
+            defaults={
+                'principal': principal_display,
+                'annual_rate': annual_rate,
+                'investment_date': investment_date,
+                'maturity_date': maturity_date,
+                'compounding': compounding,
+                'maturity_value': maturity_value,
+            },
+        )
+
+        if member:
+            InstrumentOwnership.objects.get_or_create(
+                instrument=instrument,
+                member=member,
+                defaults={'allocation_percent': Decimal('100')},
+            )
+
+        due_day = min(investment_date.day, 28)
+        mandate, _mandate_created = RDMandate.objects.update_or_create(
+            instrument=instrument,
+            household=household,
+            defaults={
+                'account': account,
+                'member': member,
+                'installment_amount': installment_amount,
+                'frequency': RDMandate.Frequency.MONTHLY,
+                'due_day': due_day,
+                'start_date': investment_date,
+                'tenure_months': tenure_months,
+                'end_date': maturity_date,
+                'is_active': True,
+            },
+        )
+
+        # Holdings are derived from Transaction history, so each installment
+        # the statement proves was paid must be recorded as a deposit — this
+        # also satisfies generate_missed_rd_installments' ack-exists check
+        # (see alerts.services.generate_missed_rd_installments), so backfilled
+        # months correctly stop showing as due even though these transactions
+        # have no account set.
+        installment_count = int(item.get('installment_count_observed') or 0)
+        for months_elapsed in range(installment_count):
+            due = _add_months(investment_date, months_elapsed).replace(day=min(due_day, 28))
+            _, tx_created = Transaction.objects.get_or_create(
+                household=household,
+                instrument=instrument,
+                account=None,
+                tx_date=due,
+                idempotency_key=f'rd-import-{instrument.id}-{due.isoformat()}',
+                defaults={
+                    'member': member,
+                    'amount': installment_amount,
+                    'direction': Transaction.Direction.OUTFLOW,
+                    'transaction_type': Transaction.TransactionType.DEPOSIT,
+                    'currency': 'INR',
+                    'source': Transaction.SourceType.CSV,
+                },
+            )
+            if tx_created:
+                installments_backfilled += 1
+            RDPaymentAck.objects.get_or_create(
+                mandate=mandate,
+                due_date=due,
+                defaults={'acknowledged_on': due, 'note': 'Backfilled from imported statement'},
+            )
+
+        # Holdings/Net Worth read market_value from the latest ValuationSnapshot.
+        # RD's current value is the statement's accrued balance (principal_display),
+        # not a formula projection — the bank has already told us the real figure.
+        ValuationSnapshot.objects.update_or_create(
+            household=household,
+            instrument=instrument,
+            account=None,
+            valuation_date=date.today(),
+            defaults={'market_value': principal_display, 'source': ValuationSnapshot.SourceType.CSV},
+        )
+
+    return {
+        'instrument_id': instrument.id,
+        'instrument_name': instrument.name,
+        'mandate_id': mandate.id,
+        'installments_backfilled': installments_backfilled,
+        'created': inst_created,
+    }
 
 
 def apply_groww_import(household, member, parsed: dict) -> dict:

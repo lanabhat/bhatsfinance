@@ -14,6 +14,7 @@ type Props = {
   onUpdateValue: () => void
   onEdit: () => void
   onTransactionsChanged: () => Promise<void>
+  onDeleted: () => Promise<void>
 }
 
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -103,7 +104,7 @@ function BuyHistoryEditor({ transaction, onSave, onCancel }: {
   )
 }
 
-export function InstrumentExpandedDetail({ householdId, holding, instrument, onBuy, onUpdateValue, onEdit, onTransactionsChanged }: Props) {
+export function InstrumentExpandedDetail({ householdId, holding, instrument, onBuy, onUpdateValue, onEdit, onTransactionsChanged, onDeleted }: Props) {
   const { canWrite } = useAuth()
   const { members } = useApp()
   const fmt = useMaskedFmt()
@@ -112,6 +113,7 @@ export function InstrumentExpandedDetail({ householdId, holding, instrument, onB
   const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [busyTxId, setBusyTxId] = useState<number | null>(null)
+  const [deletingInstrument, setDeletingInstrument] = useState(false)
   const [actionError, setActionError] = useState('')
 
   const loadHistory = async () => {
@@ -141,6 +143,23 @@ export function InstrumentExpandedDetail({ householdId, holding, instrument, onB
       setActionError('Failed to delete buy entry.')
     } finally {
       setBusyTxId(null)
+    }
+  }
+
+  const handleDeleteInstrument = async () => {
+    if (txs.length > 0) {
+      setActionError('Delete all buy entries for this holding first, then delete the instrument.')
+      return
+    }
+    if (!confirm(`Delete "${instrument.name}"? This removes the instrument and any linked FD/RD details, ownerships, and valuations. This cannot be undone.`)) return
+    setDeletingInstrument(true)
+    setActionError('')
+    try {
+      await portfolioApi.deleteInstrument(instrument.id)
+      await onDeleted()
+    } catch {
+      setActionError('Failed to delete instrument.')
+      setDeletingInstrument(false)
     }
   }
 
@@ -210,6 +229,15 @@ export function InstrumentExpandedDetail({ householdId, holding, instrument, onB
         <button type="button" onClick={onBuy} disabled={!canWrite} className="flex-1 rounded-xl border border-primary-300 py-2 text-sm font-medium text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:bg-primary-900/15 disabled:opacity-50">+ Buy More</button>
         <button type="button" onClick={onUpdateValue} disabled={!canWrite} className="flex-1 rounded-xl bg-primary-600 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">Update Value</button>
         <button type="button" onClick={onEdit} disabled={!canWrite} className="rounded-xl border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50" title="Edit instrument">✏️</button>
+        <button
+          type="button"
+          onClick={() => void handleDeleteInstrument()}
+          disabled={!canWrite || deletingInstrument || loading}
+          className="rounded-xl border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50"
+          title={txs.length > 0 ? 'Delete all buy entries first' : 'Delete instrument'}
+        >
+          {deletingInstrument ? '…' : '🗑'}
+        </button>
       </div>
     </div>
   )

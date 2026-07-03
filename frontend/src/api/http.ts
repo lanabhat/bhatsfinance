@@ -123,3 +123,32 @@ export async function deleteJsonResult<T>(path: string): Promise<T> {
 export function unwrapList<T>(payload: ApiListResponse<T>): T[] {
   return Array.isArray(payload) ? payload : payload.results
 }
+
+export async function postJsonForBlob(path: string, payload: unknown): Promise<{ blob: Blob; filename: string }> {
+  await ensureCsrfCookie()
+  const csrfToken = getCsrfTokenFromCookie()
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const err = await parseError(response)
+    throw err
+  }
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const match = /filename="?([^"]+)"?/.exec(disposition)
+  const filename = match ? match[1] : 'statement'
+  const blob = await response.blob()
+  return { blob, filename }
+}
+
+export function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}

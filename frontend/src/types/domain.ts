@@ -299,6 +299,22 @@ export type SIPMandate = {
   is_active: boolean
 }
 
+export type RDMandate = {
+  id: number
+  household: number
+  member: number | null
+  account: number
+  instrument: number
+  installment_amount: string
+  frequency: 'monthly' | 'quarterly'
+  due_day: number
+  start_date: string
+  tenure_months: number
+  end_date: string | null
+  grace_days: number
+  is_active: boolean
+}
+
 export type TaxRecord = {
   id: number
   household: number
@@ -356,6 +372,17 @@ export type MissedSipAlert = {
   grace_end: string
 }
 
+export type MissedRDAlert = {
+  mandate_id: number
+  instrument: string
+  instrument_id: number
+  account: string
+  account_id: number
+  due_date: string
+  expected_amount: string
+  grace_end: string
+}
+
 export type NetWorthPoint = {
   date: string
   networth: number
@@ -382,6 +409,7 @@ export type DashboardPayload = {
   networth: string
   xirr: number | null
   missedSip: MissedSipAlert[]
+  missedRD: MissedRDAlert[]
   missedPremiums: MissedPremiumAlert[]
   networthHistory: NetWorthPoint[]
   categoryBreakdown: CategoryBreakdownItem[]

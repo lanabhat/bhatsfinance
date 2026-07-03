@@ -23,6 +23,7 @@ import { LedgerPage } from './pages/LedgerPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { TaxPage } from './pages/TaxPage'
 import { ValuationPage } from './pages/ValuationPage'
+import { ReportsPage } from './pages/ReportsPage'
 import { MaintenancePage } from './pages/MaintenancePage'
 import { AdminPage } from './pages/AdminPage'
 import { GmailSyncPage } from './pages/GmailSyncPage'
@@ -38,9 +39,9 @@ import { PendingPage } from './pages/PendingPage'
 import { DeniedPage } from './pages/DeniedPage'
 import { CoinSpinner } from './components/common/CoinSpinner'
 
-type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'analytics' | 'settings' | 'instruments' | 'ledger' | 'cashflow' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail-sync' | 'gmail-rules' | 'gmail-staging' | 'sms-devices' | 'sms-test' | 'sms-messages' | 'sms-rules'
+type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'analytics' | 'settings' | 'instruments' | 'ledger' | 'cashflow' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'reports' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail-sync' | 'gmail-rules' | 'gmail-staging' | 'sms-devices' | 'sms-test' | 'sms-messages' | 'sms-rules'
 
-const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'analytics', 'settings', 'instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules'])
+const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'analytics', 'settings', 'instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'reports', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules'])
 
 function routeFromHash(): RouteKey {
   const value = window.location.hash.replace('#/', '') as RouteKey
@@ -121,6 +122,7 @@ function AppInner() {
       case 'tax': return <TaxPage householdId={householdId} memberOptions={members} canDelete={canDelete} />
       case 'valuation': return <ValuationPage householdId={householdId} accountOptions={accounts} instrumentOptions={instruments} canDelete={canDelete} />
       case 'insurance': return <InsurancePage householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} canDelete={canDelete} />
+      case 'reports': return <ReportsPage householdId={householdId} accountOptions={accounts} />
       case 'help': return <HelpPage />
       case 'import': return <ImportWizard householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} />
       case 'maintenance': return <MaintenancePage />

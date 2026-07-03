@@ -285,6 +285,7 @@ export function HoldingsPage() {
             onUpdateValue={() => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name })}
             onEdit={() => setSheet({ type: 'edit_instrument', instrument: inst })}
             onTransactionsChanged={async () => { await refreshDashboard(); await loadInstruments() }}
+            onDeleted={async () => { await refreshDashboard(); await loadInstruments() }}
           />
         </ExpandableGridCard>
       )

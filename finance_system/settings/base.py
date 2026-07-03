@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'sms_ingestion',
     'upstox_integration',
     'insurance',
+    'reports',
 ]
 
 MIDDLEWARE = [

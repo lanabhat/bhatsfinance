@@ -83,12 +83,13 @@ export const ledgerApi = {
   async deleteTransaction(id: number) { return deleteJson(`/api/transactions/${id}/`) },
   async fetchDashboard(householdId: number, asOf: string): Promise<DashboardPayload> {
     const q = toQueryString({ household_id: householdId, as_of: asOf })
-    const [holdings, networth, allocation, xirr, missed, missedPremiums, history, catBreakdown, membersNw, accts] = await Promise.all([
+    const [holdings, networth, allocation, xirr, missed, missedRD, missedPremiums, history, catBreakdown, membersNw, accts] = await Promise.all([
       getJson<{ holdings: DashboardPayload['holdings'] }>(`/api/holdings?${q}`),
       getJson<{ networth: string }>(`/api/networth?${q}`),
       getJson<{ allocation: DashboardPayload['allocation'] }>(`/api/allocation?${q}`),
       getJson<{ xirr: number | null }>(`/api/xirr?${q}`),
       getJson<{ missed: DashboardPayload['missedSip'] }>(`/api/alerts/missed-sip?${q}`),
+      getJson<{ missed: DashboardPayload['missedRD'] }>(`/api/alerts/missed-rd-installments?${q}`),
       getJson<{ missed: DashboardPayload['missedPremiums'] }>(`/api/alerts/missed-premiums?${q}`),
       getJson<{ history: DashboardPayload['networthHistory'] }>(`/api/networth/history?${q}`),
       getJson<{ breakdown: DashboardPayload['categoryBreakdown'] }>(`/api/category-breakdown?${q}`),
@@ -102,6 +103,7 @@ export const ledgerApi = {
       allocation: allocation.allocation,
       xirr: xirr.xirr,
       missedSip: missed.missed,
+      missedRD: missedRD.missed,
       missedPremiums: missedPremiums.missed,
       networthHistory: history.history,
       categoryBreakdown: catBreakdown.breakdown,

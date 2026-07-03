@@ -13,6 +13,7 @@ const EMPTY_DASHBOARD: DashboardPayload = {
   networth: '0.00',
   xirr: null,
   missedSip: [],
+  missedRD: [],
   missedPremiums: [],
   networthHistory: [],
   categoryBreakdown: [],

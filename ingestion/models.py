@@ -1,5 +1,6 @@
 from django.db import models
 
+from core.fields import EncryptedTextField
 from core.models import TimeStampedModel
 
 
@@ -44,5 +45,23 @@ class ImportRow(TimeStampedModel):
         blank=True,
         related_name='import_rows',
     )
+
+class SavedPdfPassword(TimeStampedModel):
+    """
+    Passwords the household has previously used to unlock imported PDFs
+    (e.g. bank FD/RD statements), tried automatically on future imports so
+    the user doesn't have to retype them.
+    """
+
+    household = models.ForeignKey('core.Household', on_delete=models.CASCADE, related_name='saved_pdf_passwords')
+    label = models.CharField(max_length=100, blank=True)
+    password = EncryptedTextField(blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-last_used_at', '-created_at']
+
+    def __str__(self) -> str:
+        return f'Saved PDF password ({self.label or self.household_id})'
 
 # Create your models here.

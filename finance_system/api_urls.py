@@ -1,12 +1,13 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from alerts.views import MissedSIPAlertsView, SIPMandateViewSet
+from alerts.views import MissedRDAlertsView, MissedSIPAlertsView, RDMandateViewSet, SIPMandateViewSet
 from insurance.views import InsurancePolicyViewSet, InsuranceSummaryView, MissedPremiumRemindersView, VehicleClaimViewSet
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
-from ingestion.views import CSVImportView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView
+from ingestion.views import CSVImportView, FDAdviceApplyView, FDAdvicePreviewView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView
 from insights.views import AllocationView, CategoryBreakdownView, CashFlowView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, SpendAnalyticsView, XIRRView
+from reports.views import StatementExportView, StatementPreviewView
 from instruments.views import (
     AccountBalanceView,
     AccountOwnershipViewSet,
@@ -75,6 +76,7 @@ router.register('valuations', ValuationSnapshotViewSet)
 router.register('fd-details', FDDetailsViewSet)
 router.register('asset-categories', AssetCategoryViewSet)
 router.register('sip-mandates', SIPMandateViewSet)
+router.register('rd-mandates', RDMandateViewSet)
 router.register('insurance-policies', InsurancePolicyViewSet)
 router.register('vehicle-claims', VehicleClaimViewSet)
 router.register('tax-records', TaxRecordViewSet)
@@ -99,6 +101,7 @@ urlpatterns = router.urls + [
     path('category-breakdown', CategoryBreakdownView.as_view(), name='category-breakdown'),
     path('members-networth', MembersNetWorthView.as_view(), name='members-networth'),
     path('alerts/missed-sip', MissedSIPAlertsView.as_view(), name='missed-sip-alerts'),
+    path('alerts/missed-rd-installments', MissedRDAlertsView.as_view(), name='missed-rd-alerts'),
     path('alerts/missed-premiums', MissedPremiumRemindersView.as_view(), name='missed-premium-alerts'),
     path('insurance-summary', InsuranceSummaryView.as_view(), name='insurance-summary'),
     path('imports/csv', CSVImportView.as_view(), name='imports-csv'),
@@ -107,6 +110,10 @@ urlpatterns = router.urls + [
     path('imports/apply', ImportApplyView.as_view(), name='imports-apply'),
     path('imports/groww-preview', GrowwPreviewView.as_view(), name='imports-groww-preview'),
     path('imports/groww-apply', GrowwApplyView.as_view(), name='imports-groww-apply'),
+    path('imports/fd-advice-preview', FDAdvicePreviewView.as_view(), name='imports-fd-advice-preview'),
+    path('imports/fd-advice-apply', FDAdviceApplyView.as_view(), name='imports-fd-advice-apply'),
+    path('reports/statement-preview', StatementPreviewView.as_view(), name='reports-statement-preview'),
+    path('reports/statement-export', StatementExportView.as_view(), name='reports-statement-export'),
     path('valuations/bulk-snapshot', BulkSnapshotView.as_view(), name='bulk-snapshot'),
     path('accounts/<int:pk>/balance/', AccountBalanceView.as_view(), name='account-balance'),
     path('fd-details/maturing', MaturingFDsView.as_view(), name='fd-details-maturing'),

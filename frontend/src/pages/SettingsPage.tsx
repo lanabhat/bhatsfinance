@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { ImportWizard } from './ImportWizard'
 import { GrowwImportWizard } from '../components/imports/GrowwImportWizard'
+import { FDAdviceImportWizard } from '../components/imports/FDAdviceImportWizard'
 import { UpstoxConnect } from '../components/integrations/UpstoxConnect'
 import { useTerms } from '../context/TermsContext'
 import { deleteJsonResult } from '../api/http'
@@ -37,7 +38,7 @@ const INSTRUMENT_TYPE_OPTIONS = [
   { value: 'other', label: 'Other' },
 ]
 
-type Tab = 'display' | 'delete' | 'import' | 'groww' | 'upstox'
+type Tab = 'display' | 'delete' | 'import' | 'groww' | 'upstox' | 'fd'
 
 type Props = {
   deleteConfig: Record<DeleteEntity, boolean>
@@ -92,6 +93,7 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
         <button className={tabCls('import')} onClick={() => setTab('import')}>Import Data</button>
         <button className={tabCls('groww')} onClick={() => setTab('groww')}>Portfolio Import</button>
         <button className={tabCls('upstox')} onClick={() => setTab('upstox')}>Upstox</button>
+        <button className={tabCls('fd')} onClick={() => setTab('fd')}>FD Import</button>
       </div>
 
       {tab === 'display' && (
@@ -153,6 +155,18 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
             Requires a free developer app at <strong>developer.upstox.com</strong> — credentials go in <code>.env</code>.
           </p>
           <UpstoxConnect memberOptions={memberOptions} />
+        </article>
+      )}
+
+      {tab === 'fd' && (
+        <article className="panel">
+          <h2>FD / RD Import</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Import Fixed Deposit advice letters or Recurring Deposit statements of account (.pdf).
+            Password-protected files are supported — SBI e-TDR/e-STDR and RD statements are fully
+            supported; other banks are parsed on a best-effort basis and reviewable before import.
+          </p>
+          <FDAdviceImportWizard householdId={householdId} />
         </article>
       )}
 

@@ -22,6 +22,7 @@ const BASE_GROUPS: RouteGroup[] = [
       { key: 'alerts', label: 'Alerts', icon: '🔔' },
       { key: 'tax', label: 'Tax', icon: '🧾' },
       { key: 'insurance', label: 'Insurance', icon: '🛡' },
+      { key: 'reports', label: 'Reports', icon: '🖨️' },
     ],
   },
   {
