@@ -23,6 +23,6 @@ echo "==> migrate"
 python manage.py migrate --noinput
 
 echo "==> collectstatic"
-python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput -c
 
 echo "Done. Restart the web app from the PythonAnywhere dashboard to apply changes."
