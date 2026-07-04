@@ -126,7 +126,7 @@ class MaturingFDsView(APIView):
         today = date.today()
         cutoff = today + timedelta(days=days)
 
-        qs = FDDetails.objects.select_related('instrument').filter(
+        qs = FDDetails.objects.select_related('instrument').prefetch_related('instrument__ownerships__member').filter(
             instrument__household_id=int(household_id),
             instrument__is_active=True,
             maturity_date__gte=today,
@@ -140,6 +140,10 @@ class MaturingFDsView(APIView):
             total_tenure_days = max((fd.maturity_date - fd.investment_date).days, 1)
             days_remaining = max((fd.maturity_date - today).days, 0)
             elapsed_days = total_tenure_days - days_remaining
+            owners = [
+                {'member_id': o.member_id, 'member_name': o.member.full_name, 'allocation_percent': str(o.allocation_percent)}
+                for o in fd.instrument.ownerships.all()
+            ]
             rows.append({
                 'instrument_id': fd.instrument_id,
                 'instrument_name': fd.instrument.name,
@@ -153,6 +157,7 @@ class MaturingFDsView(APIView):
                 'elapsed_days': elapsed_days,
                 'current_value': str(current_value),
                 'maturity_value': str(maturity_value),
+                'owners': owners,
             })
 
         return Response({'maturing': rows, 'as_of': today.isoformat(), 'window_days': days})

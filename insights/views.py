@@ -95,7 +95,10 @@ class SpendAnalyticsView(APIView):
             return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
         months = int(request.query_params.get('months', 12))
         classification = request.query_params.get('classification') or None
-        return Response(compute_spend_analytics(int(household_id), months, classification))
+        granularity = request.query_params.get('granularity', 'month')
+        periods_raw = request.query_params.get('periods')
+        periods = int(periods_raw) if periods_raw else None
+        return Response(compute_spend_analytics(int(household_id), months, classification, granularity, periods))
 
 
 class MembersNetWorthView(APIView):

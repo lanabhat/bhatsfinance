@@ -498,28 +498,55 @@ def compute_cashflow(household_id: int, year: int, month: int | None = None) -> 
     return result
 
 
-def compute_spend_analytics(household_id: int, months: int = 12, classification: str | None = None) -> dict:
-    """Return transaction analytics for the trailing `months` months.
+_GRANULARITY_LIMITS = {'day': 90, 'week': 52, 'month': 60}
+_GRANULARITY_FORMATS = {'day': '%Y-%m-%d', 'week': '%Y-%m-%d', 'month': '%Y-%m'}
+
+
+def _trunc_fn(granularity: str):
+    from django.db.models.functions import TruncDay, TruncMonth, TruncWeek
+    return {'day': TruncDay, 'week': TruncWeek, 'month': TruncMonth}[granularity]('tx_date')
+
+
+def compute_spend_analytics(
+    household_id: int,
+    months: int = 12,
+    classification: str | None = None,
+    granularity: str = 'month',
+    periods: int | None = None,
+) -> dict:
+    """Return transaction analytics for a trailing window, bucketed by `granularity`
+    ('day', 'week', or 'month').
+
+    `periods` is the window length expressed in units of `granularity` (e.g.
+    30 for 30 days, 8 for 8 weeks, 12 for 12 months). `months` is kept as a
+    backward-compatible alias for `periods` when granularity='month'.
 
     When `classification` is given (e.g. 'spend', 'income') only that type
     is included. When None, all classifications are included.
     The by_category breakdown groups by spend_category for spend-only queries,
     and by classification for all-transactions queries.
     """
-    from datetime import date as _date
+    from datetime import date as _date, timedelta
     from django.db.models import Sum
-    from django.db.models.functions import TruncMonth
     from ledger.models import Transaction
 
+    granularity = granularity if granularity in _GRANULARITY_LIMITS else 'month'
     today = _date.today()
-    months = max(1, min(months, 60))
-    year = today.year
-    month_idx = today.month - (months - 1)
-    while month_idx <= 0:
-        month_idx += 12
-        year -= 1
-    window_start = _date(year, month_idx, 1)
+    periods = periods if periods is not None else months
+    periods = max(1, min(periods, _GRANULARITY_LIMITS[granularity]))
+    date_fmt = _GRANULARITY_FORMATS[granularity]
 
+    if granularity == 'day':
+        window_start = today - timedelta(days=periods - 1)
+    elif granularity == 'week':
+        window_start = today - timedelta(weeks=periods - 1)
+    else:
+        year = today.year
+        month_idx = today.month - (periods - 1)
+        while month_idx <= 0:
+            month_idx += 12
+            year -= 1
+        window_start = _date(year, month_idx, 1)
 
     qs = Transaction.objects.filter(
         household_id=household_id,
@@ -537,9 +564,9 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
     outflow_qs = qs.filter(direction='outflow')
     inflow_qs = qs.filter(direction='inflow')
 
-    def _month_amounts(queryset):
+    def _period_amounts(queryset):
         return (
-            queryset.annotate(m=TruncMonth('tx_date'))
+            queryset.annotate(m=_trunc_fn(granularity))
             .values('m')
             .annotate(amount=Sum('amount'))
             .order_by('m')
@@ -553,9 +580,9 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
     else:
         amount_qs = outflow_qs
 
-    by_month_rows = _month_amounts(outflow_qs if not classification else amount_qs)
+    by_month_rows = _period_amounts(outflow_qs if not classification else amount_qs)
     by_month = [
-        {'month': row['m'].strftime('%Y-%m'), 'amount': float(row['amount'] or 0)}
+        {'month': row['m'].strftime(date_fmt), 'amount': float(row['amount'] or 0)}
         for row in by_month_rows
     ]
 
@@ -627,29 +654,29 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
     # by_month_category: for "all", break out each classification with correct direction
     group_field = 'spend_category' if classification == 'spend' else 'classification'
     if not classification:
-        # Build per-classification monthly amounts with correct direction per classification
+        # Build per-classification amounts (per period) with correct direction per classification
         mc_rows = []
         for row in (
             outflow_qs.exclude(classification='income')
-            .annotate(m=TruncMonth('tx_date'))
+            .annotate(m=_trunc_fn(granularity))
             .values('m', 'classification')
             .annotate(amount=Sum('amount'))
             .order_by('m', 'classification')
         ):
             mc_rows.append({
-                'month': row['m'].strftime('%Y-%m'),
+                'month': row['m'].strftime(date_fmt),
                 'category': row['classification'] or '',
                 'amount': float(row['amount'] or 0),
             })
         for row in (
             inflow_qs.filter(classification='income')
-            .annotate(m=TruncMonth('tx_date'))
+            .annotate(m=_trunc_fn(granularity))
             .values('m', 'classification')
             .annotate(amount=Sum('amount'))
             .order_by('m', 'classification')
         ):
             mc_rows.append({
-                'month': row['m'].strftime('%Y-%m'),
+                'month': row['m'].strftime(date_fmt),
                 'category': 'income',
                 'amount': float(row['amount'] or 0),
             })
@@ -657,14 +684,14 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
     else:
         direction_qs = inflow_qs if classification == 'income' else outflow_qs
         by_month_category_rows = (
-            direction_qs.annotate(m=TruncMonth('tx_date'))
+            direction_qs.annotate(m=_trunc_fn(granularity))
             .values('m', group_field)
             .annotate(amount=Sum('amount'))
             .order_by('m', group_field)
         )
         by_month_category = [
             {
-                'month': row['m'].strftime('%Y-%m'),
+                'month': row['m'].strftime(date_fmt),
                 'category': row[group_field] or '',
                 'amount': float(row['amount'] or 0),
             }
@@ -685,6 +712,8 @@ def compute_spend_analytics(household_id: int, months: int = 12, classification:
             'start': window_start.isoformat(),
             'end': today.isoformat(),
             'months': months,
+            'granularity': granularity,
+            'periods': periods,
         },
     }
 

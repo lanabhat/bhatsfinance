@@ -19,7 +19,7 @@ export function CategoryBreakdownCard({ items }: Props) {
   return (
     <div>
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Breakdown</h2>
-      <div className="grid gap-2">
+      <div className="card-grid grid gap-3">
         {items.map((item) => (
           <SectionCard
             key={item.category_id ?? 'uncategorised'}

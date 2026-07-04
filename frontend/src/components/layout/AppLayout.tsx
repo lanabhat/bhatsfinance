@@ -92,15 +92,14 @@ const CHEVRON_RIGHT = (
   </svg>
 )
 
-const SECONDARY_KEYS = new Set(['instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'reports', 'household', 'maintenance', 'help', 'import', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules', 'settings', 'analytics'])
+const SECONDARY_KEYS = new Set(['instruments', 'ledger', 'alerts', 'tax', 'valuation', 'insurance', 'reports', 'household', 'maintenance', 'help', 'import', 'admin', 'gmail', 'sms', 'settings', 'analytics'])
 const MOBILE_SECONDARY_KEYS = new Set([...SECONDARY_KEYS, 'spend-trends'])
 
 const PAGE_TITLES: Record<string, string> = {
   home: 'Home', holdings: 'Investments', accounts: 'Accounts', expenses: 'Transactions', settings: 'Settings',
-  instruments: 'Instruments', ledger: 'Ledger', cashflow: 'Cash Flow', 'spend-trends': 'Spend Trends', analytics: 'Analytics', alerts: 'Alerts', tax: 'Tax',
+  instruments: 'Instruments', ledger: 'Ledger', 'spend-trends': 'Spend Trends', analytics: 'Analytics', alerts: 'Alerts', tax: 'Tax',
   valuation: 'Valuation', insurance: 'Insurance', reports: 'Reports', household: 'Household & Members', maintenance: 'Maintenance',
-  help: 'Help', import: 'Import', admin: 'User Management', 'gmail-sync': 'Gmail Sync',
-  'gmail-rules': 'Gmail Rules', 'gmail-staging': 'Gmail Transactions', 'sms-devices': 'SMS Devices', 'sms-test': 'SMS Test Sender', 'sms-messages': 'SMS Messages', 'sms-rules': 'SMS Rules',
+  help: 'Help', import: 'Import', admin: 'User Management', gmail: 'Gmail', sms: 'SMS',
 }
 
 const SIDEBAR_PREF_KEY = 'sidebar:expanded'

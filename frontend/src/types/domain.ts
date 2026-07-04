@@ -146,7 +146,7 @@ export type SpendAnalytics = {
   by_member: { member_id: number | null; name: string; amount: number }[]
   by_month_category: { month: string; category: string; amount: number }[]
   total: number
-  window: { start: string; end: string; months: number }
+  window: { start: string; end: string; months: number; granularity: 'day' | 'week' | 'month'; periods: number }
 }
 
 export type AccountBalance = {
@@ -428,6 +428,12 @@ export type FDDetails = {
   maturity_value: string | null
 }
 
+export type MaturingFDOwner = {
+  member_id: number
+  member_name: string
+  allocation_percent: string
+}
+
 export type MaturingFD = {
   instrument_id: number
   instrument_name: string
@@ -441,6 +447,7 @@ export type MaturingFD = {
   elapsed_days: number
   current_value: string
   maturity_value: string
+  owners: MaturingFDOwner[]
 }
 
 export type BulkSnapshotResult = {

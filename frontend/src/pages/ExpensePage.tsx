@@ -22,6 +22,8 @@ type Props = {
   canDelete: (e: DeleteEntity) => boolean
 }
 
+const SPEND_PAGE_SIZE = 25
+
 export function ExpensePage({ householdId, memberOptions, accountOptions, canDelete }: Props) {
   const { canWrite } = useAuth()
   const [items, setItems] = useState<Transaction[]>([])
@@ -32,6 +34,19 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   const [showCategoryDrawer, setShowCategoryDrawer] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Table search/filter/sort/pagination state (for the spends list)
+  const [tableRows, setTableRows] = useState<Transaction[]>([])
+  const [tableCount, setTableCount] = useState(0)
+  const [tableLoading, setTableLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
+  const [filterMember, setFilterMember] = useState('')
+  const [dateAfter, setDateAfter] = useState('')
+  const [dateBefore, setDateBefore] = useState('')
+  const [ordering, setOrdering] = useState('-tx_date')
+  const [page, setPage] = useState(1)
 
   // Category management state
   const [editingCat, setEditingCat] = useState<ExpenseCategory | null>(null)
@@ -77,6 +92,57 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
     void loadCategories()
   }, [householdId])
 
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  // Reset to page 1 whenever a filter/search/order changes
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, filterCategory, filterMember, dateAfter, dateBefore, ordering])
+
+  const loadTable = async () => {
+    setTableLoading(true)
+    try {
+      const res = await ledgerApi.listTransactionsPage({
+        householdId,
+        page,
+        pageSize: SPEND_PAGE_SIZE,
+        classification: 'spend',
+        search: debouncedSearch || undefined,
+        member: filterMember ? Number(filterMember) : undefined,
+        spendCategory: filterCategory || undefined,
+        txDateAfter: dateAfter || undefined,
+        txDateBefore: dateBefore || undefined,
+        ordering,
+      })
+      setTableRows(res.results)
+      setTableCount(res.count)
+    } catch (e) {
+      setError(normalizeApiError(e))
+    } finally {
+      setTableLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadTable()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [householdId, page, debouncedSearch, filterCategory, filterMember, dateAfter, dateBefore, ordering])
+
+  const resetTableFilters = () => {
+    setSearch('')
+    setFilterCategory('')
+    setFilterMember('')
+    setDateAfter('')
+    setDateBefore('')
+    setOrdering('-tx_date')
+  }
+
+  const hasActiveTableFilters = !!(search || filterCategory || filterMember || dateAfter || dateBefore || ordering !== '-tx_date')
+
   const save = async (form: RecordTransactionPayload) => {
     setSaving(true)
     setError('')
@@ -84,6 +150,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
       await expenseApi.createRecorded(form)
       setShowForm(false)
       await loadData()
+      await loadTable()
     } catch (e) {
       setError(normalizeApiError(e))
     } finally {
@@ -138,6 +205,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
       }
       setEditingTx(null)
       await loadData()
+      await loadTable()
     } catch (e) {
       setEditError(normalizeApiError(e))
     } finally {
@@ -180,6 +248,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
       setReassignTarget(null)
       await loadCategories()
       await loadData()
+      await loadTable()
     } finally { setCatSaving(false) }
   }
 
@@ -195,19 +264,11 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   }, [items, thisMonth])
 
   const monthlyTotal = categoryTotals.reduce((s, [, v]) => s + v, 0)
-
-  const grouped = useMemo(() => {
-    const map: Record<string, Transaction[]> = {}
-    items.slice(0, 60).forEach(x => {
-      if (!map[x.tx_date]) map[x.tx_date] = []
-      map[x.tx_date].push(x)
-    })
-    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]))
-  }, [items])
+  const tableTotalPages = Math.max(1, Math.ceil(tableCount / SPEND_PAGE_SIZE))
 
   return (
     <PullToRefresh onRefresh={loadData}>
-    <div className="mx-auto max-w-4xl space-y-4 px-2 py-4 pb-24 md:px-4 md:pb-6">
+    <div className="space-y-4 px-2 py-4 pb-24 md:px-4 md:pb-6">
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3">
@@ -311,61 +372,144 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
         </div>
       )}
 
-      {/* ── Recent spends list ── */}
+      {/* ── Spends table: search, filter, sort, paginate ── */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-card)]">
         <div className="border-b border-[var(--border)] px-4 py-3">
-          <p className="text-sm font-semibold text-[var(--text)]">Recent Spends</p>
+          <p className="text-sm font-semibold text-[var(--text)]">All Spends</p>
         </div>
 
-        {grouped.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-14 text-center">
-            <span className="text-3xl">🧾</span>
-            <p className="text-sm font-medium text-[var(--text-2)]">No spends recorded yet</p>
-            <p className="text-xs text-[var(--text-muted)]">Tap + Record to add your first entry.</p>
+        <div className="grid gap-2 border-b border-[var(--border)] px-4 py-3">
+          <input
+            type="search"
+            placeholder="Search description, notes, or amount…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)]"
+          />
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+              Category
+              <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]">
+                <option value="">All</option>
+                {categories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+              Member
+              <select value={filterMember} onChange={e => setFilterMember(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]">
+                <option value="">All</option>
+                {memberOptions.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+              From
+              <input type="date" value={dateAfter} onChange={e => setDateAfter(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]" />
+            </label>
+            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+              To
+              <input type="date" value={dateBefore} onChange={e => setDateBefore(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]" />
+            </label>
+            {hasActiveTableFilters && (
+              <button type="button" onClick={resetTableFilters} className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-300">
+                Reset filters
+              </button>
+            )}
           </div>
-        ) : (
-          <div className="divide-y divide-[var(--border)]">
-            {grouped.map(([date, dayItems]) => (
-              <div key={date}>
-                <div className="flex items-center justify-between bg-[var(--surface-2)] px-4 py-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                    {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-                  </span>
-                  <Money value={dayItems.reduce((s, x) => s + Number(x.amount), 0)} className="text-[11px] font-semibold tabular-nums text-[var(--text-muted)]" />
-                </div>
-                {dayItems.map(x => {
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-[var(--surface-2)]">
+              <tr>
+                <th
+                  className="cursor-pointer select-none whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]"
+                  onClick={() => setOrdering(o => (o === '-tx_date' ? 'tx_date' : '-tx_date'))}
+                >
+                  Date{ordering === '-tx_date' ? ' ▼' : ordering === 'tx_date' ? ' ▲' : ''}
+                </th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Category</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Description</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Member</th>
+                <th
+                  className="cursor-pointer select-none whitespace-nowrap px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]"
+                  onClick={() => setOrdering(o => (o === '-amount' ? 'amount' : '-amount'))}
+                >
+                  Amount{ordering === '-amount' ? ' ▼' : ordering === 'amount' ? ' ▲' : ''}
+                </th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {tableLoading ? (
+                <tr><td colSpan={6} className="px-3 py-8 text-center text-[var(--text-muted)]">Loading…</td></tr>
+              ) : tableRows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-14 text-center">
+                    <span className="block text-3xl">🧾</span>
+                    <p className="mt-2 text-sm font-medium text-[var(--text-2)]">No spends match these filters</p>
+                    <p className="text-xs text-[var(--text-muted)]">Tap + Record to add your first entry.</p>
+                  </td>
+                </tr>
+              ) : (
+                tableRows.map(x => {
                   const cat = x.spend_category || 'other'
                   return (
-                    <div key={x.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--surface-2)]">
-                      <span className="shrink-0 text-xl">{catIcon[cat] ?? '📌'}</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-[var(--text)]">
-                          {x.description || catLabel[cat] || cat}
-                        </p>
-                        <p className="text-xs text-[var(--text-muted)]">
-                          {catLabel[cat] || cat}
-                          {x.member ? ` · ${memberOptions.find(m => m.id === x.member)?.label ?? `Member #${x.member}`}` : ''}
-                        </p>
-                      </div>
-                      <Money value={Number(x.amount)} className="shrink-0 text-sm font-semibold tabular-nums text-[var(--text)]" />
-                      {canWrite && (
-                        <button
-                          type="button"
-                          onClick={() => { setEditingTx(x); setEditError('') }}
-                          className="shrink-0 rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
-                        >
-                          Edit
-                        </button>
-                      )}
-                      <DeleteButton
-                        disabled={!canDelete('transaction')}
-                        onDelete={async () => { await ledgerApi.deleteTransaction(x.id); await loadData() }}
-                      />
-                    </div>
+                    <tr key={x.id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]">
+                      <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-faint)]">{x.tx_date}</td>
+                      <td className="px-3 py-2 text-sm">
+                        <span className="mr-1">{catIcon[cat] ?? '📌'}</span>
+                        {catLabel[cat] || cat}
+                      </td>
+                      <td className="max-w-[16rem] truncate px-3 py-2 text-sm text-[var(--text-2)]" title={x.description}>
+                        {x.description || '—'}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-[var(--text-muted)]">
+                        {x.member ? memberOptions.find(m => m.id === x.member)?.label ?? `Member #${x.member}` : '—'}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold">
+                        <Money value={Number(x.amount)} />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {canWrite && (
+                            <button
+                              type="button"
+                              onClick={() => { setEditingTx(x); setEditError('') }}
+                              className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+                            >
+                              Edit
+                            </button>
+                          )}
+                          <DeleteButton
+                            disabled={!canDelete('transaction')}
+                            onDelete={async () => { await ledgerApi.deleteTransaction(x.id); await loadData(); await loadTable() }}
+                          />
+                        </div>
+                      </td>
+                    </tr>
                   )
-                })}
-              </div>
-            ))}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {tableCount > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 text-xs text-[var(--text-muted)]">
+            <span>
+              Showing {(page - 1) * SPEND_PAGE_SIZE + 1}–{Math.min(page * SPEND_PAGE_SIZE, tableCount)} of {tableCount}
+            </span>
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
+                className="rounded-lg border border-[var(--border)] px-2.5 py-1 disabled:opacity-40">
+                ← Prev
+              </button>
+              <span>Page {page} of {tableTotalPages}</span>
+              <button type="button" disabled={page >= tableTotalPages} onClick={() => setPage(p => Math.min(tableTotalPages, p + 1))}
+                className="rounded-lg border border-[var(--border)] px-2.5 py-1 disabled:opacity-40">
+                Next →
+              </button>
+            </div>
           </div>
         )}
       </div>

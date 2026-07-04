@@ -16,7 +16,6 @@ const BASE_GROUPS: RouteGroup[] = [
       { key: 'instruments', label: 'Instruments', icon: '🏷️' },
       { key: 'ledger', label: 'Ledger', icon: '📒' },
       { key: 'valuation', label: 'Valuation', icon: '📈' },
-      { key: 'cashflow', label: 'Cash Flow', icon: '📊' },
       { key: 'spend-trends', label: 'Spend Trends', icon: '📉' },
       { key: 'analytics', label: 'Analytics', icon: '📊' },
       { key: 'alerts', label: 'Alerts', icon: '🔔' },
@@ -30,13 +29,8 @@ const BASE_GROUPS: RouteGroup[] = [
     items: [
       { key: 'household', label: 'Household & Members', icon: '👪' },
       { key: 'import', label: 'Import', icon: '📥' },
-      { key: 'gmail-sync', label: 'Gmail Sync', icon: '📧' },
-      { key: 'gmail-rules', label: 'Gmail Rules', icon: '📋' },
-      { key: 'gmail-staging', label: 'Gmail Transactions', icon: '📬' },
-      { key: 'sms-devices', label: 'SMS Devices', icon: '📱' },
-      { key: 'sms-test', label: 'SMS Test Sender', icon: '🧪' },
-      { key: 'sms-messages', label: 'SMS Messages', icon: '💬' },
-      { key: 'sms-rules', label: 'SMS Rules', icon: '📐' },
+      { key: 'gmail', label: 'Gmail', icon: '📧' },
+      { key: 'sms', label: 'SMS', icon: '💬' },
     ],
   },
   {

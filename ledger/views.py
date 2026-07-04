@@ -3,6 +3,7 @@ from rest_framework import serializers as drf_serializers, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from ledger.filters import TransactionFilter
 from ledger.models import Transaction
 from ledger.serializers import TransactionSerializer
 
@@ -11,9 +12,9 @@ MUTABLE_FIELDS = {'tx_date', 'member', 'spend_category', 'description', 'notes',
 
 
 class TransactionViewSet(viewsets.ModelViewSet):
-    queryset = Transaction.objects.select_related('household', 'account', 'instrument', 'member').all()
+    queryset = Transaction.objects.select_related('household', 'account', 'instrument', 'member').all().order_by('-tx_date', '-id')
     serializer_class = TransactionSerializer
-    filterset_fields = ['household', 'account', 'instrument', 'member', 'source', 'transaction_type', 'classification']
+    filterset_class = TransactionFilter
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()

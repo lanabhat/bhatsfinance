@@ -2,26 +2,26 @@ import { useState } from 'react'
 import { Money } from '../common/Money'
 import { ExpandableGridCard } from '../common/ExpandableGridCard'
 import { useExpandable } from '../../hooks/useExpandable'
-import { MarkRDPaidSheet } from './MarkRDPaidSheet'
-import { MarkAllRDsPaidSheet } from './MarkAllRDsPaidSheet'
-import type { MissedRDAlert, OptionItem } from '../../types/domain'
+import { MarkSipPaidSheet } from './MarkSipPaidSheet'
+import { MarkAllSipsPaidSheet } from './MarkAllSipsPaidSheet'
+import type { MissedSipAlert, OptionItem } from '../../types/domain'
 
 type Props = {
-  items: MissedRDAlert[]
+  items: MissedSipAlert[]
   accountOptions: OptionItem[]
   onPaid: () => void | Promise<void>
 }
 
-type RDGroup = {
+type SipGroup = {
   mandate_id: number
   instrument: string
   account: string
-  dues: MissedRDAlert[]
+  dues: MissedSipAlert[]
   total: number
 }
 
-function groupByMandate(items: MissedRDAlert[]): RDGroup[] {
-  const map = new Map<number, RDGroup>()
+function groupByMandate(items: MissedSipAlert[]): SipGroup[] {
+  const map = new Map<number, SipGroup>()
   for (const item of items) {
     if (!map.has(item.mandate_id)) {
       map.set(item.mandate_id, { mandate_id: item.mandate_id, instrument: item.instrument, account: item.account, dues: [], total: 0 })
@@ -33,9 +33,9 @@ function groupByMandate(items: MissedRDAlert[]): RDGroup[] {
   return [...map.values()]
 }
 
-export function MissedRDsCard({ items, accountOptions, onPaid }: Props) {
-  const [paidSheetTarget, setPaidSheetTarget] = useState<MissedRDAlert | null>(null)
-  const [bulkSheetGroup, setBulkSheetGroup] = useState<RDGroup | null>(null)
+export function MissedSipsCard({ items, accountOptions, onPaid }: Props) {
+  const [paidSheetTarget, setPaidSheetTarget] = useState<MissedSipAlert | null>(null)
+  const [bulkSheetGroup, setBulkSheetGroup] = useState<SipGroup | null>(null)
   const groupExpand = useExpandable<number>()
 
   if (items.length === 0) return null
@@ -44,7 +44,7 @@ export function MissedRDsCard({ items, accountOptions, onPaid }: Props) {
 
   return (
     <div>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Missed RD Installments</h2>
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Missed SIPs</h2>
       <div className="card-grid grid gap-3">
         {groups.map(group => {
           const isExpanded = groupExpand.isExpanded(group.mandate_id)
@@ -74,15 +74,15 @@ export function MissedRDsCard({ items, accountOptions, onPaid }: Props) {
                     </button>
                   </div>
                 )}
-                {group.dues.map(rd => (
-                  <div key={`${rd.mandate_id}-${rd.due_date}`} className="flex items-center gap-3 border-b border-amber-100 px-4 py-3 last:border-0">
+                {group.dues.map(sip => (
+                  <div key={`${sip.mandate_id}-${sip.due_date}`} className="flex items-center gap-3 border-b border-amber-100 px-4 py-3 last:border-0">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs text-[var(--text-muted)]">Due {rd.due_date}</p>
+                      <p className="text-xs text-[var(--text-muted)]">Due {sip.due_date}</p>
                     </div>
-                    <Money value={rd.expected_amount} className="shrink-0 text-sm font-bold text-amber-700 dark:text-amber-300" />
+                    <Money value={sip.expected_amount} className="shrink-0 text-sm font-bold text-amber-700 dark:text-amber-300" />
                     <button
                       type="button"
-                      onClick={() => setPaidSheetTarget(rd)}
+                      onClick={() => setPaidSheetTarget(sip)}
                       className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
                     >
                       Mark paid
@@ -96,7 +96,7 @@ export function MissedRDsCard({ items, accountOptions, onPaid }: Props) {
       </div>
 
       {paidSheetTarget && (
-        <MarkRDPaidSheet
+        <MarkSipPaidSheet
           alert={paidSheetTarget}
           accountOptions={accountOptions}
           onClose={() => setPaidSheetTarget(null)}
@@ -105,7 +105,7 @@ export function MissedRDsCard({ items, accountOptions, onPaid }: Props) {
       )}
 
       {bulkSheetGroup && (
-        <MarkAllRDsPaidSheet
+        <MarkAllSipsPaidSheet
           alerts={bulkSheetGroup.dues}
           accountOptions={accountOptions}
           onClose={() => setBulkSheetGroup(null)}

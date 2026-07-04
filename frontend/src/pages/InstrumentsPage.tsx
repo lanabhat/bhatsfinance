@@ -218,9 +218,19 @@ type SheetState =
   | { type: 'delete'; instrument: Instrument }
   | { type: 'category'; item?: AssetCategory }
 
+type ViewMode = 'table' | 'card'
+const VIEW_MODE_KEY = 'instruments:viewMode'
+
+function loadViewMode(): ViewMode {
+  try {
+    const raw = localStorage.getItem(VIEW_MODE_KEY)
+    return raw === 'card' ? 'card' : 'table'
+  } catch { return 'table' }
+}
+
 export function InstrumentsPage() {
   const { canWrite } = useAuth()
-  const { householdId, categories, refreshCategories, members } = useApp()
+  const { householdId, categories, refreshCategories, members, accounts } = useApp()
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
   const [loading, setLoading] = useState(false)
@@ -228,7 +238,13 @@ export function InstrumentsPage() {
   const [sortBy, setSortBy] = useState<SortBy>('name')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
+  const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
   const cardExpand = useExpandable<number>()
+
+  const changeViewMode = (mode: ViewMode) => {
+    setViewMode(mode)
+    try { localStorage.setItem(VIEW_MODE_KEY, mode) } catch { /* ignore */ }
+  }
 
   const toggleGroup = (key: string) =>
     setCollapsed((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
@@ -252,6 +268,23 @@ export function InstrumentsPage() {
     }
     return m
   }, [instruments, ownerships, members])
+
+  const ownershipGroups = useMemo(() => {
+    const g = new Map<string, Instrument[]>()
+    for (const inst of instruments) {
+      const label = ownerMap.get(inst.id) ?? 'Unassigned'
+      if (!g.has(label)) g.set(label, [])
+      g.get(label)!.push(inst)
+    }
+    // Stable order: named owners alphabetically, "Unassigned" last.
+    return new Map(
+      Array.from(g.entries()).sort(([a], [b]) => {
+        if (a === 'Unassigned') return 1
+        if (b === 'Unassigned') return -1
+        return a.localeCompare(b)
+      }),
+    )
+  }, [instruments, ownerMap])
 
   const sortedInstruments = useMemo(() => {
     return [...instruments].sort((a, b) => {
@@ -321,6 +354,80 @@ export function InstrumentsPage() {
     )
   }
 
+  const TYPE_ICONS: Record<string, string> = {
+    mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡',
+    ppf: '🛡', nps: '🛡', gold: '🪙', real_estate: '🏠', sip: '🔄',
+    insurance: '☂️', cash: '💵', other: '💼', vehicle: '🚗', liability: '⚠️',
+  }
+
+  const thCls = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] whitespace-nowrap'
+
+  const renderTableRow = (inst: Instrument) => {
+    const cat = categories.find((c) => c.id === inst.asset_category)
+    const account = accounts.find((a) => a.id === inst.default_account)
+    return (
+      <tr key={inst.id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]">
+        <td className="px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
+              {TYPE_ICONS[inst.instrument_type] ?? '💼'}
+            </span>
+            <span className="truncate text-sm font-medium text-[var(--text)]">{inst.name}</span>
+          </div>
+        </td>
+        <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-2)]">{inst.instrument_type.replace(/_/g, ' ')}</td>
+        <td className="px-3 py-2 text-xs text-[var(--text-muted)]">{inst.symbol || '—'}</td>
+        <td className="px-3 py-2 text-xs text-[var(--text-2)]">
+          {cat ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: cat.color }} />
+              {cat.name}
+            </span>
+          ) : <span className="text-[var(--text-faint)]">Uncategorised</span>}
+        </td>
+        <td className="px-3 py-2 text-xs text-[var(--text-2)]">{account?.label ?? '—'}</td>
+        <td className="px-3 py-2 text-xs text-[var(--text-2)]">{ownerMap.get(inst.id) ?? 'Unassigned'}</td>
+        <td className="px-3 py-2">
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${inst.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
+            {inst.is_active ? 'Active' : 'Inactive'}
+          </span>
+        </td>
+        <td className="px-3 py-2 text-right">
+          <div className="flex items-center justify-end gap-1">
+            <button type="button" onClick={() => setSheet({ type: 'instrument', item: inst })} disabled={!canWrite}
+              className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
+              Edit
+            </button>
+            <button type="button" onClick={() => setSheet({ type: 'delete', instrument: inst })} disabled={!canWrite}
+              className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
+              Delete
+            </button>
+          </div>
+        </td>
+      </tr>
+    )
+  }
+
+  const renderTable = (items: Instrument[]) => (
+    <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+      <table className="w-full text-sm">
+        <thead className="bg-[var(--surface-2)]">
+          <tr>
+            <th className={thCls}>Name</th>
+            <th className={thCls}>Type</th>
+            <th className={thCls}>Symbol</th>
+            <th className={thCls}>Category</th>
+            <th className={thCls}>Default Account</th>
+            <th className={thCls}>Owner</th>
+            <th className={thCls}>Status</th>
+            <th className={thCls}></th>
+          </tr>
+        </thead>
+        <tbody>{items.map(renderTableRow)}</tbody>
+      </table>
+    </div>
+  )
+
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -336,10 +443,24 @@ export function InstrumentsPage() {
             <button key={v} type="button" onClick={() => setSortBy(v)} className={pillCls(sortBy === v)}>{l}</button>
           ))}
         </div>
-        <button type="button" onClick={() => setSheet({ type: 'instrument' })} disabled={!canWrite}
-          className="ml-auto shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
-          + Add Instrument
-        </button>
+
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={viewMode === 'card'}
+            onClick={() => changeViewMode(viewMode === 'table' ? 'card' : 'table')}
+            title={viewMode === 'table' ? 'Switch to Card view' : 'Switch to Table view'}
+            className="flex items-center gap-2 rounded-full bg-[var(--surface-2)] px-1 py-1 text-xs font-medium text-[var(--text-muted)]"
+          >
+            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'table' ? 'bg-primary-600 text-white' : ''}`}>Table</span>
+            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'card' ? 'bg-primary-600 text-white' : ''}`}>Card</span>
+          </button>
+          <button type="button" onClick={() => setSheet({ type: 'instrument' })} disabled={!canWrite}
+            className="shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            + Add Instrument
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -351,7 +472,9 @@ export function InstrumentsPage() {
           <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first instrument.</p>
         </div>
       ) : groupBy === 'none' ? (
-        <div className="card-grid grid gap-3">{instruments.map(renderRow)}</div>
+        viewMode === 'table' ? renderTable(sortedInstruments) : (
+          <div className="card-grid grid gap-3">{instruments.map(renderRow)}</div>
+        )
       ) : (
         <div className="grid gap-1">
           {Array.from(grouped.entries()).map(([label, { items, color }]) => {
@@ -370,7 +493,7 @@ export function InstrumentsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </button>
-                {isOpen && <div className="card-grid grid gap-3 pb-2">{items.map(renderRow)}</div>}
+                {isOpen && (viewMode === 'table' ? renderTable(items) : <div className="card-grid grid gap-3 pb-2">{items.map(renderRow)}</div>)}
               </div>
             )
           })}
@@ -399,7 +522,7 @@ export function InstrumentsPage() {
         )}
       </div>
 
-      {/* Ownership section */}
+      {/* Ownership section — grouped by owner */}
       {instruments.length > 0 && members.length > 1 && (
         <details className="group rounded-xl border border-[var(--border)] bg-[var(--surface)]">
           <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
@@ -410,36 +533,51 @@ export function InstrumentsPage() {
           </summary>
           <div className="border-t border-[var(--border)] px-4 py-1">
             <p className="py-2 text-xs text-[var(--text-muted)]">Assign each instrument to the member who owns it — drives per-member net worth on Home.</p>
-            {instruments.map((inst) => {
-              const existing = ownerships.filter((o) => o.instrument === inst.id)
-              const currentMemberId = existing[0]?.member ?? null
+            {Array.from(ownershipGroups.entries()).map(([label, items]) => {
+              const groupKey = `owner-section:${label}`
+              const isOpen = !collapsed.has(groupKey)
               return (
-                <OwnershipRow
-                  key={`${inst.id}-${currentMemberId}`}
-                  name={inst.name}
-                  subtitle={inst.instrument_type.replace(/_/g, ' ')}
-                  currentMemberId={currentMemberId}
-                  memberOptions={members}
-                  onSave={async (memberId) => {
-                    console.log('[ownership] save start', { instId: inst.id, memberId })
-                    const fresh = await portfolioApi.listInstrumentOwnerships(inst.id)
-                    console.log('[ownership] fresh fetch result', fresh)
-                    if (memberId === null) {
-                      console.log('[ownership] deleting', fresh.map(o => o.id))
-                      await Promise.all(fresh.map((o) => portfolioApi.deleteInstrumentOwnership(o.id)))
-                    } else {
-                      if (fresh.length === 0) {
-                        console.log('[ownership] creating new ownership', { instrument: inst.id, member: memberId })
-                        await portfolioApi.createInstrumentOwnership({ instrument: inst.id, member: memberId, allocation_percent: '100.00' })
-                      } else {
-                        console.log('[ownership] patching existing', fresh.map(o => ({ id: o.id, member: o.member })), '→ member', memberId)
-                        await Promise.all(fresh.map((o) => portfolioApi.updateInstrumentOwnership(o.id, { member: memberId })))
-                      }
-                    }
-                    console.log('[ownership] save done, reloading')
-                    await load()
-                  }}
-                />
+                <div key={label} className="border-t border-[var(--border)] first:border-t-0">
+                  <button type="button" onClick={() => toggleGroup(groupKey)}
+                    className="flex w-full items-center justify-between py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</span>
+                      <span className="rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">{items.length}</span>
+                    </div>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+                      className={`h-4 w-4 text-[var(--text-muted)] transition-transform ${isOpen ? 'rotate-180' : ''}`}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </button>
+                  {isOpen && (
+                    <div className="pb-2">
+                      {items.map((inst) => {
+                        const existing = ownerships.filter((o) => o.instrument === inst.id)
+                        const currentMemberId = existing[0]?.member ?? null
+                        return (
+                          <OwnershipRow
+                            key={`${inst.id}-${currentMemberId}`}
+                            name={inst.name}
+                            subtitle={inst.instrument_type.replace(/_/g, ' ')}
+                            currentMemberId={currentMemberId}
+                            memberOptions={members}
+                            onSave={async (memberId) => {
+                              const fresh = await portfolioApi.listInstrumentOwnerships(inst.id)
+                              if (memberId === null) {
+                                await Promise.all(fresh.map((o) => portfolioApi.deleteInstrumentOwnership(o.id)))
+                              } else if (fresh.length === 0) {
+                                await portfolioApi.createInstrumentOwnership({ instrument: inst.id, member: memberId, allocation_percent: '100.00' })
+                              } else {
+                                await Promise.all(fresh.map((o) => portfolioApi.updateInstrumentOwnership(o.id, { member: memberId })))
+                              }
+                              await load()
+                            }}
+                          />
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </div>

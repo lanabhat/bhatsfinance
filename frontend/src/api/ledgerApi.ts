@@ -7,11 +7,52 @@ type TransactionCreatePayload = Omit<
 > &
   Partial<Pick<Transaction, 'classification' | 'spend_category' | 'description' | 'for_members' | 'notes'>>
 
+export type TransactionListParams = {
+  householdId: number
+  page?: number
+  pageSize?: number
+  search?: string
+  account?: number
+  member?: number
+  instrument?: number
+  transactionType?: string
+  classification?: string
+  spendCategory?: string
+  txDateAfter?: string
+  txDateBefore?: string
+  ordering?: string
+}
+
+export type PaginatedTransactions = {
+  count: number
+  results: Transaction[]
+}
+
 export const ledgerApi = {
   async listTransactions(householdId: number) {
     const q = toQueryString({ household: householdId })
     const data = await getJson<ApiListResponse<Transaction>>(`/api/transactions/?${q}`)
     return unwrapList(data)
+  },
+  async listTransactionsPage(params: TransactionListParams): Promise<PaginatedTransactions> {
+    const q = toQueryString({
+      household: params.householdId,
+      page: params.page,
+      page_size: params.pageSize,
+      search: params.search,
+      account: params.account,
+      member: params.member,
+      instrument: params.instrument,
+      transaction_type: params.transactionType,
+      classification: params.classification,
+      spend_category: params.spendCategory,
+      tx_date_after: params.txDateAfter,
+      tx_date_before: params.txDateBefore,
+      ordering: params.ordering,
+    })
+    const data = await getJson<ApiListResponse<Transaction> & { count?: number }>(`/api/transactions/?${q}`)
+    if (Array.isArray(data)) return { count: data.length, results: data }
+    return { count: data.count ?? data.results.length, results: data.results }
   },
   async listTransactionsForInstrument(householdId: number, instrumentId: number) {
     const q = toQueryString({ household: householdId, instrument: instrumentId })

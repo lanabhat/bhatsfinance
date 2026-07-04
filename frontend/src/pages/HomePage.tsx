@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { CategoryBreakdownCard } from '../components/home/CategoryBreakdownCard'
 import { MaturingFDsCard } from '../components/home/MaturingFDsCard'
-import { MarkSipPaidSheet } from '../components/home/MarkSipPaidSheet'
-import { MarkAllSipsPaidSheet } from '../components/home/MarkAllSipsPaidSheet'
+import { MissedSipsCard } from '../components/home/MissedSipsCard'
 import { MissedPremiumsCard } from '../components/home/MissedPremiumsCard'
 import { MissedRDsCard } from '../components/home/MissedRDsCard'
 import { InsuranceSummaryCard } from '../components/home/InsuranceSummaryCard'
@@ -22,7 +21,7 @@ import { useApp } from '../context/AppContext'
 import { fdDetailsApi } from '../api/fdDetailsApi'
 import { insuranceApi } from '../api/insuranceApi'
 import { getJson, toQueryString } from '../api/http'
-import type { CategoryBreakdownItem, DashboardHolding, InsuranceSummary, MaturingFD, MemberAccount, MissedSipAlert } from '../types/domain'
+import type { CategoryBreakdownItem, DashboardHolding, InsuranceSummary, MaturingFD, MemberAccount } from '../types/domain'
 
 const TYPE_ICONS: Record<string, string> = {
   mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡',
@@ -54,8 +53,6 @@ export function HomePage({ onNavigate }: Props) {
   const [allMemberAccounts, setAllMemberAccounts] = useState<Record<number, MemberAccount[]>>({})
   const [maturingFDs, setMaturingFDs] = useState<MaturingFD[]>([])
   const MATURING_WINDOW_DAYS = 180
-  const [paidSheetTarget, setPaidSheetTarget] = useState<MissedSipAlert | null>(null)
-  const [bulkSheetOpen, setBulkSheetOpen] = useState(false)
   const [insuranceSummary, setInsuranceSummary] = useState<InsuranceSummary | null>(null)
 
   useEffect(() => {
@@ -308,58 +305,11 @@ export function HomePage({ onNavigate }: Props) {
         <MaturingFDsCard items={maturingFDs} windowDays={MATURING_WINDOW_DAYS} />
       )}
 
-      {dashboard.missedSip.length > 0 && (
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Missed SIPs</h2>
-            {dashboard.missedSip.length > 1 && (
-              <button
-                type="button"
-                onClick={() => setBulkSheetOpen(true)}
-                className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:text-amber-800"
-              >
-                Mark all paid →
-              </button>
-            )}
-          </div>
-          <div className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50 dark:bg-amber-900/15">
-            {dashboard.missedSip.map((sip) => (
-              <div key={`${sip.mandate_id}-${sip.due_date}`} className="flex items-center gap-3 border-b border-amber-100 px-4 py-3 last:border-0">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-[var(--text)]">{sip.instrument}</p>
-                  <p className="text-xs text-[var(--text-muted)]">Due {sip.due_date} · {sip.account}</p>
-                </div>
-                <Money value={sip.expected_amount} className="shrink-0 text-sm font-bold text-amber-700 dark:text-amber-300" />
-                <button
-                  type="button"
-                  onClick={() => setPaidSheetTarget(sip)}
-                  className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
-                >
-                  Mark paid
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {paidSheetTarget && (
-        <MarkSipPaidSheet
-          alert={paidSheetTarget}
-          accountOptions={accounts}
-          onClose={() => setPaidSheetTarget(null)}
-          onPaid={refreshDashboard}
-        />
-      )}
-
-      {bulkSheetOpen && (
-        <MarkAllSipsPaidSheet
-          alerts={dashboard.missedSip}
-          accountOptions={accounts}
-          onClose={() => setBulkSheetOpen(false)}
-          onPaid={refreshDashboard}
-        />
-      )}
+      <MissedSipsCard
+        items={dashboard.missedSip}
+        accountOptions={accounts}
+        onPaid={refreshDashboard}
+      />
 
       <MissedRDsCard
         items={dashboard.missedRD}

@@ -11,13 +11,12 @@ import { AssetsPage } from './pages/AssetsPage'
 import { HoldingsPage } from './pages/HoldingsPage'
 import { AccountsPage } from './pages/AccountsPage'
 import { InstrumentsPage } from './pages/InstrumentsPage'
-import { CashFlowPage } from './pages/CashFlowPage'
 import { ExpensePage } from './pages/ExpensePage'
 import { SpendTrendsPage } from './pages/SpendTrendsPage'
 import { HelpPage } from './pages/HelpPage'
 import { HomePage } from './pages/HomePage'
 import { HouseholdPage } from './pages/HouseholdPage'
-import { ImportWizard } from './pages/ImportWizard'
+import { ImportPage } from './pages/ImportPage'
 import { InsurancePage } from './pages/InsurancePage'
 import { LedgerPage } from './pages/LedgerPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -26,22 +25,17 @@ import { ValuationPage } from './pages/ValuationPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { MaintenancePage } from './pages/MaintenancePage'
 import { AdminPage } from './pages/AdminPage'
-import { GmailSyncPage } from './pages/GmailSyncPage'
-import { GmailRulesPage } from './pages/GmailRulesPage'
-import { GmailStagingPage } from './pages/GmailStagingPage'
-import { SmsDevicesPage } from './pages/SmsDevicesPage'
-import { SmsTestPage } from './pages/SmsTestPage'
-import { SmsMessagesPage } from './pages/SmsMessagesPage'
-import { SmsRulesPage } from './pages/SmsRulesPage'
+import { GmailPage } from './pages/GmailPage'
+import { SmsPage } from './pages/SmsPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { LoginPage } from './pages/LoginPage'
 import { PendingPage } from './pages/PendingPage'
 import { DeniedPage } from './pages/DeniedPage'
 import { CoinSpinner } from './components/common/CoinSpinner'
 
-type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'analytics' | 'settings' | 'instruments' | 'ledger' | 'cashflow' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'reports' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail-sync' | 'gmail-rules' | 'gmail-staging' | 'sms-devices' | 'sms-test' | 'sms-messages' | 'sms-rules'
+type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'analytics' | 'settings' | 'instruments' | 'ledger' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'reports' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail' | 'sms'
 
-const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'analytics', 'settings', 'instruments', 'ledger', 'cashflow', 'alerts', 'tax', 'valuation', 'insurance', 'reports', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail-sync', 'gmail-rules', 'gmail-staging', 'sms-devices', 'sms-test', 'sms-messages', 'sms-rules'])
+const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'analytics', 'settings', 'instruments', 'ledger', 'alerts', 'tax', 'valuation', 'insurance', 'reports', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail', 'sms'])
 
 function routeFromHash(): RouteKey {
   const value = window.location.hash.replace('#/', '') as RouteKey
@@ -92,9 +86,6 @@ function AppInner() {
             deleteConfig={deleteConfig}
             toggleDelete={toggleDelete}
             householdId={householdId}
-            memberOptions={members}
-            accountOptions={accounts}
-            instrumentOptions={instruments}
           />
         )
       case 'household':
@@ -117,22 +108,16 @@ function AppInner() {
             canDelete={canDelete}
           />
         )
-      case 'cashflow': return <CashFlowPage householdId={householdId} />
       case 'alerts': return <AlertsPage householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} canDelete={canDelete} />
       case 'tax': return <TaxPage householdId={householdId} memberOptions={members} canDelete={canDelete} />
       case 'valuation': return <ValuationPage householdId={householdId} accountOptions={accounts} instrumentOptions={instruments} canDelete={canDelete} />
       case 'insurance': return <InsurancePage householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} canDelete={canDelete} />
       case 'reports': return <ReportsPage householdId={householdId} accountOptions={accounts} />
       case 'help': return <HelpPage />
-      case 'import': return <ImportWizard householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} />
+      case 'import': return <ImportPage householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} />
       case 'maintenance': return <MaintenancePage />
-      case 'gmail-sync': return <GmailSyncPage householdId={householdId} accountOptions={accounts} instrumentOptions={instruments} memberOptions={members} />
-      case 'gmail-rules': return <GmailRulesPage householdId={householdId} accountOptions={accounts} memberOptions={members} />
-      case 'gmail-staging': return <GmailStagingPage accountOptions={accounts} />
-      case 'sms-devices': return <SmsDevicesPage householdId={householdId} />
-      case 'sms-test': return <SmsTestPage />
-      case 'sms-messages': return <SmsMessagesPage householdId={householdId} canDelete={canDelete} accountOptions={accounts} memberOptions={members} instrumentOptions={instrumentsFull} />
-      case 'sms-rules': return <SmsRulesPage householdId={householdId} accountOptions={accounts} memberOptions={members} />
+      case 'gmail': return <GmailPage householdId={householdId} accountOptions={accounts} instrumentOptions={instruments} memberOptions={members} />
+      case 'sms': return <SmsPage householdId={householdId} canDelete={canDelete} accountOptions={accounts} memberOptions={members} instrumentOptions={instrumentsFull} />
       case 'admin': return user.authenticated && user.role === 'super_admin' ? <AdminPage /> : <HomePage onNavigate={navigate} />
       default: return <HomePage onNavigate={navigate} />
     }

@@ -1,12 +1,7 @@
 import { useState } from 'react'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
-import { ImportWizard } from './ImportWizard'
-import { GrowwImportWizard } from '../components/imports/GrowwImportWizard'
-import { FDAdviceImportWizard } from '../components/imports/FDAdviceImportWizard'
-import { UpstoxConnect } from '../components/integrations/UpstoxConnect'
 import { useTerms } from '../context/TermsContext'
 import { deleteJsonResult } from '../api/http'
-import type { OptionItem } from '../types/domain'
 
 const ENTITY_LABELS: Array<{ key: DeleteEntity; label: string; warning?: string }> = [
   { key: 'transaction', label: 'Transactions', warning: 'Deleting transactions affects net worth and XIRR calculations' },
@@ -38,18 +33,15 @@ const INSTRUMENT_TYPE_OPTIONS = [
   { value: 'other', label: 'Other' },
 ]
 
-type Tab = 'display' | 'delete' | 'import' | 'groww' | 'upstox' | 'fd'
+type Tab = 'display' | 'delete'
 
 type Props = {
   deleteConfig: Record<DeleteEntity, boolean>
   toggleDelete: (e: DeleteEntity) => void
   householdId: number
-  memberOptions: OptionItem[]
-  accountOptions: OptionItem[]
-  instrumentOptions: OptionItem[]
 }
 
-export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOptions, accountOptions, instrumentOptions }: Props) {
+export function SettingsPage({ deleteConfig, toggleDelete, householdId }: Props) {
   const [tab, setTab] = useState<Tab>('display')
   const { mode, setMode } = useTerms()
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
@@ -90,10 +82,6 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
       <div className="mb-4 flex flex-wrap gap-2">
         <button className={tabCls('display')} onClick={() => setTab('display')}>Display</button>
         <button className={tabCls('delete')} onClick={() => setTab('delete')}>Delete Permissions</button>
-        <button className={tabCls('import')} onClick={() => setTab('import')}>Import Data</button>
-        <button className={tabCls('groww')} onClick={() => setTab('groww')}>Portfolio Import</button>
-        <button className={tabCls('upstox')} onClick={() => setTab('upstox')}>Upstox</button>
-        <button className={tabCls('fd')} onClick={() => setTab('fd')}>FD Import</button>
       </div>
 
       {tab === 'display' && (
@@ -123,50 +111,6 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId, memberOp
               </button>
             ))}
           </div>
-        </article>
-      )}
-
-      {tab === 'import' && (
-        <ImportWizard
-          householdId={householdId}
-          memberOptions={memberOptions}
-          accountOptions={accountOptions}
-          instrumentOptions={instrumentOptions}
-        />
-      )}
-
-      {tab === 'groww' && (
-        <article className="panel">
-          <h2>Portfolio Import</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-            Import holdings from Groww or Upstox Excel exports. Both formats are auto-detected.
-            Groww: Portfolio → top-right menu → Download. Upstox: Reports → Holdings.
-            Upload files for multiple family members at once.
-          </p>
-          <GrowwImportWizard householdId={householdId} />
-        </article>
-      )}
-
-      {tab === 'upstox' && (
-        <article className="panel">
-          <h2>Upstox Integration</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-            Connect a family member's Upstox account to automatically sync their equity holdings.
-            Requires a free developer app at <strong>developer.upstox.com</strong> — credentials go in <code>.env</code>.
-          </p>
-          <UpstoxConnect memberOptions={memberOptions} />
-        </article>
-      )}
-
-      {tab === 'fd' && (
-        <article className="panel">
-          <h2>FD / RD Import</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-            Import Fixed Deposit advice letters or Recurring Deposit statements of account (.pdf).
-            Password-protected files are supported — SBI e-TDR/e-STDR and RD statements are fully
-            supported; other banks are parsed on a best-effort basis and reviewable before import.
-          </p>
-          <FDAdviceImportWizard householdId={householdId} />
         </article>
       )}
 
