@@ -1,5 +1,5 @@
 import { deleteJson, getJson, patchJson, postJson, toQueryString, unwrapList } from './http'
-import type { ApiListResponse, DashboardAccount, DashboardPayload, Tag, Transaction, TransactionCorrectionInput } from '../types/domain'
+import type { ApiListResponse, DashboardAccount, DashboardPayload, Transaction, TransactionCorrectionInput } from '../types/domain'
 
 type TransactionCreatePayload = Omit<
   Transaction,
