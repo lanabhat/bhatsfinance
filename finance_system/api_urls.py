@@ -19,7 +19,7 @@ from instruments.views import (
     InstrumentViewSet,
     MaturingFDsView,
 )
-from ledger.views import CashWithdrawalView, TransactionViewSet
+from ledger.views import CashWithdrawalView, TagViewSet, TransactionViewSet
 from gmail_ingestion.views import (
     GmailApproveProposalsView,
     GmailConfigView,
@@ -72,6 +72,7 @@ router.register('account-ownerships', AccountOwnershipViewSet, basename='account
 router.register('instruments', InstrumentViewSet)
 router.register('instrument-ownerships', InstrumentOwnershipViewSet)
 router.register('transactions', TransactionViewSet)
+router.register('tags', TagViewSet, basename='tag')
 router.register('valuations', ValuationSnapshotViewSet)
 router.register('fd-details', FDDetailsViewSet)
 router.register('asset-categories', AssetCategoryViewSet)

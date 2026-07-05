@@ -5,9 +5,13 @@ import { expenseApi } from '../api/expenseApi'
 import { ledgerApi } from '../api/ledgerApi'
 import { getJson, toQueryString } from '../api/http'
 import { normalizeApiError } from '../hooks/errorUtils'
-import { CashFlowChart, type CashFlowPoint } from '../components/charts/CashFlowChart'
+import { CashFlowChart, type CashFlowBucket, type CashFlowPoint } from '../components/charts/CashFlowChart'
 import { Money, useMaskedFmt } from '../components/common/Money'
+import { Sheet } from '../components/ui/Sheet'
+import { TxFormFields, blankTxForm, txFormFromTransaction } from '../components/ledger/TransactionEditForm'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useApp } from '../context/AppContext'
+import { useAuth } from '../context/AuthContext'
 import { useChartTheme, ChartTooltip } from '../components/charts/chartTheme'
 import type { SpendAnalytics, Transaction } from '../types/domain'
 
@@ -417,12 +421,17 @@ function DrillDownTable({ householdId, drillDown, granularity, windowStart, wind
   )
 }
 
+const CASHFLOW_BUCKET_LABELS: Record<CashFlowBucket, string> = {
+  income: 'Income', expense: 'Expense', investment: 'Investment', savings: 'Savings',
+}
+
 // Cash Flow tab — yearly income/expense/investment/savings breakdown
 function CashFlowSection({ householdId }: { householdId: number }) {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [data, setData] = useState<CashFlowPoint[]>([])
   const [error, setError] = useState('')
+  const [cfDrillDown, setCfDrillDown] = useState<{ month: string; bucket: CashFlowBucket } | null>(null)
 
   const load = async (hid: number, y: number) => {
     try {
@@ -436,6 +445,7 @@ function CashFlowSection({ householdId }: { householdId: number }) {
   }
 
   useEffect(() => { void load(householdId, year) }, [householdId, year])
+  useEffect(() => { setCfDrillDown(null) }, [year])
 
   const totalIncome = data.reduce((s, r) => s + r.income, 0)
   const totalExpense = data.reduce((s, r) => s + r.expense, 0)
@@ -443,6 +453,8 @@ function CashFlowSection({ householdId }: { householdId: number }) {
   const totalSavings = data.reduce((s, r) => s + r.savings, 0)
   const savingsRate = totalIncome > 0 ? ((totalSavings / totalIncome) * 100).toFixed(1) : 'N/A'
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i)
+
+  const cellCls = 'cursor-pointer hover:underline'
 
   return (
     <>
@@ -479,12 +491,13 @@ function CashFlowSection({ householdId }: { householdId: number }) {
         {data.length === 0 ? (
           <p>No transactions found for {year}.</p>
         ) : (
-          <CashFlowChart data={data} />
+          <CashFlowChart data={data} onSelect={(month, bucket) => setCfDrillDown({ month, bucket })} />
         )}
       </article>
 
       <article className="panel">
         <h3>Monthly Breakdown</h3>
+        <p className="mb-2 text-xs text-[var(--text-muted)]">Click a figure to see the transactions behind it.</p>
         <table>
           <thead>
             <tr>
@@ -499,16 +512,166 @@ function CashFlowSection({ householdId }: { householdId: number }) {
             {data.map((r) => (
               <tr key={r.month}>
                 <td>{r.month}</td>
-                <td><Money value={r.income} /></td>
-                <td><Money value={r.expense} /></td>
-                <td><Money value={r.investment} /></td>
-                <td style={{ color: r.savings >= 0 ? '#10b981' : '#f43f5e' }}><Money value={r.savings} /></td>
+                <td className={cellCls} onClick={() => setCfDrillDown({ month: r.month, bucket: 'income' })}><Money value={r.income} /></td>
+                <td className={cellCls} onClick={() => setCfDrillDown({ month: r.month, bucket: 'expense' })}><Money value={r.expense} /></td>
+                <td className={cellCls} onClick={() => setCfDrillDown({ month: r.month, bucket: 'investment' })}><Money value={r.investment} /></td>
+                <td
+                  className={cellCls}
+                  style={{ color: r.savings >= 0 ? '#10b981' : '#f43f5e' }}
+                  onClick={() => setCfDrillDown({ month: r.month, bucket: 'savings' })}
+                >
+                  <Money value={r.savings} />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </article>
+
+      {cfDrillDown && (
+        <CashFlowDrillDown
+          householdId={householdId}
+          month={cfDrillDown.month}
+          bucket={cfDrillDown.bucket}
+          onClose={() => setCfDrillDown(null)}
+        />
+      )}
     </>
+  )
+}
+
+// Transaction list for a clicked Cash Flow chart bar / breakdown cell, using the
+// same cashflow_bucket filter as insights.services.compute_cashflow so the list
+// matches the figure exactly. Clicking a row opens the same edit form as Ledger.
+function CashFlowDrillDown({ householdId, month, bucket, onClose }: {
+  householdId: number
+  month: string
+  bucket: CashFlowBucket
+  onClose: () => void
+}) {
+  const { members, accounts, instruments } = useApp()
+  const { canWrite } = useAuth()
+  const [rows, setRows] = useState<Transaction[]>([])
+  const [count, setCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState(blankTxForm())
+  const [formError, setFormError] = useState('')
+
+  const [y, m] = month.split('-').map(Number)
+  const start = new Date(Date.UTC(y, m - 1, 1)).toISOString().slice(0, 10)
+  const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
+
+  const load = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await ledgerApi.listTransactionsPage({
+        householdId, page: 1, pageSize: 100, ordering: '-amount',
+        txDateAfter: start, txDateBefore: end, cashflowBucket: bucket,
+      })
+      setRows(res.results)
+      setCount(res.count)
+    } catch (e) {
+      setError(normalizeApiError(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { void load() }, [householdId, month, bucket])
+
+  const openEdit = (t: Transaction) => {
+    setEditingId(t.id)
+    setEditForm(txFormFromTransaction(t))
+    setFormError('')
+  }
+
+  const saveEdit = async () => {
+    if (editingId === null) return
+    try {
+      setFormError('')
+      await ledgerApi.updateTransaction(editingId, {
+        member: editForm.member ? Number(editForm.member) : null,
+        account: editForm.account ? Number(editForm.account) : null,
+        instrument: editForm.instrument ? Number(editForm.instrument) : null,
+        tx_date: editForm.tx_date,
+        amount: editForm.amount,
+        quantity: editForm.quantity || null,
+        price_per_unit: editForm.price_per_unit || null,
+        direction: 'outflow',
+        transaction_type: editForm.transaction_type as Transaction['transaction_type'],
+        external_reference: editForm.external_reference,
+        classification: editForm.classification as Transaction['classification'],
+      })
+      setEditingId(null)
+      await load()
+    } catch (e) {
+      setFormError(normalizeApiError(e))
+    }
+  }
+
+  return (
+    <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-base font-semibold text-[var(--text)]">{CASHFLOW_BUCKET_LABELS[bucket]} · {month}</h3>
+        <button type="button" onClick={onClose} className="text-xs text-[var(--text-muted)] hover:text-[var(--text)]">✕ Close</button>
+      </div>
+      {loading ? (
+        <div className="flex justify-center py-6"><CoinSpinner size={36} /></div>
+      ) : error ? (
+        <p className="text-sm text-red-500">{error}</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-[var(--text-muted)]">No transactions found.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+          <table className="w-full text-sm">
+            <thead className="bg-[var(--surface-2)]">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Date</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Description</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Type</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Classification</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(t => (
+                <tr
+                  key={t.id}
+                  className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--surface-2)]"
+                  onClick={() => openEdit(t)}
+                >
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-faint)]">{t.tx_date}</td>
+                  <td className="max-w-[20rem] truncate px-3 py-2 text-xs text-[var(--text-2)]" title={t.description || t.external_reference}>
+                    {t.description || t.external_reference || '—'}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-muted)]">{t.transaction_type.replace(/_/g, ' ')}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-muted)]">{t.classification ? t.classification.replace(/_/g, ' ') : '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold"><Money value={t.amount} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {count > rows.length && (
+            <p className="px-3 py-2 text-xs text-[var(--text-muted)]">Showing {rows.length} of {count}.</p>
+          )}
+        </div>
+      )}
+
+      {editingId !== null && (
+        <Sheet title={`Editing #${editingId}`} onClose={() => setEditingId(null)}>
+          <TxFormFields
+            form={editForm} onChange={setEditForm}
+            accountOptions={accounts} memberOptions={members} instrumentOptions={instruments}
+            error={formError} submitLabel="Update" canWrite={canWrite}
+            onSubmit={saveEdit}
+            onCancel={() => setEditingId(null)}
+          />
+        </Sheet>
+      )}
+    </article>
   )
 }
 

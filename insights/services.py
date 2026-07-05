@@ -448,24 +448,31 @@ def compute_holdings_history(household_id: int, instrument_type: str | None = No
     return result
 
 
+# Shared with ledger.filters.TransactionFilter's cashflow_bucket param so the
+# "click a cash-flow bar -> see its transactions" drill-down matches this
+# function's bucketing exactly.
+CASHFLOW_INCOME_TYPES = {
+    Transaction.TransactionType.SALARY,
+    Transaction.TransactionType.DIVIDEND,
+    Transaction.TransactionType.INTEREST,
+    Transaction.TransactionType.TAX_REFUND,
+    Transaction.TransactionType.LOAN_DISBURSAL,
+    Transaction.TransactionType.DEPOSIT,
+}
+CASHFLOW_EXPENSE_TYPES = {
+    Transaction.TransactionType.WITHDRAWAL,
+    Transaction.TransactionType.EMI,
+    Transaction.TransactionType.TAX_PAYMENT,
+    Transaction.TransactionType.PREMIUM,
+}
+
+
 def compute_cashflow(household_id: int, year: int, month: int | None = None) -> list[dict]:
     """Return monthly income/expense/savings summary for a given year (optionally single month)."""
     from collections import defaultdict
 
-    INCOME_TYPES = {
-        Transaction.TransactionType.SALARY,
-        Transaction.TransactionType.DIVIDEND,
-        Transaction.TransactionType.INTEREST,
-        Transaction.TransactionType.TAX_REFUND,
-        Transaction.TransactionType.LOAN_DISBURSAL,
-        Transaction.TransactionType.DEPOSIT,
-    }
-    EXPENSE_TYPES = {
-        Transaction.TransactionType.WITHDRAWAL,
-        Transaction.TransactionType.EMI,
-        Transaction.TransactionType.TAX_PAYMENT,
-        Transaction.TransactionType.PREMIUM,
-    }
+    INCOME_TYPES = CASHFLOW_INCOME_TYPES
+    EXPENSE_TYPES = CASHFLOW_EXPENSE_TYPES
 
     qs = Transaction.objects.filter(household_id=household_id, tx_date__year=year)
     if month:
@@ -474,6 +481,11 @@ def compute_cashflow(household_id: int, year: int, month: int | None = None) -> 
     by_month: dict[str, dict] = defaultdict(lambda: {'income': ZERO, 'expense': ZERO, 'investment': ZERO})
 
     for tx in qs:
+        # internal_transfer/tracking rows aren't funded by this period's income
+        # (e.g. an FD/lump-sum buy sourced from pre-existing savings), so they
+        # shouldn't reduce the reported savings figure.
+        if tx.classification in (Transaction.Classification.INTERNAL_TRANSFER, Transaction.Classification.TRACKING):
+            continue
         key = tx.tx_date.strftime('%Y-%m')
         if tx.transaction_type in INCOME_TYPES:
             by_month[key]['income'] += tx.amount

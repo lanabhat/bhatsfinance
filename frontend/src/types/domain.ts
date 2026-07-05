@@ -266,7 +266,16 @@ export type Transaction = {
   spend_category: string
   description: string
   for_members: number[]
+  tags: number[]
   notes: string
+  created_at?: string
+  updated_at?: string
+}
+
+export type Tag = {
+  id: number
+  household: number
+  name: string
   created_at?: string
   updated_at?: string
 }
@@ -584,6 +593,7 @@ export type TransactionCorrectionInput = {
     classification?: TransactionClassification
     spend_category?: string
     description?: string
+    tags?: number[]
     notes?: string
   }
 }

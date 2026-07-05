@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { portfolioApi } from '../../api/portfolioApi'
-import type { Account, AccountOwnership, ExpenseCategory, OptionItem, TransactionClassification } from '../../types/domain'
+import { expenseApi } from '../../api/expenseApi'
+import { tagApi } from '../../api/tagApi'
+import { EmojiPicker } from './EmojiPicker'
+import { TagPicker } from './TagPicker'
+import type { Account, AccountOwnership, ExpenseCategory, OptionItem, Tag, TransactionClassification } from '../../types/domain'
 import type { RecordTransactionPayload } from '../../api/expenseApi'
 
 export type CategoryKey = string
@@ -47,8 +51,84 @@ function MemberChip({ name, selected, onClick }: { name: string; selected: boole
   )
 }
 
-function CategoryGrid({ value, onChange, categories }: { value: CategoryKey; onChange: (k: CategoryKey) => void; categories: ExpenseCategory[] }) {
+function NewCategoryInline({ householdId, onCreated, onCancel }: {
+  householdId: number
+  onCreated: (cat: ExpenseCategory) => void
+  onCancel: () => void
+}) {
+  const [label, setLabel] = useState('')
+  const [icon, setIcon] = useState('📌')
+  const [showPicker, setShowPicker] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const save = async () => {
+    if (!label.trim()) return
+    setSaving(true)
+    setError('')
+    try {
+      const key = label.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30)
+      const created = await expenseApi.createCategory({ household: householdId, key, label: label.trim(), icon })
+      onCreated(created)
+    } catch {
+      setError('Could not create category.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-primary-200 bg-primary-50 dark:bg-primary-900/15 p-2.5 space-y-2">
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setShowPicker(true)}
+          className="flex h-9 w-12 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xl hover:bg-[var(--surface-2)]"
+        >
+          {icon}
+        </button>
+        {showPicker && <EmojiPicker value={icon} onChange={setIcon} onClose={() => setShowPicker(false)} />}
+        <input
+          autoFocus
+          value={label}
+          onChange={e => { setLabel(e.target.value); setError('') }}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void save() } }}
+          placeholder="New category name"
+          className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+      </div>
+      {error && <p className="text-xs text-rose-600">{error}</p>}
+      <div className="flex gap-2">
+        <button type="button" disabled={!label.trim() || saving} onClick={() => void save()}
+          className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-40">
+          {saving ? 'Adding…' : 'Add category'}
+        </button>
+        <button type="button" onClick={onCancel} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-2)]">Cancel</button>
+      </div>
+    </div>
+  )
+}
+
+function CategoryGrid({ value, onChange, categories, householdId, onCategoryCreated }: {
+  value: CategoryKey
+  onChange: (k: CategoryKey) => void
+  categories: ExpenseCategory[]
+  householdId: number
+  onCategoryCreated: (cat: ExpenseCategory) => void
+}) {
   const cats = useMemo(() => sortedCategories(categories), [categories])
+  const [addingNew, setAddingNew] = useState(false)
+
+  if (addingNew) {
+    return (
+      <NewCategoryInline
+        householdId={householdId}
+        onCreated={(cat) => { onCategoryCreated(cat); onChange(cat.key); setAddingNew(false) }}
+        onCancel={() => setAddingNew(false)}
+      />
+    )
+  }
+
   return (
     <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-5">
       {cats.map(cat => (
@@ -66,6 +146,14 @@ function CategoryGrid({ value, onChange, categories }: { value: CategoryKey; onC
           <span className="text-[10px] font-medium leading-tight">{cat.label}</span>
         </button>
       ))}
+      <button
+        type="button"
+        onClick={() => setAddingNew(true)}
+        className="flex flex-col items-center gap-1 rounded-xl border border-dashed border-[var(--border)] py-2.5 px-1 text-center text-[var(--text-muted)] hover:border-primary-400 hover:text-primary-600"
+      >
+        <span className="text-xl leading-none">＋</span>
+        <span className="text-[10px] font-medium leading-tight">New</span>
+      </button>
     </div>
   )
 }
@@ -145,6 +233,7 @@ type FormState = {
   member: number | null
   for_members: number[]
   account: number | null
+  tags: number[]
   notes: string
 }
 
@@ -177,6 +266,8 @@ export function QuickExpenseForm({
   const [step, setStep] = useState(initialClassification ? 1 : 0)
   const [fullAccounts, setFullAccounts] = useState<Account[]>([])
   const [ownerships, setOwnerships] = useState<AccountOwnership[]>([])
+  const [localCategories, setLocalCategories] = useState<ExpenseCategory[]>(categories)
+  const [tags, setTags] = useState<Tag[]>([])
   const amountRef = useRef<HTMLInputElement>(null)
 
   const today = new Date().toISOString().slice(0, 10)
@@ -190,8 +281,13 @@ export function QuickExpenseForm({
     member: null,
     for_members: [],
     account: null,
+    tags: [],
     notes: '',
   }))
+
+  useEffect(() => {
+    setLocalCategories(categories)
+  }, [categories])
 
   useEffect(() => {
     portfolioApi.listAccounts(householdId).then(accs => {
@@ -202,6 +298,7 @@ export function QuickExpenseForm({
         .then(results => setOwnerships(results.flat()))
         .catch(() => {})
     }).catch(() => {})
+    tagApi.list(householdId).then(setTags).catch(() => {})
   }, [householdId, refreshKey])
 
   const memberAccounts = useMemo((): Account[] => {
@@ -267,6 +364,7 @@ export function QuickExpenseForm({
       spend_category: isSpend ? form.spend_category : undefined,
       description: form.description,
       for_members: form.for_members.length > 0 ? form.for_members : undefined,
+      tags: form.tags.length > 0 ? form.tags : undefined,
       notes: form.notes || undefined,
       currency: 'INR',
     })
@@ -409,9 +507,29 @@ export function QuickExpenseForm({
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                 Category
               </label>
-              <CategoryGrid value={form.spend_category} onChange={selectCategory} categories={categories} />
+              <CategoryGrid
+                value={form.spend_category}
+                onChange={selectCategory}
+                categories={localCategories}
+                householdId={householdId}
+                onCategoryCreated={(cat) => setLocalCategories(prev => [...prev, cat])}
+              />
             </div>
           )}
+
+          {/* Tags — any classification */}
+          <div>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Tags <span className="normal-case font-normal text-[var(--text-faint)]">(optional)</span>
+            </label>
+            <TagPicker
+              householdId={householdId}
+              tags={tags}
+              selectedIds={form.tags}
+              onChange={(ids) => setForm(p => ({ ...p, tags: ids }))}
+              onTagCreated={(tag) => setTags(prev => [...prev, tag])}
+            />
+          </div>
 
           {/* Date */}
           <div>

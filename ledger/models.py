@@ -6,6 +6,22 @@ from django.db import models
 from core.models import TimeStampedModel
 
 
+class Tag(TimeStampedModel):
+    """Free-form, household-scoped label a user can attach to any number of
+    transactions — unlike spend_category (one per transaction, drives imports/
+    trends/budgets), tags are many-per-transaction and exist purely so the user
+    can filter/group by their own ad-hoc labels (e.g. 'business trip', 'Q3')."""
+    household = models.ForeignKey('core.Household', on_delete=models.CASCADE, related_name='tags')
+    name = models.CharField(max_length=50)
+
+    class Meta:
+        unique_together = [('household', 'name')]
+        ordering = ['name']
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Transaction(TimeStampedModel):
     class Direction(models.TextChoices):
         INFLOW = 'inflow', 'Inflow'
@@ -70,6 +86,7 @@ class Transaction(TimeStampedModel):
     for_members = models.ManyToManyField(
         'core.Member', blank=True, related_name='shared_transactions',
     )
+    tags = models.ManyToManyField('Tag', blank=True, related_name='transactions')
     notes = models.TextField(blank=True)
 
     class Meta:

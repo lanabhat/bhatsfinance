@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from instruments.models import Account
-from ledger.models import Transaction
+from ledger.models import Tag, Transaction
 
 _DIRECTION_MAP = {
     Transaction.TransactionType.BUY: Transaction.Direction.OUTFLOW,
@@ -19,6 +19,13 @@ _DIRECTION_MAP = {
 }
 
 
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ['id', 'household', 'name', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
 class TransactionSerializer(serializers.ModelSerializer):
     account = serializers.PrimaryKeyRelatedField(
         queryset=Account.objects.all(),
@@ -26,6 +33,7 @@ class TransactionSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     for_members = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    tags = serializers.PrimaryKeyRelatedField(many=True, queryset=Tag.objects.all(), required=False)
 
     class Meta:
         model = Transaction
@@ -52,6 +60,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             'spend_category',
             'description',
             'for_members',
+            'tags',
             'notes',
             'created_at',
             'updated_at',

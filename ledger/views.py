@@ -1,18 +1,38 @@
 from django.db import transaction as db_transaction
 from rest_framework import serializers as drf_serializers, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ledger.filters import TransactionFilter
-from ledger.models import Transaction
-from ledger.serializers import TransactionSerializer
+from ledger.models import Tag, Transaction
+from ledger.serializers import TagSerializer, TransactionSerializer
 
 
-MUTABLE_FIELDS = {'tx_date', 'member', 'spend_category', 'description', 'notes', 'classification'}
+MUTABLE_FIELDS = {'tx_date', 'member', 'spend_category', 'description', 'notes', 'classification', 'tags'}
+# Bulk edits only ever need to touch classification (the primary use case: mass
+# reclassifying imported rows as internal_transfer/tracking/etc.) — narrower than
+# single-row edits so a bad filter can't accidentally overwrite dates/notes for
+# hundreds of rows at once.
+BULK_MUTABLE_FIELDS = {'classification', 'spend_category'}
+BULK_UPDATE_LIMIT = 500
+
+
+class TagViewSet(viewsets.ModelViewSet):
+    serializer_class = TagSerializer
+    filterset_fields = ['household']
+
+    def get_queryset(self):
+        hid = self.request.query_params.get('household')
+        if hid:
+            return Tag.objects.filter(household_id=hid)
+        if self.action in ('retrieve', 'update', 'partial_update', 'destroy'):
+            return Tag.objects.all()
+        return Tag.objects.none()
 
 
 class TransactionViewSet(viewsets.ModelViewSet):
-    queryset = Transaction.objects.select_related('household', 'account', 'instrument', 'member').all().order_by('-tx_date', '-id')
+    queryset = Transaction.objects.select_related('household', 'account', 'instrument', 'member').prefetch_related('tags').all().order_by('-tx_date', '-id')
     serializer_class = TransactionSerializer
     filterset_class = TransactionFilter
 
@@ -34,9 +54,46 @@ class TransactionViewSet(viewsets.ModelViewSet):
             update_kwargs['notes'] = request.data['notes']
         if 'classification' in request.data:
             update_kwargs['classification'] = request.data['classification']
-        Transaction.objects.filter(pk=instance.pk).update(**update_kwargs)
+        if update_kwargs:
+            Transaction.objects.filter(pk=instance.pk).update(**update_kwargs)
+        if 'tags' in request.data:
+            instance.tags.set(request.data['tags'])
         instance.refresh_from_db()
         return Response(TransactionSerializer(instance).data)
+
+    @action(detail=False, methods=['post'], url_path='bulk-update')
+    def bulk_update(self, request, *args, **kwargs):
+        """Apply the same field values to a set of transactions by id.
+
+        Body: {"ids": [1,2,3], "household": 1, "classification": "internal_transfer"}
+        `ids` must be explicit (selected client-side from an already-filtered list) —
+        this endpoint never re-derives the target set from filter params itself, so
+        a stale/wrong filter can't silently expand to unintended rows.
+        """
+        ids = request.data.get('ids')
+        household_id = request.data.get('household')
+        if not isinstance(ids, list) or not ids:
+            return Response({'detail': 'ids must be a non-empty list.'}, status=400)
+        if not household_id:
+            return Response({'detail': 'household is required.'}, status=400)
+        if len(ids) > BULK_UPDATE_LIMIT:
+            return Response({'detail': f'Cannot update more than {BULK_UPDATE_LIMIT} transactions at once.'}, status=400)
+
+        fields = request.data.get('fields')
+        if not isinstance(fields, dict) or not fields:
+            return Response({'detail': 'fields must be a non-empty object.'}, status=400)
+        unknown = set(fields.keys()) - BULK_MUTABLE_FIELDS
+        if unknown:
+            return Response({'detail': f'Fields not editable in bulk: {", ".join(sorted(unknown))}'}, status=400)
+
+        qs = Transaction.objects.filter(household_id=household_id, pk__in=ids)
+        matched_ids = set(qs.values_list('pk', flat=True))
+        missing = set(ids) - matched_ids
+        if missing:
+            return Response({'detail': f'Transactions not found in this household: {sorted(missing)}'}, status=400)
+
+        updated = qs.update(**fields)
+        return Response({'updated': updated})
 
 
 class CashWithdrawalView(APIView):

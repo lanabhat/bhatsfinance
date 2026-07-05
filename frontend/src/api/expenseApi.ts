@@ -13,6 +13,7 @@ export type RecordTransactionPayload = {
   spend_category?: string
   description?: string
   for_members?: number[]
+  tags?: number[]
   notes?: string
   currency?: string
   fees?: string

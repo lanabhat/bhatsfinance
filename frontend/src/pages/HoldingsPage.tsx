@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { postJson } from '../api/http'
 import { ledgerApi } from '../api/ledgerApi'
@@ -9,11 +9,12 @@ import { InstrumentRow } from '../components/assets/InstrumentRow'
 import { InstrumentExpandedDetail } from '../components/assets/InstrumentExpandedDetail'
 import { AssetCategoryForm } from '../components/assets/AssetCategoryForm'
 import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
+import { Money } from '../components/common/Money'
 import { useExpandable } from '../hooks/useExpandable'
 import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
-import type { AssetCategory, DashboardHolding, Instrument } from '../types/domain'
+import type { AssetCategory, DashboardHolding, Instrument, InstrumentOwnership } from '../types/domain'
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -206,6 +207,22 @@ const TYPE_LABELS: Record<string, string> = {
   cash: 'Cash', vehicle: 'Vehicle', liability: 'Liability', other: 'Other',
 }
 
+const TYPE_ICONS: Record<string, string> = {
+  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡',
+  ppf: '🛡', nps: '🛡', gold: '🪙', real_estate: '🏠', sip: '🔄',
+  insurance: '☂️', cash: '💵', other: '💼', vehicle: '🚗', liability: '⚠️',
+}
+
+type ViewMode = 'table' | 'card'
+const VIEW_MODE_KEY = 'holdings:viewMode'
+
+function loadViewMode(): ViewMode {
+  try {
+    const raw = localStorage.getItem(VIEW_MODE_KEY)
+    return raw === 'card' ? 'card' : 'table'
+  } catch { return 'table' }
+}
+
 export function HoldingsPage() {
   const { canWrite } = useAuth()
   const { householdId, categories, refreshCategories, dashboard, members, asOf, refreshDashboard } = useApp()
@@ -213,17 +230,35 @@ export function HoldingsPage() {
   const [memberHoldings, setMemberHoldings] = useState<typeof dashboard.holdings | null>(null)
   const [holdingsLoading, setHoldingsLoading] = useState(false)
   const [instruments, setInstruments] = useState<Instrument[]>([])
+  const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
   const [groupBy, setGroupBy] = useState<HoldingGroupBy>('type')
   const [sortBy, setSortBy] = useState<HoldingSortBy>('value')
+  const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
   const cardExpand = useExpandable<number>()
+  const tableExpand = useExpandable<number>()
+
+  const changeViewMode = (mode: ViewMode) => {
+    setViewMode(mode)
+    try { localStorage.setItem(VIEW_MODE_KEY, mode) } catch { /* ignore */ }
+  }
 
   const loadInstruments = () => portfolioApi.listInstruments(householdId).then(setInstruments).catch(() => {})
+  const loadOwnerships = () => portfolioApi.listInstrumentOwnerships(undefined, 200).then(setOwnerships).catch(() => {})
 
-  useEffect(() => { void loadInstruments() }, [householdId])
+  useEffect(() => { void loadInstruments(); void loadOwnerships() }, [householdId])
 
   // Resync instruments whenever holdings change (e.g. after an import adds new instruments)
   useEffect(() => { void loadInstruments() }, [dashboard.holdings])
+
+  const ownerMap = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const o of ownerships) {
+      const label = members.find((mb) => mb.id === o.member)?.label ?? `#${o.member}`
+      m.set(o.instrument, m.has(o.instrument) ? `${m.get(o.instrument)}, ${label}` : label)
+    }
+    return m
+  }, [ownerships, members])
 
   useEffect(() => {
     if (activeMemberId === null) { setMemberHoldings(null); return }
@@ -233,7 +268,7 @@ export function HoldingsPage() {
   }, [activeMemberId, householdId, asOf])
 
   const close = () => setSheet({ type: 'none' })
-  const afterBuy = async () => { close(); await refreshDashboard(); await loadInstruments() }
+  const afterBuy = async () => { close(); await refreshDashboard(); await loadInstruments(); await loadOwnerships() }
   const afterValuation = async () => { close(); await refreshDashboard() }
 
   const activeHoldings = activeMemberId !== null ? (memberHoldings ?? []) : dashboard.holdings
@@ -251,8 +286,8 @@ export function HoldingsPage() {
       return parseFloat(b.market_value) - parseFloat(a.market_value)
     }
 
-    const renderRow = (h: DashboardHolding, cat?: AssetCategory) => {
-      const inst = instruments.find((i) => i.id === h.instrument_id) ?? {
+    const resolveInstrument = (h: DashboardHolding): Instrument =>
+      instruments.find((i) => i.id === h.instrument_id) ?? {
         id: h.instrument_id,
         name: h.instrument_name,
         instrument_type: h.instrument_type as Instrument['instrument_type'],
@@ -263,6 +298,9 @@ export function HoldingsPage() {
         metadata: {},
         is_active: true,
       }
+
+    const renderRow = (h: DashboardHolding, cat?: AssetCategory) => {
+      const inst = resolveInstrument(h)
       const isExpanded = cardExpand.isExpanded(h.instrument_id)
       return (
         <ExpandableGridCard
@@ -291,8 +329,102 @@ export function HoldingsPage() {
       )
     }
 
+    const thCls = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] whitespace-nowrap'
+
+    const TABLE_COLS = 8
+
+    const renderTableRow = (h: DashboardHolding, cat?: AssetCategory) => {
+      const inst = resolveInstrument(h)
+      const invested = parseFloat(h.net_invested)
+      const marketValue = parseFloat(h.market_value)
+      const gain = marketValue - invested
+      const gainPct = invested > 0 ? (gain / invested) * 100 : null
+      const isExpanded = tableExpand.isExpanded(h.instrument_id)
+      return (
+        <Fragment key={h.instrument_id}>
+          <tr
+            className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--surface-2)]"
+            onClick={() => tableExpand.toggle(h.instrument_id)}
+          >
+            <td className="px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
+                  {TYPE_ICONS[inst.instrument_type] ?? '💼'}
+                </span>
+                <span className="truncate text-sm font-medium text-[var(--text)]">{inst.name}</span>
+              </div>
+            </td>
+            <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-2)]">{TYPE_LABELS[inst.instrument_type] ?? inst.instrument_type}</td>
+            <td className="px-3 py-2 text-xs text-[var(--text-2)]">
+              {cat ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: cat.color }} />
+                  {cat.name}
+                </span>
+              ) : <span className="text-[var(--text-faint)]">Uncategorised</span>}
+            </td>
+            <td className="px-3 py-2 text-xs text-[var(--text-2)]">{ownerMap.get(inst.id) ?? 'Unassigned'}</td>
+            <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-[var(--text-2)]">{invested > 0 ? <Money value={invested} /> : '—'}</td>
+            <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold"><Money value={marketValue} /></td>
+            <td className={`whitespace-nowrap px-3 py-2 text-right text-xs font-medium ${gain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+              {invested > 0 ? <>{gain >= 0 ? '+' : ''}<Money value={gain} />{gainPct !== null ? ` (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)` : ''}</> : '—'}
+            </td>
+            <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-end gap-1">
+                <button type="button" onClick={() => setSheet({ type: 'buy', instrumentId: inst.id })} disabled={!canWrite}
+                  className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
+                  Buy
+                </button>
+                <button type="button" onClick={() => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name })} disabled={!canWrite}
+                  className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
+                  Update Value
+                </button>
+              </div>
+            </td>
+          </tr>
+          {isExpanded && (
+            <tr>
+              <td colSpan={TABLE_COLS} className="bg-[var(--surface-2)] px-4 py-3">
+                <InstrumentExpandedDetail
+                  householdId={householdId}
+                  holding={h}
+                  instrument={inst}
+                  onBuy={() => setSheet({ type: 'buy', instrumentId: inst.id })}
+                  onUpdateValue={() => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name })}
+                  onEdit={() => setSheet({ type: 'edit_instrument', instrument: inst })}
+                  onTransactionsChanged={async () => { await refreshDashboard(); await loadInstruments() }}
+                  onDeleted={async () => { tableExpand.toggle(h.instrument_id); await refreshDashboard(); await loadInstruments() }}
+                />
+              </td>
+            </tr>
+          )}
+        </Fragment>
+      )
+    }
+
+    const renderTable = (list: DashboardHolding[], cat?: AssetCategory) => (
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+        <table className="w-full text-sm">
+          <thead className="bg-[var(--surface-2)]">
+            <tr>
+              <th className={thCls}>Name</th>
+              <th className={thCls}>Type</th>
+              <th className={thCls}>Category</th>
+              <th className={thCls}>Owner</th>
+              <th className={`${thCls} text-right`}>Invested</th>
+              <th className={`${thCls} text-right`}>Value</th>
+              <th className={`${thCls} text-right`}>Gain</th>
+              <th className={thCls}></th>
+            </tr>
+          </thead>
+          <tbody>{list.map(h => renderTableRow(h, cat))}</tbody>
+        </table>
+      </div>
+    )
+
     if (groupBy === 'none') {
-      return <div className="card-grid grid gap-3">{[...activeHoldings].sort(sortFn).map(h => renderRow(h))}</div>
+      const sorted = [...activeHoldings].sort(sortFn)
+      return viewMode === 'table' ? renderTable(sorted) : <div className="card-grid grid gap-3">{sorted.map(h => renderRow(h))}</div>
     }
 
     if (groupBy === 'type') {
@@ -310,8 +442,8 @@ export function HoldingsPage() {
         const sorted = [...group].sort(sortFn)
         const total = group.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
         return (
-          <CategorySection key={label} name={label} color="#b4521f" totalValue={total} count={group.length} gridChildren>
-            {sorted.map(h => renderRow(h))}
+          <CategorySection key={label} name={label} color="#b4521f" totalValue={total} count={group.length} gridChildren={viewMode === 'card'}>
+            {viewMode === 'table' ? renderTable(sorted) : sorted.map(h => renderRow(h))}
           </CategorySection>
         )
       })
@@ -330,23 +462,25 @@ export function HoldingsPage() {
       const group = catMap.get(cat.id)
       if (!group?.length) continue
       const total = group.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
+      const sorted = [...group].sort(sortFn)
       sections.push(
-        <CategorySection key={cat.id} name={cat.name} color={cat.color} totalValue={total} count={group.length} gridChildren>
-          {[...group].sort(sortFn).map(h => renderRow(h, cat))}
+        <CategorySection key={cat.id} name={cat.name} color={cat.color} totalValue={total} count={group.length} gridChildren={viewMode === 'card'}>
+          {viewMode === 'table' ? renderTable(sorted, cat) : sorted.map(h => renderRow(h, cat))}
         </CategorySection>
       )
     }
     const uncat = catMap.get(null) ?? []
     if (uncat.length > 0) {
       const total = uncat.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
+      const sorted = [...uncat].sort(sortFn)
       sections.push(
-        <CategorySection key="uncat" name="Uncategorised" color="#94a3b8" totalValue={total} count={uncat.length} gridChildren>
-          {[...uncat].sort(sortFn).map(h => renderRow(h))}
+        <CategorySection key="uncat" name="Uncategorised" color="#94a3b8" totalValue={total} count={uncat.length} gridChildren={viewMode === 'card'}>
+          {viewMode === 'table' ? renderTable(sorted) : sorted.map(h => renderRow(h))}
         </CategorySection>
       )
     }
     return sections
-  }, [activeHoldings, categories, instruments, canWrite, groupBy, sortBy, householdId, cardExpand, refreshDashboard, loadInstruments])
+  }, [activeHoldings, categories, instruments, canWrite, groupBy, sortBy, viewMode, householdId, cardExpand, refreshDashboard, loadInstruments])
 
   const pillCls = (active: boolean) =>
     `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`
@@ -380,6 +514,17 @@ export function HoldingsPage() {
               <button key={v} type="button" onClick={() => setSortBy(v)} className={pillCls(sortBy === v)}>{l}</button>
             ))}
           </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={viewMode === 'card'}
+            onClick={() => changeViewMode(viewMode === 'table' ? 'card' : 'table')}
+            title={viewMode === 'table' ? 'Switch to Card view' : 'Switch to Table view'}
+            className="flex items-center gap-2 rounded-full bg-[var(--surface-2)] px-1 py-1 text-xs font-medium text-[var(--text-muted)]"
+          >
+            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'table' ? 'bg-primary-600 text-white' : ''}`}>Table</span>
+            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'card' ? 'bg-primary-600 text-white' : ''}`}>Card</span>
+          </button>
           <button type="button" onClick={() => setSheet({ type: 'buy' })} disabled={!canWrite}
             className="shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
             + Add Holding

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { expenseApi } from '../api/expenseApi'
 import type { RecordTransactionPayload } from '../api/expenseApi'
 import { Money } from '../components/common/Money'
@@ -12,8 +12,9 @@ import { Drawer } from '../components/ui/Drawer'
 import { useAuth } from '../context/AuthContext'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { normalizeApiError } from '../hooks/errorUtils'
-import type { ExpenseCategory, Transaction, UnmappedExpenseInfo, OptionItem } from '../types/domain'
+import type { ExpenseCategory, Tag, Transaction, UnmappedExpenseInfo, OptionItem } from '../types/domain'
 import { ledgerApi } from '../api/ledgerApi'
+import { tagApi } from '../api/tagApi'
 
 type Props = {
   householdId: number
@@ -23,6 +24,32 @@ type Props = {
 }
 
 const SPEND_PAGE_SIZE = 25
+const GROUPED_FETCH_LIMIT = 500
+
+type GroupBy = 'none' | 'date' | 'month' | 'category' | 'member' | 'tag' | 'amount'
+
+const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'date', label: 'Date' },
+  { value: 'month', label: 'Month' },
+  { value: 'category', label: 'Category' },
+  { value: 'member', label: 'Member' },
+  { value: 'tag', label: 'Tag' },
+  { value: 'amount', label: 'Amount range' },
+]
+
+const AMOUNT_BUCKETS: { label: string; min: number; max: number | null }[] = [
+  { label: 'Under ₹500', min: 0, max: 500 },
+  { label: '₹500 – ₹2,000', min: 500, max: 2000 },
+  { label: '₹2,000 – ₹10,000', min: 2000, max: 10000 },
+  { label: '₹10,000 – ₹50,000', min: 10000, max: 50000 },
+  { label: 'Over ₹50,000', min: 50000, max: null },
+]
+
+function amountBucketLabel(amount: number): string {
+  const bucket = AMOUNT_BUCKETS.find(b => amount >= b.min && (b.max === null || amount < b.max))
+  return bucket?.label ?? 'Other'
+}
 
 export function ExpensePage({ householdId, memberOptions, accountOptions, canDelete }: Props) {
   const { canWrite } = useAuth()
@@ -43,10 +70,15 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterMember, setFilterMember] = useState('')
+  const [filterTags, setFilterTags] = useState<number[]>([])
+  const [amountMin, setAmountMin] = useState('')
+  const [amountMax, setAmountMax] = useState('')
   const [dateAfter, setDateAfter] = useState('')
   const [dateBefore, setDateBefore] = useState('')
   const [ordering, setOrdering] = useState('-tx_date')
   const [page, setPage] = useState(1)
+  const [groupBy, setGroupBy] = useState<GroupBy>('none')
+  const [allTags, setAllTags] = useState<Tag[]>([])
 
   // Category management state
   const [editingCat, setEditingCat] = useState<ExpenseCategory | null>(null)
@@ -87,9 +119,16 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
     } catch { /* non-fatal */ }
   }
 
+  const loadTags = async () => {
+    try {
+      setAllTags(await tagApi.list(householdId))
+    } catch { /* non-fatal */ }
+  }
+
   useEffect(() => {
     void loadData()
     void loadCategories()
+    void loadTags()
   }, [householdId])
 
   // Debounce search input
@@ -101,25 +140,45 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   // Reset to page 1 whenever a filter/search/order changes
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, filterCategory, filterMember, dateAfter, dateBefore, ordering])
+  }, [debouncedSearch, filterCategory, filterMember, filterTags, amountMin, amountMax, dateAfter, dateBefore, ordering])
+
+  const tableParams = () => ({
+    householdId,
+    classification: 'spend' as const,
+    search: debouncedSearch || undefined,
+    member: filterMember ? Number(filterMember) : undefined,
+    spendCategory: filterCategory || undefined,
+    tags: filterTags.length > 0 ? filterTags : undefined,
+    amountMin: amountMin ? Number(amountMin) : undefined,
+    amountMax: amountMax ? Number(amountMax) : undefined,
+    txDateAfter: dateAfter || undefined,
+    txDateBefore: dateBefore || undefined,
+  })
 
   const loadTable = async () => {
     setTableLoading(true)
     try {
-      const res = await ledgerApi.listTransactionsPage({
-        householdId,
-        page,
-        pageSize: SPEND_PAGE_SIZE,
-        classification: 'spend',
-        search: debouncedSearch || undefined,
-        member: filterMember ? Number(filterMember) : undefined,
-        spendCategory: filterCategory || undefined,
-        txDateAfter: dateAfter || undefined,
-        txDateBefore: dateBefore || undefined,
-        ordering,
-      })
-      setTableRows(res.results)
-      setTableCount(res.count)
+      if (groupBy === 'none') {
+        const res = await ledgerApi.listTransactionsPage({
+          ...tableParams(),
+          page,
+          pageSize: SPEND_PAGE_SIZE,
+          ordering,
+        })
+        setTableRows(res.results)
+        setTableCount(res.count)
+      } else {
+        // Grouping needs the full matching set (not just one page) to bucket
+        // and subtotal client-side — capped so a huge history can't hang the page.
+        const res = await ledgerApi.listTransactionsPage({
+          ...tableParams(),
+          page: 1,
+          pageSize: GROUPED_FETCH_LIMIT,
+          ordering,
+        })
+        setTableRows(res.results)
+        setTableCount(res.count)
+      }
     } catch (e) {
       setError(normalizeApiError(e))
     } finally {
@@ -130,18 +189,64 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   useEffect(() => {
     void loadTable()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [householdId, page, debouncedSearch, filterCategory, filterMember, dateAfter, dateBefore, ordering])
+  }, [householdId, page, debouncedSearch, filterCategory, filterMember, filterTags, amountMin, amountMax, dateAfter, dateBefore, ordering, groupBy])
 
   const resetTableFilters = () => {
     setSearch('')
     setFilterCategory('')
     setFilterMember('')
+    setFilterTags([])
+    setAmountMin('')
+    setAmountMax('')
     setDateAfter('')
     setDateBefore('')
     setOrdering('-tx_date')
+    setGroupBy('none')
   }
 
-  const hasActiveTableFilters = !!(search || filterCategory || filterMember || dateAfter || dateBefore || ordering !== '-tx_date')
+  const hasActiveTableFilters = !!(
+    search || filterCategory || filterMember || filterTags.length > 0 || amountMin || amountMax ||
+    dateAfter || dateBefore || ordering !== '-tx_date' || groupBy !== 'none'
+  )
+
+  const tagName = useMemo(() => Object.fromEntries(allTags.map(t => [t.id, t.name])), [allTags])
+
+  // Client-side grouping of the (already filtered) rows in tableRows.
+  const groupedRows = useMemo(() => {
+    if (groupBy === 'none') return null
+    const groups = new Map<string, Transaction[]>()
+    const pushTo = (key: string, tx: Transaction) => {
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(tx)
+    }
+    for (const tx of tableRows) {
+      if (groupBy === 'date') {
+        pushTo(tx.tx_date, tx)
+      } else if (groupBy === 'month') {
+        pushTo(tx.tx_date.slice(0, 7), tx)
+      } else if (groupBy === 'category') {
+        const cat = tx.spend_category || 'other'
+        pushTo(catLabel[cat] || cat, tx)
+      } else if (groupBy === 'member') {
+        pushTo(tx.member ? memberOptions.find(m => m.id === tx.member)?.label ?? `Member #${tx.member}` : 'Unassigned', tx)
+      } else if (groupBy === 'tag') {
+        if (tx.tags.length === 0) { pushTo('Untagged', tx); continue }
+        for (const tagId of tx.tags) pushTo(tagName[tagId] ?? `#${tagId}`, tx)
+      } else if (groupBy === 'amount') {
+        pushTo(amountBucketLabel(Number(tx.amount)), tx)
+      }
+    }
+    // Sort groups by total amount desc, except date/month which sort chronologically (respecting current ordering).
+    const entries = Array.from(groups.entries())
+    if (groupBy === 'date' || groupBy === 'month') {
+      entries.sort(([a], [b]) => ordering.startsWith('-') ? b.localeCompare(a) : a.localeCompare(b))
+    } else if (groupBy === 'amount') {
+      entries.sort(([a], [b]) => AMOUNT_BUCKETS.findIndex(x => x.label === a) - AMOUNT_BUCKETS.findIndex(x => x.label === b))
+    } else {
+      entries.sort(([, a], [, b]) => b.reduce((s, t) => s + Number(t.amount), 0) - a.reduce((s, t) => s + Number(t.amount), 0))
+    }
+    return entries
+  }, [groupBy, tableRows, catLabel, memberOptions, tagName, ordering])
 
   const save = async (form: RecordTransactionPayload) => {
     setSaving(true)
@@ -151,6 +256,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
       setShowForm(false)
       await loadData()
       await loadTable()
+      await loadTags()
     } catch (e) {
       setError(normalizeApiError(e))
     } finally {
@@ -167,6 +273,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
     member: number | null
     spend_category: string
     description: string
+    tags: number[]
     notes: string
   }) => {
     if (!editingTx) return
@@ -190,6 +297,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
             classification: editingTx.classification,
             spend_category: patch.spend_category,
             description: patch.description,
+            tags: patch.tags,
             notes: patch.notes,
           },
         })
@@ -200,12 +308,14 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
           member: patch.member,
           spend_category: patch.spend_category,
           description: patch.description,
+          tags: patch.tags,
           notes: patch.notes,
         })
       }
       setEditingTx(null)
       await loadData()
       await loadTable()
+      await loadTags()
     } catch (e) {
       setEditError(normalizeApiError(e))
     } finally {
@@ -265,6 +375,48 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
 
   const monthlyTotal = categoryTotals.reduce((s, [, v]) => s + v, 0)
   const tableTotalPages = Math.max(1, Math.ceil(tableCount / SPEND_PAGE_SIZE))
+
+  const SpendRow = ({ x }: { x: Transaction }) => {
+    const cat = x.spend_category || 'other'
+    return (
+      <tr className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]">
+        <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-faint)]">{x.tx_date}</td>
+        <td className="px-3 py-2 text-sm">
+          <span className="mr-1">{catIcon[cat] ?? '📌'}</span>
+          {catLabel[cat] || cat}
+        </td>
+        <td className="max-w-[16rem] truncate px-3 py-2 text-sm text-[var(--text-2)]" title={x.description}>
+          {x.description || '—'}
+        </td>
+        <td className="px-3 py-2 text-xs text-[var(--text-muted)]">
+          {x.tags.length > 0 ? x.tags.map(id => `#${tagName[id] ?? id}`).join(' ') : '—'}
+        </td>
+        <td className="px-3 py-2 text-xs text-[var(--text-muted)]">
+          {x.member ? memberOptions.find(m => m.id === x.member)?.label ?? `Member #${x.member}` : '—'}
+        </td>
+        <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold">
+          <Money value={Number(x.amount)} />
+        </td>
+        <td className="px-3 py-2 text-right">
+          <div className="flex items-center justify-end gap-1">
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => { setEditingTx(x); setEditError('') }}
+                className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+              >
+                Edit
+              </button>
+            )}
+            <DeleteButton
+              disabled={!canDelete('transaction')}
+              onDelete={async () => { await ledgerApi.deleteTransaction(x.id); await loadData(); await loadTable() }}
+            />
+          </div>
+        </td>
+      </tr>
+    )
+  }
 
   return (
     <PullToRefresh onRefresh={loadData}>
@@ -409,12 +561,48 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
               To
               <input type="date" value={dateBefore} onChange={e => setDateBefore(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]" />
             </label>
+            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+              Min ₹
+              <input type="number" min="0" placeholder="0" value={amountMin} onChange={e => setAmountMin(e.target.value)} className="w-24 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]" />
+            </label>
+            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+              Max ₹
+              <input type="number" min="0" placeholder="Any" value={amountMax} onChange={e => setAmountMax(e.target.value)} className="w-24 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]" />
+            </label>
+            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+              Group by
+              <select value={groupBy} onChange={e => setGroupBy(e.target.value as GroupBy)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]">
+                {GROUP_BY_OPTIONS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+              </select>
+            </label>
             {hasActiveTableFilters && (
               <button type="button" onClick={resetTableFilters} className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-300">
                 Reset filters
               </button>
             )}
           </div>
+          {allTags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-[var(--text-muted)]">Tags:</span>
+              {allTags.map(t => {
+                const selected = filterTags.includes(t.id)
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setFilterTags(prev => selected ? prev.filter(x => x !== t.id) : [...prev, t.id])}
+                    className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-all ${
+                      selected
+                        ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
+                        : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'
+                    }`}
+                  >
+                    #{t.name}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -429,6 +617,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
                 </th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Category</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Description</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Tags</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Member</th>
                 <th
                   className="cursor-pointer select-none whitespace-nowrap px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]"
@@ -441,60 +630,40 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
             </thead>
             <tbody>
               {tableLoading ? (
-                <tr><td colSpan={6} className="px-3 py-8 text-center text-[var(--text-muted)]">Loading…</td></tr>
+                <tr><td colSpan={7} className="px-3 py-8 text-center text-[var(--text-muted)]">Loading…</td></tr>
               ) : tableRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-14 text-center">
+                  <td colSpan={7} className="py-14 text-center">
                     <span className="block text-3xl">🧾</span>
                     <p className="mt-2 text-sm font-medium text-[var(--text-2)]">No spends match these filters</p>
                     <p className="text-xs text-[var(--text-muted)]">Tap + Record to add your first entry.</p>
                   </td>
                 </tr>
-              ) : (
-                tableRows.map(x => {
-                  const cat = x.spend_category || 'other'
+              ) : groupedRows ? (
+                groupedRows.map(([label, rows]) => {
+                  const total = rows.reduce((s, t) => s + Number(t.amount), 0)
                   return (
-                    <tr key={x.id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]">
-                      <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-faint)]">{x.tx_date}</td>
-                      <td className="px-3 py-2 text-sm">
-                        <span className="mr-1">{catIcon[cat] ?? '📌'}</span>
-                        {catLabel[cat] || cat}
-                      </td>
-                      <td className="max-w-[16rem] truncate px-3 py-2 text-sm text-[var(--text-2)]" title={x.description}>
-                        {x.description || '—'}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-[var(--text-muted)]">
-                        {x.member ? memberOptions.find(m => m.id === x.member)?.label ?? `Member #${x.member}` : '—'}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold">
-                        <Money value={Number(x.amount)} />
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {canWrite && (
-                            <button
-                              type="button"
-                              onClick={() => { setEditingTx(x); setEditError('') }}
-                              className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
-                            >
-                              Edit
-                            </button>
-                          )}
-                          <DeleteButton
-                            disabled={!canDelete('transaction')}
-                            onDelete={async () => { await ledgerApi.deleteTransaction(x.id); await loadData(); await loadTable() }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
+                    <Fragment key={label}>
+                      <tr>
+                        <td colSpan={7} className="bg-[var(--surface-2)] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                          <div className="flex items-center justify-between">
+                            <span>{label} <span className="ml-1 rounded-full bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-medium normal-case">{rows.length}</span></span>
+                            <Money value={total} className="font-semibold normal-case" />
+                          </div>
+                        </td>
+                      </tr>
+                      {rows.map(x => <SpendRow key={x.id} x={x} />)}
+                    </Fragment>
                   )
                 })
+              ) : (
+                tableRows.map(x => <SpendRow key={x.id} x={x} />)
               )}
             </tbody>
           </table>
         </div>
 
-        {tableCount > 0 && (
+        {groupBy === 'none' && tableCount > 0 && (
           <div className="flex items-center justify-between px-4 py-3 text-xs text-[var(--text-muted)]">
             <span>
               Showing {(page - 1) * SPEND_PAGE_SIZE + 1}–{Math.min(page * SPEND_PAGE_SIZE, tableCount)} of {tableCount}
@@ -511,6 +680,11 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
               </button>
             </div>
           </div>
+        )}
+        {groupBy !== 'none' && tableCount > GROUPED_FETCH_LIMIT && (
+          <p className="px-4 py-3 text-xs text-[var(--text-muted)]">
+            Showing the first {GROUPED_FETCH_LIMIT} of {tableCount} matching spends — narrow the filters to see the rest grouped.
+          </p>
         )}
       </div>
 
@@ -667,6 +841,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
       {editingTx && (
         <EditSpendDialog
           open={!!editingTx}
+          householdId={householdId}
           transaction={editingTx}
           categories={categories}
           memberOptions={memberOptions}

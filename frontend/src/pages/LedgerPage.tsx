@@ -2,12 +2,11 @@ import { Fragment, useEffect, useState } from 'react'
 import { ledgerApi } from '../api/ledgerApi'
 import { getJson } from '../api/http'
 import { EntityPageLayout } from '../components/common/EntityPageLayout'
-import { DateField, MoneyInput, SelectField, TextField } from '../components/common/FormField'
 import { DeleteButton } from '../components/common/DeleteButton'
+import { TX_TYPES, TxFormFields, blankTxForm, txFormFromTransaction, type TxForm } from '../components/ledger/TransactionEditForm'
 import { useAuth } from '../context/AuthContext'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { normalizeApiError } from '../hooks/errorUtils'
-import { TOOLTIPS } from '../data/helpContent'
 import type { Account, OptionItem, Transaction } from '../types/domain'
 
 type Props = {
@@ -27,18 +26,6 @@ type GmailMeta = {
   snippet?: string
 }
 
-type TxForm = {
-  member: string
-  account: string
-  instrument: string
-  tx_date: string
-  amount: string
-  quantity: string
-  price_per_unit: string
-  transaction_type: string
-  external_reference: string
-}
-
 const TX_TYPE_LABELS: Record<string, string> = {
   deposit: 'Deposit', withdrawal: 'Withdrawal', buy: 'Buy', sell: 'Sell',
   dividend: 'Dividend', interest: 'Interest', salary: 'Salary',
@@ -50,11 +37,6 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   bank: 'Bank Account', broker: 'Broker', pf: 'PF', loan: 'Loan',
   credit_card: 'Credit Card', insurance: 'Insurance', cash: 'Cash', other: 'Other',
 }
-
-const TX_TYPES: OptionItem[] = [
-  'deposit', 'withdrawal', 'buy', 'sell', 'dividend', 'interest', 'salary',
-  'tax_payment', 'tax_refund', 'emi', 'loan_disbursal', 'premium', 'other',
-].map((x, i) => ({ id: i + 1, label: x }))
 
 const CLASSIFICATION_OPTIONS: OptionItem[] = [
   { id: 1, label: 'spend' }, { id: 2, label: 'income' }, { id: 3, label: 'internal_transfer' }, { id: 4, label: 'tracking' },
@@ -71,18 +53,6 @@ type GroupBy = 'none' | 'account' | 'member' | 'transaction_type'
 
 const PAGE_SIZE = 25
 
-function blankForm(): TxForm {
-  return {
-    member: '', account: '', instrument: '',
-    tx_date: new Date().toISOString().slice(0, 10),
-    amount: '', quantity: '', price_per_unit: '',
-    transaction_type: 'buy', external_reference: '',
-  }
-}
-
-function txTypeId(label: string) { return String(TX_TYPES.find(x => x.label === label)?.id || 3) }
-function txTypeLabel(id: string) { return TX_TYPES.find(x => x.id === Number(id))?.label || 'buy' }
-
 function directionArrow(d: string) {
   return d === 'inflow'
     ? <span className="font-bold text-emerald-600 dark:text-emerald-400">↑</span>
@@ -94,41 +64,6 @@ function sourceBadge(source: string) {
   if (source === 'api') return <span className={`${BADGE_BASE} bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300`}>Gmail</span>
   if (source === 'csv') return <span className={`${BADGE_BASE} bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300`}>CSV</span>
   return <span className={`${BADGE_BASE} bg-[var(--surface-2)] text-[var(--text-2)]`}>Manual</span>
-}
-
-function TxFormFields({ form, onChange, accountOptions, memberOptions, instrumentOptions, error, submitLabel, onSubmit, onCancel, canWrite }: {
-  form: TxForm
-  onChange: (f: TxForm) => void
-  accountOptions: OptionItem[]
-  memberOptions: OptionItem[]
-  instrumentOptions: OptionItem[]
-  error: string
-  submitLabel: string
-  onSubmit: () => void
-  onCancel: () => void
-  canWrite: boolean
-}) {
-  const set = (k: keyof TxForm) => (v: string) => onChange({ ...form, [k]: v })
-  return (
-    <>
-      {error && <p className="mb-2 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
-      <div className="form-grid">
-        <SelectField label="Member" value={form.member} onChange={set('member')} options={memberOptions} placeholder="Optional" />
-        <SelectField label="Account" value={form.account} onChange={set('account')} options={accountOptions} placeholder="Optional" />
-        <SelectField label="Instrument" value={form.instrument} onChange={set('instrument')} options={instrumentOptions} placeholder="Optional" />
-        <DateField label="Date" value={form.tx_date} onChange={set('tx_date')} />
-        <MoneyInput label="Amount" value={form.amount} onChange={set('amount')} />
-        <TextField label="Quantity" type="number" min="0" step="0.000001" value={form.quantity} onChange={set('quantity')} />
-        <TextField label="Price Per Unit" type="number" min="0" step="0.000001" value={form.price_per_unit} onChange={set('price_per_unit')} />
-        <SelectField label="Type" helpTooltip={TOOLTIPS.transaction_type} value={txTypeId(form.transaction_type)} onChange={v => onChange({ ...form, transaction_type: txTypeLabel(v) })} options={TX_TYPES} />
-      </div>
-      <TextField label="Reference / Note" value={form.external_reference} onChange={set('external_reference')} />
-      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-        <button type="button" onClick={onSubmit} disabled={!canWrite} className="primary-btn">{submitLabel}</button>
-        <button type="button" onClick={onCancel} className="secondary-btn">Cancel</button>
-      </div>
-    </>
-  )
 }
 
 function TransactionDetailRow({ t, accountFull, colSpan }: { t: Transaction; accountFull: Account | undefined; colSpan: number }) {
@@ -188,11 +123,19 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
 
   // Create form visibility
   const [showCreate, setShowCreate] = useState(false)
-  const [createForm, setCreateForm] = useState<TxForm>(blankForm())
+  const [createForm, setCreateForm] = useState<TxForm>(blankTxForm())
 
   // Inline edit state: null = no edit open, number = transaction id being edited
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState<TxForm>(blankForm())
+  const [editForm, setEditForm] = useState<TxForm>(blankTxForm())
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [selectAllMatching, setSelectAllMatching] = useState(false)
+  const [bulkClassification, setBulkClassification] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkError, setBulkError] = useState('')
+  const [bulkMessage, setBulkMessage] = useState('')
 
   // Debounce search input
   useEffect(() => {
@@ -204,6 +147,15 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
   useEffect(() => {
     setPage(1)
   }, [debouncedSearch, filterAccount, filterMember, filterType, filterClassification, dateAfter, dateBefore, groupBy, ordering])
+
+  // Clear selection whenever the filtered set or page changes, so a bulk
+  // action can never silently apply to rows the user can no longer see.
+  useEffect(() => {
+    setSelectedIds(new Set())
+    setSelectAllMatching(false)
+    setBulkError('')
+    setBulkMessage('')
+  }, [page, debouncedSearch, filterAccount, filterMember, filterType, filterClassification, dateAfter, dateBefore, groupBy, ordering])
 
   const loadAccounts = async () => {
     try {
@@ -286,7 +238,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
         idempotency_key: `manual-${Date.now()}`,
         metadata: {},
       })
-      setCreateForm(blankForm())
+      setCreateForm(blankTxForm())
       setShowCreate(false)
       await loadTransactions()
       await onRefreshDashboard()
@@ -298,17 +250,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
 
   const openEdit = (t: Transaction) => {
     setEditingId(t.id)
-    setEditForm({
-      member: t.member ? String(t.member) : '',
-      account: t.account ? String(t.account) : '',
-      instrument: t.instrument ? String(t.instrument) : '',
-      tx_date: t.tx_date,
-      amount: t.amount,
-      quantity: t.quantity || '',
-      price_per_unit: t.price_per_unit || '',
-      transaction_type: t.transaction_type,
-      external_reference: t.external_reference,
-    })
+    setEditForm(txFormFromTransaction(t))
     setFormError('')
   }
 
@@ -327,12 +269,89 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
         direction: 'outflow',
         transaction_type: editForm.transaction_type as Transaction['transaction_type'],
         external_reference: editForm.external_reference,
+        classification: editForm.classification as Transaction['classification'],
       })
       setEditingId(null)
       await loadTransactions()
       await onRefreshDashboard()
     } catch (e) {
       setFormError(normalizeApiError(e))
+    }
+  }
+
+  const BULK_LIMIT = 500
+  const MAX_PAGE_SIZE = 200
+
+  // Fetches every id matching the current filters (not just the visible page),
+  // up to BULK_LIMIT, so "select all matching filter" can span multiple pages.
+  const fetchAllMatchingIds = async (): Promise<number[]> => {
+    const ids: number[] = []
+    let fetchPage = 1
+    while (ids.length < BULK_LIMIT) {
+      const res = await ledgerApi.listTransactionsPage({
+        householdId,
+        page: fetchPage,
+        pageSize: MAX_PAGE_SIZE,
+        search: debouncedSearch || undefined,
+        account: filterAccount ? Number(filterAccount) : undefined,
+        member: filterMember ? Number(filterMember) : undefined,
+        transactionType: filterType || undefined,
+        classification: filterClassification || undefined,
+        txDateAfter: dateAfter || undefined,
+        txDateBefore: dateBefore || undefined,
+      })
+      ids.push(...res.results.map(t => t.id))
+      if (res.results.length < MAX_PAGE_SIZE || ids.length >= res.count) break
+      fetchPage += 1
+    }
+    return ids.slice(0, BULK_LIMIT)
+  }
+
+  const toggleSelected = (id: number) => {
+    setSelectAllMatching(false)
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const pageIds = transactions.map(t => t.id)
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id))
+
+  const toggleSelectPage = () => {
+    setSelectAllMatching(false)
+    setSelectedIds(prev => {
+      if (allPageSelected) {
+        const next = new Set(prev)
+        pageIds.forEach(id => next.delete(id))
+        return next
+      }
+      return new Set([...prev, ...pageIds])
+    })
+  }
+
+  const selectionCount = selectAllMatching ? Math.min(totalCount, BULK_LIMIT) : selectedIds.size
+
+  const applyBulkClassification = async () => {
+    if (!bulkClassification || selectionCount === 0) return
+    setBulkBusy(true)
+    setBulkError('')
+    setBulkMessage('')
+    try {
+      const ids = selectAllMatching ? await fetchAllMatchingIds() : Array.from(selectedIds)
+      const res = await ledgerApi.bulkUpdateTransactions(householdId, ids, { classification: bulkClassification as Transaction['classification'] })
+      setBulkMessage(`Updated ${res.updated} transaction${res.updated === 1 ? '' : 's'}.`)
+      setSelectedIds(new Set())
+      setSelectAllMatching(false)
+      setBulkClassification('')
+      await loadTransactions()
+      await onRefreshDashboard()
+    } catch (e) {
+      setBulkError(normalizeApiError(e))
+    } finally {
+      setBulkBusy(false)
     }
   }
 
@@ -396,7 +415,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                   accountOptions={accountOptions} memberOptions={memberOptions} instrumentOptions={instrumentOptions}
                   error={formError} submitLabel="Save" canWrite={canWrite}
                   onSubmit={saveTransaction}
-                  onCancel={() => { setShowCreate(false); setCreateForm(blankForm()); setFormError('') }}
+                  onCancel={() => { setShowCreate(false); setCreateForm(blankTxForm()); setFormError('') }}
                 />
               </div>
             )}
@@ -474,25 +493,59 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
               </div>
             </div>
 
+            {/* Bulk action bar */}
+            {canWrite && selectionCount > 0 && (
+              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-primary-300 bg-primary-50 px-3 py-2 text-sm dark:border-primary-800/40 dark:bg-primary-900/20">
+                <span className="font-medium">{selectionCount} selected</span>
+                {!selectAllMatching && totalCount > pageIds.length && allPageSelected && (
+                  <button type="button" onClick={() => setSelectAllMatching(true)} className="text-xs text-primary-700 underline dark:text-primary-300">
+                    Select all {Math.min(totalCount, BULK_LIMIT)} matching filter{totalCount > BULK_LIMIT ? ` (capped at ${BULK_LIMIT})` : ''}
+                  </button>
+                )}
+                <select
+                  value={bulkClassification}
+                  onChange={e => setBulkClassification(e.target.value)}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]"
+                >
+                  <option value="">Set classification…</option>
+                  {CLASSIFICATION_OPTIONS.map(c => <option key={c.id} value={c.label}>{c.label.replace('_', ' ')}</option>)}
+                </select>
+                <button type="button" disabled={!bulkClassification || bulkBusy} onClick={applyBulkClassification} className="primary-btn" style={{ fontSize: '0.8rem', padding: '4px 12px' }}>
+                  {bulkBusy ? 'Applying…' : 'Apply'}
+                </button>
+                <button type="button" onClick={() => { setSelectedIds(new Set()); setSelectAllMatching(false) }} className="secondary-btn" style={{ fontSize: '0.8rem', padding: '4px 12px' }}>
+                  Clear
+                </button>
+                {bulkError && <span className="text-xs text-rose-600 dark:text-rose-400">{bulkError}</span>}
+                {bulkMessage && <span className="text-xs text-emerald-600 dark:text-emerald-400">{bulkMessage}</span>}
+              </div>
+            )}
+
             {/* Table */}
             <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
               <table className="w-full text-sm">
                 <thead className="bg-[var(--surface-2)]">
                   <tr>
+                    {canWrite && (
+                      <th className={thCls}>
+                        <input type="checkbox" checked={allPageSelected} onChange={toggleSelectPage} aria-label="Select all on page" />
+                      </th>
+                    )}
                     <th className={thCls} onClick={() => toggleSort('tx_date')}>Date{sortIndicator('tx_date')}</th>
                     <th className={thCls}>Type</th>
                     <th className={thCls}>Account / Member / Instrument</th>
                     <th className={thCls}>Reference</th>
                     <th className={`${thCls} text-right`} onClick={() => toggleSort('amount')}>Amount{sortIndicator('amount')}</th>
                     <th className={thCls}>Source</th>
+                    <th className={thCls} title="Buy transactions with no classification set — likely need review (e.g. funded from existing savings rather than this month's income, or a duplicate import row)">⚠</th>
                     <th className={thCls}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={7} className="px-3 py-8 text-center text-[var(--text-muted)]">Loading…</td></tr>
+                    <tr><td colSpan={9} className="px-3 py-8 text-center text-[var(--text-muted)]">Loading…</td></tr>
                   ) : transactions.length === 0 ? (
-                    <tr><td colSpan={7} className="px-3 py-8 text-center text-[var(--text-muted)]">No transactions match these filters.</td></tr>
+                    <tr><td colSpan={9} className="px-3 py-8 text-center text-[var(--text-muted)]">No transactions match these filters.</td></tr>
                   ) : (
                     transactions.map((t) => {
                       const accountName = accountOptions.find(a => a.id === t.account)?.label ?? null
@@ -511,7 +564,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                         <Fragment key={t.id}>
                           {showDivider && (
                             <tr key={`group-${label}`}>
-                              <td colSpan={7} className="bg-[var(--surface-2)] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                              <td colSpan={9} className="bg-[var(--surface-2)] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                                 {label}
                               </td>
                             </tr>
@@ -521,6 +574,11 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                             className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--surface-2)]"
                             onClick={() => setExpandedId(isExpanded ? null : t.id)}
                           >
+                            {canWrite && (
+                              <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                                <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelected(t.id)} aria-label={`Select transaction ${t.id}`} />
+                              </td>
+                            )}
                             <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-faint)]">{t.tx_date}</td>
                             <td className="px-3 py-2">
                               <div className="flex items-center gap-1.5">
@@ -542,6 +600,11 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                             </td>
                             <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold">{amountStr}</td>
                             <td className="px-3 py-2">{sourceBadge(t.source)}</td>
+                            <td className="px-3 py-2 text-center">
+                              {t.transaction_type === 'buy' && !t.classification && (
+                                <span title="Unclassified Buy — funded from existing savings? Mark as internal_transfer, or check for a duplicate import row.">⚠️</span>
+                              )}
+                            </td>
                             <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-1">
                                 {canWrite && (
@@ -558,7 +621,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                               </div>
                             </td>
                           </tr>
-                          {isExpanded && <TransactionDetailRow key={`detail-${t.id}`} t={t} accountFull={accountFull} colSpan={7} />}
+                          {isExpanded && <TransactionDetailRow key={`detail-${t.id}`} t={t} accountFull={accountFull} colSpan={9} />}
                         </Fragment>
                       )
                     })

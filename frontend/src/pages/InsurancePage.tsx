@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { insuranceApi } from '../api/insuranceApi'
 import { BaseForm } from '../components/common/BaseForm'
 import { DeleteButton } from '../components/common/DeleteButton'
@@ -137,6 +137,16 @@ type Props = {
   canDelete: (e: DeleteEntity) => boolean
 }
 
+type ViewMode = 'table' | 'card'
+const VIEW_MODE_KEY = 'insurance:viewMode'
+
+function loadViewMode(): ViewMode {
+  try {
+    const raw = localStorage.getItem(VIEW_MODE_KEY)
+    return raw === 'card' ? 'card' : 'table'
+  } catch { return 'table' }
+}
+
 export function InsurancePage({ householdId, memberOptions, accountOptions, instrumentOptions, canDelete }: Props) {
   const { canWrite } = useAuth()
   const [policies, setPolicies] = useState<InsurancePolicy[]>([])
@@ -145,6 +155,20 @@ export function InsurancePage({ householdId, memberOptions, accountOptions, inst
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
+  const formRef = useRef<HTMLDivElement>(null)
+
+  const changeViewMode = (mode: ViewMode) => {
+    setViewMode(mode)
+    try { localStorage.setItem(VIEW_MODE_KEY, mode) } catch { /* ignore */ }
+  }
+
+  // The form panel renders below the (potentially long) policy list, so
+  // opening it via a table/card Edit button gives no visible feedback unless
+  // we scroll it into view — otherwise it looks like Edit "did nothing".
+  useEffect(() => {
+    if (showForm) formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [showForm])
 
   // Vehicle claims state (for edit mode)
   const [claims, setClaims] = useState<VehicleClaim[]>([])
@@ -288,6 +312,17 @@ export function InsurancePage({ householdId, memberOptions, accountOptions, inst
           >
             Import CSV
           </a>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={viewMode === 'card'}
+            onClick={() => changeViewMode(viewMode === 'table' ? 'card' : 'table')}
+            title={viewMode === 'table' ? 'Switch to Card view' : 'Switch to Table view'}
+            className="flex items-center gap-2 rounded-full bg-[var(--surface-2)] px-1 py-1 text-xs font-medium text-[var(--text-muted)]"
+          >
+            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'table' ? 'bg-primary-600 text-white' : ''}`}>Table</span>
+            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'card' ? 'bg-primary-600 text-white' : ''}`}>Card</span>
+          </button>
           {canWrite && (
             <button
               type="button"
@@ -331,25 +366,35 @@ export function InsurancePage({ householdId, memberOptions, accountOptions, inst
               <span>{POLICY_TYPE_ICONS[type]}</span>
               <span>{POLICY_TYPE_LABELS[type]}</span>
             </h2>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {group.map((p) => (
-                <PolicyCard
-                  key={p.id}
-                  policy={p}
-                  canWrite={canWrite}
-                  canDelete={canDelete('sip_mandate')}
-                  onEdit={() => openEdit(p)}
-                  onDelete={async () => { await insuranceApi.deletePolicy(p.id); await loadPolicies() }}
-                />
-              ))}
-            </div>
+            {viewMode === 'table' ? (
+              <PolicyTable
+                policies={group}
+                canWrite={canWrite}
+                canDelete={canDelete('sip_mandate')}
+                onEdit={openEdit}
+                onDelete={async (id) => { await insuranceApi.deletePolicy(id); await loadPolicies() }}
+              />
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {group.map((p) => (
+                  <PolicyCard
+                    key={p.id}
+                    policy={p}
+                    canWrite={canWrite}
+                    canDelete={canDelete('sip_mandate')}
+                    onEdit={() => openEdit(p)}
+                    onDelete={async () => { await insuranceApi.deletePolicy(p.id); await loadPolicies() }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )
       })}
 
       {/* Form panel */}
       {showForm && (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <div ref={formRef} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-base font-semibold text-[var(--text)]">
               {editId ? 'Edit Policy' : 'New Policy'}
@@ -440,6 +485,96 @@ export function InsurancePage({ householdId, memberOptions, accountOptions, inst
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Policy Table ─────────────────────────────────────────────────────────────
+
+const thCls = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] whitespace-nowrap'
+
+function PolicyTable({
+  policies, canWrite, canDelete, onEdit, onDelete,
+}: {
+  policies: InsurancePolicy[]
+  canWrite: boolean
+  canDelete: boolean
+  onEdit: (p: InsurancePolicy) => void
+  onDelete: (id: number) => Promise<void>
+}) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+      <table className="w-full text-sm">
+        <thead className="bg-[var(--surface-2)]">
+          <tr>
+            <th className={thCls}>Policy</th>
+            <th className={thCls}>Insurer</th>
+            <th className={thCls}>Insured</th>
+            <th className={`${thCls} text-right`}>Sum Insured</th>
+            <th className={`${thCls} text-right`}>Premium</th>
+            <th className={thCls}>Maturity</th>
+            <th className={thCls}>Status</th>
+            <th className={thCls}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {policies.map((p) => {
+            const maturityDays = p.maturity_date
+              ? Math.ceil((new Date(p.maturity_date).getTime() - Date.now()) / 86_400_000)
+              : null
+            return (
+              <tr key={p.id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]">
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
+                      {POLICY_TYPE_ICONS[p.policy_type]}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-[var(--text)]">{p.policy_name}</p>
+                      {p.policy_number && <p className="truncate font-mono text-[10px] text-[var(--text-faint)]">{p.policy_number}</p>}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-3 py-2 text-xs text-[var(--text-2)]">{p.insurer_name || '—'}</td>
+                <td className="px-3 py-2 text-xs text-[var(--text-2)]">
+                  {p.is_family_floater && p.covered_member_names.length > 0
+                    ? p.covered_member_names.join(', ')
+                    : p.member_name || '—'}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-[var(--text-2)]">
+                  {p.sum_insured ? `₹${parseFloat(p.sum_insured).toLocaleString('en-IN')}` : '—'}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-[var(--text-2)]">
+                  {p.is_employer_paid ? 'Employer' : p.premium_amount ? `₹${parseFloat(p.premium_amount).toLocaleString('en-IN')} / ${FREQ_LABEL[p.premium_frequency]}` : '—'}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 text-xs">
+                  {maturityDays !== null ? (
+                    <span className={maturityDays < 0 ? 'text-red-600' : maturityDays < 60 ? 'text-amber-600' : 'text-[var(--text-2)]'}>
+                      {maturityDays < 0 ? `Matured ${Math.abs(maturityDays)}d ago` : `${maturityDays}d`}
+                    </span>
+                  ) : <span className="text-[var(--text-faint)]">—</span>}
+                </td>
+                <td className="px-3 py-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${p.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
+                    {p.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    {canWrite && (
+                      <button type="button" onClick={() => onEdit(p)}
+                        className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]">
+                        Edit
+                      </button>
+                    )}
+                    <DeleteButton disabled={!canDelete} onDelete={() => onDelete(p.id)} />
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

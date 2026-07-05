@@ -1,8 +1,12 @@
-import { useState } from 'react'
-import type { ExpenseCategory, OptionItem, Transaction } from '../../types/domain'
+import { useEffect, useState } from 'react'
+import { expenseApi } from '../../api/expenseApi'
+import { tagApi } from '../../api/tagApi'
+import { TagPicker } from './TagPicker'
+import type { ExpenseCategory, OptionItem, Tag, Transaction } from '../../types/domain'
 
 type Props = {
   open: boolean
+  householdId: number
   transaction: Transaction
   categories: ExpenseCategory[]
   memberOptions: OptionItem[]
@@ -14,6 +18,7 @@ type Props = {
     member: number | null
     spend_category: string
     description: string
+    tags: number[]
     notes: string
   }) => Promise<void>
   onCancel: () => void
@@ -21,7 +26,7 @@ type Props = {
   error?: string
 }
 
-export function EditSpendDialog({ open, transaction, categories, memberOptions, accountOptions, onSave, onCancel, saving, error }: Props) {
+export function EditSpendDialog({ open, householdId, transaction, categories, memberOptions, accountOptions, onSave, onCancel, saving, error }: Props) {
   const [txDate, setTxDate] = useState(transaction.tx_date)
   const [amount, setAmount] = useState(transaction.amount)
   const [account, setAccount] = useState(transaction.account != null ? String(transaction.account) : '')
@@ -29,6 +34,16 @@ export function EditSpendDialog({ open, transaction, categories, memberOptions, 
   const [spendCategory, setSpendCategory] = useState(transaction.spend_category || 'other')
   const [description, setDescription] = useState(transaction.description)
   const [notes, setNotes] = useState(transaction.notes)
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>(transaction.tags ?? [])
+  const [localCategories, setLocalCategories] = useState(categories)
+  const [tags, setTags] = useState<Tag[]>([])
+  const [addingCategory, setAddingCategory] = useState(false)
+  const [newCatLabel, setNewCatLabel] = useState('')
+  const [newCatSaving, setNewCatSaving] = useState(false)
+  const [newCatError, setNewCatError] = useState('')
+
+  useEffect(() => { setLocalCategories(categories) }, [categories])
+  useEffect(() => { tagApi.list(householdId).then(setTags).catch(() => {}) }, [householdId])
 
   if (!open) return null
 
@@ -43,13 +58,32 @@ export function EditSpendDialog({ open, transaction, categories, memberOptions, 
       member: member ? Number(member) : null,
       spend_category: spendCategory,
       description,
+      tags: selectedTagIds,
       notes,
     })
   }
 
+  async function createCategory() {
+    if (!newCatLabel.trim()) return
+    setNewCatSaving(true)
+    setNewCatError('')
+    try {
+      const key = newCatLabel.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30)
+      const created = await expenseApi.createCategory({ household: householdId, key, label: newCatLabel.trim(), icon: '📌' })
+      setLocalCategories(prev => [...prev, created])
+      setSpendCategory(created.key)
+      setNewCatLabel('')
+      setAddingCategory(false)
+    } catch {
+      setNewCatError('Could not create category.')
+    } finally {
+      setNewCatSaving(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 className="mb-1 text-base font-semibold text-[var(--text)]">Edit transaction</h2>
         <p className="mb-4 text-xs text-[var(--text-muted)]">
           Changing amount or account creates a corrected replacement. Other fields update in place.
@@ -93,13 +127,38 @@ export function EditSpendDialog({ open, transaction, categories, memberOptions, 
           <div className="grid grid-cols-2 gap-3">
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-[var(--text-2)]">Category</span>
-              <select
-                value={spendCategory}
-                onChange={e => setSpendCategory(e.target.value)}
-                className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {categories.map(c => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
-              </select>
+              {addingCategory ? (
+                <div className="space-y-1.5">
+                  <input
+                    autoFocus
+                    value={newCatLabel}
+                    onChange={e => { setNewCatLabel(e.target.value); setNewCatError('') }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void createCategory() } }}
+                    placeholder="New category name"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  {newCatError && <p className="text-[10px] text-rose-600">{newCatError}</p>}
+                  <div className="flex gap-2">
+                    <button type="button" disabled={!newCatLabel.trim() || newCatSaving} onClick={() => void createCategory()}
+                      className="rounded-lg bg-primary-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-primary-700 disabled:opacity-40">
+                      {newCatSaving ? '…' : 'Add'}
+                    </button>
+                    <button type="button" onClick={() => setAddingCategory(false)} className="text-[11px] text-[var(--text-muted)]">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <select
+                  value={spendCategory}
+                  onChange={e => {
+                    if (e.target.value === '__new__') { setAddingCategory(true); return }
+                    setSpendCategory(e.target.value)
+                  }}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {localCategories.map(c => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
+                  <option value="__new__">＋ New category…</option>
+                </select>
+              )}
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-[var(--text-2)]">Member</span>
@@ -123,6 +182,17 @@ export function EditSpendDialog({ open, transaction, categories, memberOptions, 
               className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </label>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[var(--text-2)]">Tags</span>
+            <TagPicker
+              householdId={householdId}
+              tags={tags}
+              selectedIds={selectedTagIds}
+              onChange={setSelectedTagIds}
+              onTagCreated={(tag) => setTags(prev => [...prev, tag])}
+            />
+          </div>
 
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-[var(--text-2)]">Notes</span>

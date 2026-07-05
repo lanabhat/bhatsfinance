@@ -1,11 +1,11 @@
 import { deleteJson, getJson, patchJson, postJson, toQueryString, unwrapList } from './http'
-import type { ApiListResponse, DashboardAccount, DashboardPayload, Transaction, TransactionCorrectionInput } from '../types/domain'
+import type { ApiListResponse, DashboardAccount, DashboardPayload, Tag, Transaction, TransactionCorrectionInput } from '../types/domain'
 
 type TransactionCreatePayload = Omit<
   Transaction,
-  'id' | 'source' | 'classification' | 'spend_category' | 'description' | 'for_members' | 'notes'
+  'id' | 'source' | 'classification' | 'spend_category' | 'description' | 'for_members' | 'tags' | 'notes'
 > &
-  Partial<Pick<Transaction, 'classification' | 'spend_category' | 'description' | 'for_members' | 'notes'>>
+  Partial<Pick<Transaction, 'classification' | 'spend_category' | 'description' | 'for_members' | 'tags' | 'notes'>>
 
 export type TransactionListParams = {
   householdId: number
@@ -20,7 +20,11 @@ export type TransactionListParams = {
   spendCategory?: string
   txDateAfter?: string
   txDateBefore?: string
+  amountMin?: number
+  amountMax?: number
+  tags?: number[]
   ordering?: string
+  cashflowBucket?: 'income' | 'expense' | 'investment' | 'savings'
 }
 
 export type PaginatedTransactions = {
@@ -48,7 +52,11 @@ export const ledgerApi = {
       spend_category: params.spendCategory,
       tx_date_after: params.txDateAfter,
       tx_date_before: params.txDateBefore,
+      amount_min: params.amountMin,
+      amount_max: params.amountMax,
+      tags: params.tags && params.tags.length > 0 ? params.tags.join(',') : undefined,
       ordering: params.ordering,
+      cashflow_bucket: params.cashflowBucket,
     })
     const data = await getJson<ApiListResponse<Transaction> & { count?: number }>(`/api/transactions/?${q}`)
     if (Array.isArray(data)) return { count: data.length, results: data }
@@ -118,10 +126,14 @@ export const ledgerApi = {
       classification: input.corrected.classification ?? original.classification,
       spend_category: input.corrected.spend_category ?? original.spend_category,
       description: input.corrected.description ?? original.description,
+      tags: input.corrected.tags ?? original.tags,
       notes: input.corrected.notes ?? original.notes,
     })
   },
   async deleteTransaction(id: number) { return deleteJson(`/api/transactions/${id}/`) },
+  async bulkUpdateTransactions(householdId: number, ids: number[], fields: Partial<Pick<Transaction, 'classification' | 'spend_category'>>) {
+    return postJson<{ updated: number }>('/api/transactions/bulk-update/', { household: householdId, ids, fields })
+  },
   async fetchDashboard(householdId: number, asOf: string): Promise<DashboardPayload> {
     const q = toQueryString({ household_id: householdId, as_of: asOf })
     const [holdings, networth, allocation, xirr, missed, missedRD, missedPremiums, history, catBreakdown, membersNw, accts] = await Promise.all([

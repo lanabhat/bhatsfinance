@@ -6,6 +6,7 @@ import { AccountCard } from '../components/assets/AccountCard'
 import { AccountExpandedDetail } from '../components/assets/AccountExpandedDetail'
 import { UpdateBalanceForm } from '../components/assets/UpdateBalanceForm'
 import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
+import { Money } from '../components/common/Money'
 import { useExpandable } from '../hooks/useExpandable'
 import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
@@ -225,9 +226,24 @@ type SheetState =
   | { type: 'cc_spend'; item: Account; mode: 'spend' | 'payment' }
   | { type: 'update_balance'; item: Account }
 
+type ViewMode = 'table' | 'card'
+const VIEW_MODE_KEY = 'accounts:viewMode'
+
+function loadViewMode(): ViewMode {
+  try {
+    const raw = localStorage.getItem(VIEW_MODE_KEY)
+    return raw === 'card' ? 'card' : 'table'
+  } catch { return 'table' }
+}
+
+const ACCOUNT_TYPE_ICONS: Record<string, string> = {
+  bank: '🏦', broker: '📈', pf: '🛡', credit_card: '💳',
+  loan: '🏛', cash: '💵', insurance: '☂️', other: '💼',
+}
+
 export function AccountsPage() {
   const { canWrite } = useAuth()
-  const { householdId, members } = useApp()
+  const { householdId, members, dashboard } = useApp()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [ownerships, setOwnerships] = useState<AccountOwnership[]>([])
   const [loading, setLoading] = useState(false)
@@ -235,7 +251,19 @@ export function AccountsPage() {
   const [sortBy, setSortBy] = useState<SortBy>('name')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
+  const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
   const cardExpand = useExpandable<number>()
+
+  const changeViewMode = (mode: ViewMode) => {
+    setViewMode(mode)
+    try { localStorage.setItem(VIEW_MODE_KEY, mode) } catch { /* ignore */ }
+  }
+
+  const balanceMap = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const a of dashboard.accounts) m.set(a.account_id, a.balance)
+    return m
+  }, [dashboard.accounts])
 
   const toggleGroup = (key: string) =>
     setCollapsed((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
@@ -323,6 +351,62 @@ export function AccountsPage() {
       )
     })
 
+  const thCls = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] whitespace-nowrap'
+
+  const renderTableRow = (a: Account) => {
+    const isCC = a.account_type === 'credit_card'
+    const balance = balanceMap.get(a.id)
+    const displayValue = balance !== undefined ? (isCC ? -parseFloat(balance) : parseFloat(balance)) : null
+    return (
+      <tr key={a.id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]">
+        <td className="px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
+              {ACCOUNT_TYPE_ICONS[a.account_type] ?? '💼'}
+            </span>
+            <span className="truncate text-sm font-medium text-[var(--text)]">{a.name}</span>
+          </div>
+        </td>
+        <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-2)]">{a.account_type.replace(/_/g, ' ')}</td>
+        <td className="px-3 py-2 text-xs text-[var(--text-muted)]">{a.institution_name || '—'}</td>
+        <td className="px-3 py-2 text-xs text-[var(--text-2)]">{ownerMap.get(a.id) ?? 'Unassigned'}</td>
+        <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold">
+          {displayValue !== null ? <Money value={displayValue} className={isCC ? 'text-rose-600 dark:text-rose-400' : ''} /> : '—'}
+        </td>
+        <td className="px-3 py-2">
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${a.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
+            {a.is_active ? 'Active' : 'Inactive'}
+          </span>
+        </td>
+        <td className="px-3 py-2 text-right">
+          <button type="button" onClick={() => setSheet({ type: 'account', item: a })} disabled={!canWrite}
+            className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
+            Edit
+          </button>
+        </td>
+      </tr>
+    )
+  }
+
+  const renderTable = (list: Account[]) => (
+    <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+      <table className="w-full text-sm">
+        <thead className="bg-[var(--surface-2)]">
+          <tr>
+            <th className={thCls}>Name</th>
+            <th className={thCls}>Type</th>
+            <th className={thCls}>Institution</th>
+            <th className={thCls}>Owner</th>
+            <th className={`${thCls} text-right`}>Balance</th>
+            <th className={thCls}>Status</th>
+            <th className={thCls}></th>
+          </tr>
+        </thead>
+        <tbody>{list.map(renderTableRow)}</tbody>
+      </table>
+    </div>
+  )
+
   return (
     <div className="grid grid-cols-1 min-w-0 gap-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -338,10 +422,23 @@ export function AccountsPage() {
             <button key={v} type="button" onClick={() => setSortBy(v)} className={pillCls(sortBy === v)}>{l}</button>
           ))}
         </div>
-        <button type="button" onClick={() => setSheet({ type: 'account' })} disabled={!canWrite}
-          className="ml-auto shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
-          + Add Account
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={viewMode === 'card'}
+            onClick={() => changeViewMode(viewMode === 'table' ? 'card' : 'table')}
+            title={viewMode === 'table' ? 'Switch to Card view' : 'Switch to Table view'}
+            className="flex items-center gap-2 rounded-full bg-[var(--surface-2)] px-1 py-1 text-xs font-medium text-[var(--text-muted)]"
+          >
+            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'table' ? 'bg-primary-600 text-white' : ''}`}>Table</span>
+            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'card' ? 'bg-primary-600 text-white' : ''}`}>Card</span>
+          </button>
+          <button type="button" onClick={() => setSheet({ type: 'account' })} disabled={!canWrite}
+            className="shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            + Add Account
+          </button>
+        </div>
       </div>
 
       {!loading && unownedAccounts.length > 0 && (
@@ -374,7 +471,9 @@ export function AccountsPage() {
           <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first account.</p>
         </div>
       ) : groupBy === 'none' ? (
-        <div className="card-grid grid min-w-0 gap-3">{renderList(sortedAccounts)}</div>
+        viewMode === 'table' ? renderTable(sortedAccounts) : (
+          <div className="card-grid grid min-w-0 gap-3">{renderList(sortedAccounts)}</div>
+        )
       ) : (
         <div className="flex w-full min-w-0 max-w-full flex-col gap-1 overflow-hidden">
           {Array.from(grouped.entries()).map(([label, group]) => {
@@ -392,7 +491,7 @@ export function AccountsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </button>
-                {isOpen && <div className="card-grid grid gap-3 pb-2">{renderList(group)}</div>}
+                {isOpen && (viewMode === 'table' ? renderTable(group) : <div className="card-grid grid gap-3 pb-2">{renderList(group)}</div>)}
               </div>
             )
           })}
