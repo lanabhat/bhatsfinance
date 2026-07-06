@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
@@ -357,34 +357,54 @@ export function AccountsPage() {
     const isCC = a.account_type === 'credit_card'
     const balance = balanceMap.get(a.id)
     const displayValue = balance !== undefined ? (isCC ? -parseFloat(balance) : parseFloat(balance)) : null
+    const isExpanded = cardExpand.isExpanded(a.id)
     return (
-      <tr key={a.id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]">
-        <td className="px-3 py-2">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
-              {ACCOUNT_TYPE_ICONS[a.account_type] ?? '💼'}
+      <Fragment key={a.id}>
+        <tr
+          className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--surface-2)]"
+          onClick={() => cardExpand.toggle(a.id)}
+        >
+          <td className="px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
+                {ACCOUNT_TYPE_ICONS[a.account_type] ?? '💼'}
+              </span>
+              <span className="truncate text-sm font-medium text-[var(--text)]">{a.name}</span>
+            </div>
+          </td>
+          <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-2)]">{a.account_type.replace(/_/g, ' ')}</td>
+          <td className="px-3 py-2 text-xs text-[var(--text-muted)]">{a.institution_name || '—'}</td>
+          <td className="px-3 py-2 text-xs text-[var(--text-2)]">{ownerMap.get(a.id) ?? 'Unassigned'}</td>
+          <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold">
+            {displayValue !== null ? <Money value={displayValue} className={isCC ? 'text-rose-600 dark:text-rose-400' : ''} /> : '—'}
+          </td>
+          <td className="px-3 py-2">
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${a.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
+              {a.is_active ? 'Active' : 'Inactive'}
             </span>
-            <span className="truncate text-sm font-medium text-[var(--text)]">{a.name}</span>
-          </div>
-        </td>
-        <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-2)]">{a.account_type.replace(/_/g, ' ')}</td>
-        <td className="px-3 py-2 text-xs text-[var(--text-muted)]">{a.institution_name || '—'}</td>
-        <td className="px-3 py-2 text-xs text-[var(--text-2)]">{ownerMap.get(a.id) ?? 'Unassigned'}</td>
-        <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold">
-          {displayValue !== null ? <Money value={displayValue} className={isCC ? 'text-rose-600 dark:text-rose-400' : ''} /> : '—'}
-        </td>
-        <td className="px-3 py-2">
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${a.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
-            {a.is_active ? 'Active' : 'Inactive'}
-          </span>
-        </td>
-        <td className="px-3 py-2 text-right">
-          <button type="button" onClick={() => setSheet({ type: 'account', item: a })} disabled={!canWrite}
-            className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
-            Edit
-          </button>
-        </td>
-      </tr>
+          </td>
+          <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
+            <button type="button" onClick={() => setSheet({ type: 'account', item: a })} disabled={!canWrite}
+              className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
+              Edit
+            </button>
+          </td>
+        </tr>
+        {isExpanded && (
+          <tr>
+            <td colSpan={7} className="bg-[var(--surface-2)] px-4 py-3">
+              <AccountExpandedDetail
+                account={a}
+                householdId={householdId}
+                onEdit={() => setSheet({ type: 'account', item: a })}
+                onRecordSpend={() => setSheet({ type: 'cc_spend', item: a, mode: 'spend' })}
+                onRecordPayment={() => setSheet({ type: 'cc_spend', item: a, mode: 'payment' })}
+                onUpdateBalance={() => setSheet({ type: 'update_balance', item: a })}
+              />
+            </td>
+          </tr>
+        )}
+      </Fragment>
     )
   }
 

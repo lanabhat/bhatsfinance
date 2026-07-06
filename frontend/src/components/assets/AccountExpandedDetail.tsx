@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Money, useMaskedFmt } from '../common/Money'
 import { ledgerApi } from '../../api/ledgerApi'
 import { accountApi } from '../../api/accountApi'
+import { expenseApi } from '../../api/expenseApi'
+import { tagApi } from '../../api/tagApi'
+import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
-import type { Account, AccountBalance, Transaction } from '../../types/domain'
+import type { Account, AccountBalance, ExpenseCategory, Tag, Transaction } from '../../types/domain'
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })
@@ -20,27 +23,82 @@ type Props = {
 
 const RECENT_TX_LIMIT = 8
 
+const TX_TYPE_LABELS: Record<string, string> = {
+  deposit: 'Deposit', withdrawal: 'Withdrawal', buy: 'Buy', sell: 'Sell',
+  dividend: 'Dividend', interest: 'Interest', salary: 'Salary',
+  tax_payment: 'Tax Payment', tax_refund: 'Tax Refund', emi: 'EMI',
+  loan_disbursal: 'Loan Disbursal', premium: 'Premium', cc_bill_payment: 'CC Bill Payment', other: 'Other',
+}
+
+function TxRow({ tx, categories, tagName, memberName }: {
+  tx: Transaction
+  categories: ExpenseCategory[]
+  tagName: Record<number, string>
+  memberName: string | null
+}) {
+  const cat = categories.find(c => c.key === tx.spend_category)
+  // Prefer the user's own description; fall back to an imported reference, then the
+  // category (if this is a categorised spend), and only then the bare transaction type —
+  // so a plain "Withdrawal" only shows up when nothing more specific was ever recorded.
+  const primary = tx.description || tx.external_reference || (cat ? cat.label : '') || TX_TYPE_LABELS[tx.transaction_type] || tx.transaction_type
+  const metaParts = [
+    cat ? `${cat.icon} ${cat.label}` : null,
+    memberName,
+    ...tx.tags.map(id => `#${tagName[id] ?? id}`),
+  ].filter(Boolean)
+
+  return (
+    <div className="rounded-lg bg-[var(--surface-2)] px-3 py-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium text-[var(--text)]">{primary}</p>
+          <p className="text-[10px] text-[var(--text-muted)]">{fmtDate(tx.tx_date)}</p>
+        </div>
+        <p className={`shrink-0 text-xs font-semibold ${tx.direction === 'outflow' ? 'text-rose-600' : 'text-primary-600'}`}>
+          <Money value={tx.direction === 'outflow' ? -parseFloat(tx.amount) : parseFloat(tx.amount)} />
+        </p>
+      </div>
+      {metaParts.length > 0 && (
+        <p className="mt-0.5 truncate text-[10px] text-[var(--text-muted)]">{metaParts.join(' · ')}</p>
+      )}
+      {tx.notes && <p className="mt-0.5 truncate text-[10px] italic text-[var(--text-faint)]" title={tx.notes}>{tx.notes}</p>}
+    </div>
+  )
+}
+
 export function AccountExpandedDetail({ account, householdId, onEdit, onRecordSpend, onRecordPayment, onUpdateBalance }: Props) {
   const fmtINR = useMaskedFmt()
   const { canWrite } = useAuth()
+  const { members } = useApp()
   const [balance, setBalance] = useState<AccountBalance | null>(null)
   const [txs, setTxs] = useState<Transaction[]>([])
+  const [categories, setCategories] = useState<ExpenseCategory[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
   const [loading, setLoading] = useState(true)
   const isCreditCard = account.account_type === 'credit_card'
 
   useEffect(() => {
     let active = true
-    Promise.all([accountApi.getBalance(account.id), ledgerApi.listTransactionsForAccount(householdId, account.id)])
-      .then(([b, t]) => {
+    Promise.all([
+      accountApi.getBalance(account.id),
+      ledgerApi.listTransactionsForAccount(householdId, account.id),
+      expenseApi.listCategories(householdId),
+      tagApi.list(householdId),
+    ])
+      .then(([b, t, cats, tg]) => {
         if (!active) return
         setBalance(b)
         setTxs([...t].sort((a, b2) => b2.tx_date.localeCompare(a.tx_date)))
+        setCategories(cats)
+        setTags(tg)
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [account.id, householdId])
 
   const recentTxs = useMemo(() => txs.slice(0, RECENT_TX_LIMIT), [txs])
+  const tagName = useMemo(() => Object.fromEntries(tags.map(t => [t.id, t.name])), [tags])
+  const memberNameFor = (tx: Transaction) => tx.member ? members.find(m => m.id === tx.member)?.label ?? `Member #${tx.member}` : null
 
   const outstandingRaw = balance?.outstanding ?? 0
   const outstanding = outstandingRaw > 0 ? outstandingRaw : 0
@@ -86,15 +144,7 @@ export function AccountExpandedDetail({ account, householdId, onEdit, onRecordSp
         ) : (
           <div className="grid gap-1">
             {recentTxs.map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between rounded-lg bg-[var(--surface-2)] px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs text-[var(--text)]">{tx.external_reference || tx.transaction_type.replace(/_/g, ' ')}</p>
-                  <p className="text-[10px] text-[var(--text-muted)]">{fmtDate(tx.tx_date)}</p>
-                </div>
-                <p className={`ml-3 shrink-0 text-xs font-semibold ${tx.direction === 'outflow' ? 'text-rose-600' : 'text-primary-600'}`}>
-                  <Money value={tx.direction === 'outflow' ? -parseFloat(tx.amount) : parseFloat(tx.amount)} />
-                </p>
-              </div>
+              <TxRow key={tx.id} tx={tx} categories={categories} tagName={tagName} memberName={memberNameFor(tx)} />
             ))}
             {txs.length > RECENT_TX_LIMIT && (
               <p className="pt-1 text-center text-[10px] text-[var(--text-muted)]">…and {txs.length - RECENT_TX_LIMIT} more</p>
@@ -155,15 +205,7 @@ export function AccountExpandedDetail({ account, householdId, onEdit, onRecordSp
       ) : (
         <div className="grid gap-1">
           {recentTxs.map((tx) => (
-            <div key={tx.id} className="flex items-center justify-between rounded-lg bg-[var(--surface-2)] px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs text-[var(--text)]">{tx.external_reference || tx.transaction_type.replace(/_/g, ' ')}</p>
-                <p className="text-[10px] text-[var(--text-muted)]">{fmtDate(tx.tx_date)}</p>
-              </div>
-              <p className={`ml-3 shrink-0 text-xs font-semibold ${tx.direction === 'outflow' ? 'text-rose-600' : 'text-primary-600'}`}>
-                <Money value={tx.direction === 'outflow' ? -parseFloat(tx.amount) : parseFloat(tx.amount)} />
-              </p>
-            </div>
+            <TxRow key={tx.id} tx={tx} categories={categories} tagName={tagName} memberName={memberNameFor(tx)} />
           ))}
           {txs.length > RECENT_TX_LIMIT && (
             <p className="pt-1 text-center text-[10px] text-[var(--text-muted)]">…and {txs.length - RECENT_TX_LIMIT} more</p>
