@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { ImportWizard } from './ImportWizard'
 import { GrowwImportWizard } from '../components/imports/GrowwImportWizard'
 import { FDAdviceImportWizard } from '../components/imports/FDAdviceImportWizard'
+import { NpsImportWizard } from '../components/imports/NpsImportWizard'
 import { UpstoxConnect } from '../components/integrations/UpstoxConnect'
 import type { OptionItem } from '../types/domain'
 
-type Tab = 'import' | 'groww' | 'upstox' | 'fd'
+type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'nps'
 
 type Props = {
   householdId: number
@@ -27,6 +28,7 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
         <button className={tabCls('groww')} onClick={() => setTab('groww')}>Portfolio Import</button>
         <button className={tabCls('upstox')} onClick={() => setTab('upstox')}>Upstox</button>
         <button className={tabCls('fd')} onClick={() => setTab('fd')}>FD Import</button>
+        <button className={tabCls('nps')} onClick={() => setTab('nps')}>NPS Import</button>
       </div>
 
       {tab === 'import' && (
@@ -70,6 +72,17 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
             supported; other banks are parsed on a best-effort basis and reviewable before import.
           </p>
           <FDAdviceImportWizard householdId={householdId} />
+        </article>
+      )}
+
+      {tab === 'nps' && (
+        <article className="panel">
+          <h2>NPS Import</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Import NPS transaction statement CSVs (Tier I and/or Tier II) exported from the CRA/CAMS
+            portal. Contributions and quarterly fee deductions are backfilled against your NPS holding.
+          </p>
+          <NpsImportWizard householdId={householdId} />
         </article>
       )}
     </section>

@@ -472,7 +472,7 @@ class SmsStagedActionView(APIView):
         tx_row = dict(msg.raw_payload.get('parsed_tx') or {})
         for field in ('account', 'member', 'direction', 'amount', 'transaction_type', 'tx_date', 'currency',
                       'fees', 'taxes', 'external_reference', 'classification', 'spend_category',
-                      'description', 'notes', 'merchant', 'instrument', 'quantity'):
+                      'description', 'notes', 'merchant', 'instrument', 'quantity', 'affects_balance'):
             if field in overrides:
                 tx_row[field] = overrides[field]
 
@@ -530,6 +530,7 @@ class SmsStagedActionView(APIView):
                 metadata={'sms_message_id': msg.pk, 'sms_sender': msg.sender},
                 classification=classification,
                 spend_category=spend_category,
+                affects_balance=bool(tx_row.get('affects_balance', True)),
             )
             if instrument is not None:
                 create_kwargs['instrument'] = instrument

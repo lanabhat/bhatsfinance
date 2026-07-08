@@ -91,6 +91,64 @@ export type FDAdviceFileResult = {
   error?: string
 }
 
+export type NpsMemberPreview = { id: number; name: string; relation?: string }
+
+export type NpsSchemeTransaction = {
+  tx_date: string
+  description: string
+  amount: string
+  nav: string
+  units: string
+  kind: 'contribution' | 'billing' | 'other'
+}
+
+export type NpsSchemePreview = {
+  scheme: string
+  fund_manager: string
+  tier: string
+  closing_units: string
+  transactions: NpsSchemeTransaction[]
+}
+
+export type NpsFilePreview = {
+  filename: string
+  pran: string
+  subscriber_name: string
+  tier: string
+  statement_date: string
+  total_value: string
+  total_contribution: string
+  total_withdrawal: string
+  schemes: NpsSchemePreview[]
+  matched_member: { id: number; name: string; relation?: string; confidence: number } | null
+  members: NpsMemberPreview[]
+  error?: string
+}
+
+export type NpsConfirmedItem = {
+  filename: string
+  pran: string
+  tier: string
+  statement_date: string
+  total_value: string
+  total_contribution: string
+  schemes: NpsSchemePreview[]
+  member_id: number | null
+  account_id?: number | null
+  affects_balance: boolean
+}
+
+export type NpsFileResult = {
+  filename: string
+  instrument_id?: number
+  instrument_name?: string
+  created?: boolean
+  contributions_created?: number
+  fees_created?: number
+  opening_contribution_backfilled?: boolean
+  error?: string
+}
+
 const BASE = '/api'
 
 async function getCsrf(): Promise<string> {
@@ -177,4 +235,17 @@ export const importApi = {
     items: FDAdviceConfirmedItem[],
   ): Promise<FDAdviceFileResult[]> =>
     httpPost(`${BASE}/imports/fd-advice-apply`, { household_id: householdId, items }),
+
+  previewNpsFiles: async (householdId: number, files: File[]): Promise<NpsFilePreview[]> => {
+    const fd = new FormData()
+    fd.append('household_id', String(householdId))
+    for (const f of files) fd.append('files', f)
+    return postForm<NpsFilePreview[]>(`${BASE}/imports/nps-preview`, fd)
+  },
+
+  applyNpsImport: (
+    householdId: number,
+    items: NpsConfirmedItem[],
+  ): Promise<NpsFileResult[]> =>
+    httpPost(`${BASE}/imports/nps-apply`, { household_id: householdId, items }),
 }

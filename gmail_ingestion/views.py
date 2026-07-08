@@ -691,7 +691,7 @@ class GmailStagedActionView(APIView):
         overrides = request.data or {}
         tx_row = dict(msg.raw.get('parsed_tx') or {})
         for field in ('account', 'direction', 'amount', 'transaction_type', 'tx_date', 'currency', 'fees', 'taxes',
-                      'external_reference', 'classification', 'spend_category'):
+                      'external_reference', 'classification', 'spend_category', 'affects_balance'):
             if field in overrides:
                 tx_row[field] = overrides[field]
 
@@ -733,6 +733,7 @@ class GmailStagedActionView(APIView):
                         metadata=tx_row.get('_gmail_meta', {}),
                         classification=classification,
                         spend_category=spend_category,
+                        affects_balance=bool(tx_row.get('affects_balance', True)),
                     )
                     tx_id = created.pk
             except (Account.DoesNotExist, InvalidOperation, Exception) as ex:

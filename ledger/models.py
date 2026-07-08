@@ -81,6 +81,12 @@ class Transaction(TimeStampedModel):
     classification = models.CharField(
         max_length=20, choices=Classification.choices, blank=True, default='',
     )
+    affects_balance = models.BooleanField(
+        default=True,
+        help_text='Whether this transaction is counted toward the linked account\'s balance. '
+                   'Turn off for transactions recorded against an account that never actually '
+                   'held the money (e.g. NPS contributions debited straight from payroll).',
+    )
     spend_category = models.CharField(max_length=30, blank=True, default='')
     description = models.CharField(max_length=200, blank=True, default='')
     for_members = models.ManyToManyField(

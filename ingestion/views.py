@@ -479,4 +479,113 @@ class FDAdviceApplyView(APIView):
 
         return Response(all_results, status=201)
 
+
+class NpsPreviewView(APIView):
+    """Step 1: parse one or more uploaded NPS transaction statement CSVs (Tier I/II)."""
+
+    def post(self, request):
+        from core.models import Household
+        from ingestion.nps_parser import NpsParseError, parse_nps_statement
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'error': 'household_id is required'}, status=400)
+
+        try:
+            household = Household.objects.get(pk=int(household_id))
+        except Household.DoesNotExist:
+            return Response({'error': 'Household not found'}, status=404)
+
+        members = household.members.filter(is_active=True)
+        member_names = {m.full_name.lower(): m for m in members}
+        member_list = [{'id': m.id, 'name': m.full_name, 'relation': m.relation_type} for m in members]
+
+        files = request.FILES.getlist('files')
+        if not files:
+            single = request.FILES.get('file')
+            if single:
+                files = [single]
+        if not files:
+            return Response({'error': 'No files provided'}, status=400)
+
+        results = []
+        for f in files:
+            try:
+                text = f.read().decode('utf-8-sig')
+            except UnicodeDecodeError:
+                results.append({'filename': f.name, 'error': 'Could not read file as UTF-8 text.'})
+                continue
+
+            try:
+                parsed = parse_nps_statement(text)
+            except NpsParseError as e:
+                results.append({'filename': f.name, 'error': str(e)})
+                continue
+
+            matched_member, confidence = _fuzzy_match_member(parsed.get('subscriber_name', ''), member_names)
+
+            results.append({
+                'filename': f.name,
+                **parsed,
+                'matched_member': (
+                    {'id': matched_member.id, 'name': matched_member.full_name,
+                     'relation': matched_member.relation_type, 'confidence': confidence}
+                    if matched_member else None
+                ),
+                'members': member_list,
+            })
+
+        return Response(results)
+
+
+class NpsApplyView(APIView):
+    """Step 2: commit records from user-confirmed NPS statement parse results."""
+
+    def post(self, request):
+        from core.models import Household, Member
+        from ingestion.universal_importer import apply_nps_statement_import
+        from instruments.models import Account
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'error': 'household_id is required'}, status=400)
+
+        try:
+            household = Household.objects.get(pk=int(household_id))
+        except Household.DoesNotExist:
+            return Response({'error': 'Household not found'}, status=404)
+
+        items = request.data.get('items', [])
+        if not items:
+            return Response({'error': 'items is required'}, status=400)
+
+        all_results = []
+        for item in items:
+            member = None
+            member_id = item.get('member_id')
+            if member_id:
+                try:
+                    member = Member.objects.get(pk=member_id, household=household)
+                except Member.DoesNotExist:
+                    pass
+
+            account = None
+            account_id = item.get('account_id')
+            if account_id:
+                try:
+                    account = Account.objects.get(pk=account_id, household=household)
+                except Account.DoesNotExist:
+                    pass
+
+            try:
+                result = apply_nps_statement_import(
+                    household, member, item,
+                    account=account,
+                    affects_balance=bool(item.get('affects_balance', False)),
+                )
+                result['filename'] = item.get('filename', '')
+                all_results.append(result)
+            except Exception as e:
+                all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
+
         return Response(all_results, status=201)

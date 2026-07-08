@@ -66,6 +66,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
   const [investMember, setInvestMember] = useState(tx.member ?? (message.owner ? String(message.owner) : ''))
   const [quantity, setQuantity] = useState('')
   const [investAccount, setInvestAccount] = useState(tx.account ?? '')
+  const [investAffectsBalance, setInvestAffectsBalance] = useState(true)
 
   // Transaction mode — categories for QuickExpenseForm
   const [spendCategories, setSpendCategories] = useState<ExpenseCategory[]>([])
@@ -145,6 +146,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
         transaction_type: payload.transaction_type,
         tx_date: payload.tx_date,
         classification: payload.classification as SmsApprovalOverrides['classification'],
+        affects_balance: payload.affects_balance,
         spend_category: payload.spend_category ?? '',
         description: payload.description ?? '',
         notes: payload.notes ?? '',
@@ -195,6 +197,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
         transaction_type: 'buy',
         tx_date: txDate,
         instrument,
+        affects_balance: investAffectsBalance,
         ...(quantity ? { quantity } : {}),
       }
       const result = await smsApi.approveStaged(message.id, overrides)
@@ -382,6 +385,23 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
                     <input type="date" value={txDate} onChange={(e) => setTxDate(e.target.value)} className={INP} />
                   </label>
                 </div>
+                {investAccount && (
+                  <label className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={investAffectsBalance}
+                      onChange={(e) => setInvestAffectsBalance(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--border)] text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className="text-xs text-[var(--text-2)]">
+                      <span className="font-medium">Deduct from account balance</span>
+                      <br />
+                      <span className="text-[var(--text-muted)]">
+                        Turn off if this account never actually held the money (e.g. NPS debited straight from payroll) — still recorded and tagged to the account, just excluded from its balance.
+                      </span>
+                    </span>
+                  </label>
+                )}
                 <label className="flex flex-col gap-1">
                   <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Instrument (Fund / Stock) *</span>
                   <select value={instrument} onChange={(e) => handleInstrumentChange(e.target.value)} className={INP}>

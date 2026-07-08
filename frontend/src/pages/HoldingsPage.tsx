@@ -14,7 +14,7 @@ import { useExpandable } from '../hooks/useExpandable'
 import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
-import type { AssetCategory, DashboardHolding, Instrument, InstrumentOwnership } from '../types/domain'
+import type { Account, AssetCategory, DashboardHolding, Instrument, InstrumentOwnership } from '../types/domain'
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -85,10 +85,19 @@ function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
   const [quantity, setQuantity] = useState('')
   const [pricePerUnit, setPricePerUnit] = useState('')
   const [amount, setAmount] = useState('')
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [accountId, setAccountId] = useState('')
+  const [affectsBalance, setAffectsBalance] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => { portfolioApi.listInstruments(householdId).then(setInstruments).catch(() => {}) }, [householdId])
+  useEffect(() => { portfolioApi.listAccounts(householdId).then(setAccounts).catch(() => {}) }, [householdId])
+
+  useEffect(() => {
+    const inst = instruments.find((i) => String(i.id) === instrumentId)
+    if (inst?.default_account) setAccountId(String(inst.default_account))
+  }, [instrumentId, instruments])
 
   useEffect(() => {
     if (quantity && pricePerUnit) setAmount((parseFloat(quantity) * parseFloat(pricePerUnit)).toFixed(2))
@@ -110,7 +119,7 @@ function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
         finalId = created.id
       }
       if (!finalId) { setError('Select an instrument.'); setSaving(false); return }
-      await ledgerApi.createTransaction({ household: householdId, member: memberId ? Number(memberId) : null, account: null, instrument: finalId, tx_date: date, amount, quantity: quantity || null, price_per_unit: pricePerUnit || null, fees: '0.00', taxes: '0.00', currency: 'INR', direction: 'outflow', transaction_type: 'buy', external_reference: '', idempotency_key: `buy-${finalId}-${Date.now()}`, metadata: {} })
+      await ledgerApi.createTransaction({ household: householdId, member: memberId ? Number(memberId) : null, account: accountId ? Number(accountId) : null, instrument: finalId, tx_date: date, amount, quantity: quantity || null, price_per_unit: pricePerUnit || null, fees: '0.00', taxes: '0.00', currency: 'INR', direction: 'outflow', transaction_type: 'buy', external_reference: '', idempotency_key: `buy-${finalId}-${Date.now()}`, metadata: {}, affects_balance: accountId ? affectsBalance : true })
       if (memberId) {
         const existing = await portfolioApi.listInstrumentOwnerships(finalId)
         if (!existing.find((o) => o.member === Number(memberId)))
@@ -180,6 +189,30 @@ function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
       </div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Total amount paid (₹) *</label>
         <input type="number" min="0" step="0.01" placeholder="e.g. 5000" value={amount} onChange={(e) => setAmount(e.target.value)} className={INP} /></div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Paid from account (optional)</label>
+        <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={INP}>
+          <option value="">— None —</option>
+          {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </div>
+      {accountId && (
+        <label className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={affectsBalance}
+            onChange={(e) => setAffectsBalance(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--border)] text-primary-600 focus:ring-primary-500"
+          />
+          <span className="text-xs text-[var(--text-2)]">
+            <span className="font-medium">Deduct from account balance</span>
+            <br />
+            <span className="text-[var(--text-muted)]">
+              Turn off if this account never actually held the money (e.g. NPS debited straight from payroll) — still recorded and tagged to the account, just excluded from its balance.
+            </span>
+          </span>
+        </label>
+      )}
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2 border-t border-[var(--border)] pt-3">
         <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>

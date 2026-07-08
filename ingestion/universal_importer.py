@@ -3,7 +3,7 @@ Universal importer: applies a user-defined column mapping to parsed rows
 and creates the corresponding model records.
 """
 import difflib
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction as db_transaction
@@ -733,6 +733,181 @@ def apply_rd_statement_import(household, member, item: dict, account) -> dict:
         'mandate_id': mandate.id,
         'installments_backfilled': installments_backfilled,
         'created': inst_created,
+    }
+
+
+def apply_nps_statement_import(household, member, item: dict, account=None, affects_balance: bool = False) -> dict:
+    """
+    Create/update a Tier-specific NPS Instrument + backfill contribution/fee
+    Transactions + a ValuationSnapshot from a user-confirmed, parsed NPS
+    transaction statement (see ingestion.nps_parser.parse_nps_statement).
+
+    Tier I and Tier II are tracked as separate Instrument rows ('NPS Tier I',
+    'NPS Tier II') since they're functionally distinct sub-accounts with their
+    own contribution history and valuation — each statement (which only ever
+    covers one tier) targets its own instrument. Scheme (E/C/G) stays as
+    Transaction metadata rather than a further split, since the statement
+    already reports one combined value/contribution total per tier.
+
+    Contributions are salary-deducted before the money ever reaches a tracked
+    account, so `affects_balance` defaults to False even when an `account` is
+    supplied for tagging/filtering — the account's live balance would
+    otherwise be double-counted against a debit that was never actually seen
+    by that account.
+    """
+    from instruments.models import Instrument, InstrumentOwnership
+    from ledger.models import Transaction
+    from valuations.models import ValuationSnapshot
+
+    tier = item.get('tier', '')
+    instrument_name = (item.get('instrument_name') or '').strip() or (f'NPS Tier {tier}' if tier else 'NPS')
+    nps_category = _get_asset_category(household, 'NPS') or _get_asset_category(household, 'Retirement')
+
+    schemes = item.get('schemes') or []
+    statement_date = _to_date(item['statement_date']) if item.get('statement_date') else date.today()
+    total_value = _to_decimal(item['total_value']) if item.get('total_value') else None
+    total_contribution = _to_decimal(item['total_contribution']) if item.get('total_contribution') else None
+
+    contributions_created = 0
+    fees_created = 0
+    backfilled = False
+
+    with db_transaction.atomic():
+        instrument, inst_created = Instrument.objects.get_or_create(
+            household=household,
+            name=instrument_name,
+            defaults={
+                'instrument_type': Instrument.InstrumentType.NPS,
+                'symbol': item.get('pran', ''),
+                'asset_category': nps_category,
+            },
+        )
+        if not inst_created and not instrument.asset_category and nps_category:
+            instrument.asset_category = nps_category
+            instrument.save(update_fields=['asset_category'])
+
+        if member:
+            InstrumentOwnership.objects.get_or_create(
+                instrument=instrument,
+                member=member,
+                defaults={'allocation_percent': Decimal('100')},
+            )
+
+        for scheme in schemes:
+            scheme_key = f"{scheme['tier']}-{scheme['scheme']}"
+            for tx in scheme.get('transactions', []):
+                amount = _to_decimal(tx['amount']) if tx.get('amount') else None
+                if amount is None or amount == 0:
+                    continue
+                quantity = _to_decimal(tx['units']) if tx.get('units') else None
+                price_per_unit = _to_decimal(tx['nav']) if tx.get('nav') else None
+
+                kind = tx.get('kind')
+                if kind == 'contribution':
+                    # Money going into the instrument — same convention as
+                    # apply_fd_advice_import's funding deposit.
+                    transaction_type = Transaction.TransactionType.BUY
+                    direction = Transaction.Direction.OUTFLOW
+                else:
+                    # 'billing' (quarterly PFM charge) or any other scheme
+                    # ledger line that reduces units — units leave the
+                    # instrument, so it reads as a sell.
+                    transaction_type = Transaction.TransactionType.SELL
+                    direction = Transaction.Direction.INFLOW
+
+                _, tx_created = Transaction.objects.get_or_create(
+                    household=household,
+                    instrument=instrument,
+                    tx_date=tx['tx_date'],
+                    idempotency_key=f"nps-import-{instrument.id}-{scheme_key}-{tx['tx_date']}-{kind}",
+                    defaults={
+                        'member': member,
+                        'account': account,
+                        'amount': abs(amount),
+                        'quantity': abs(quantity) if quantity is not None else None,
+                        'price_per_unit': price_per_unit,
+                        'direction': direction,
+                        'transaction_type': transaction_type,
+                        'currency': 'INR',
+                        'source': Transaction.SourceType.CSV,
+                        'affects_balance': affects_balance if account else True,
+                        'description': tx.get('description', ''),
+                        'metadata': {'nps_tier': scheme['tier'], 'nps_scheme': scheme['scheme']},
+                    },
+                )
+                if tx_created:
+                    if kind == 'contribution':
+                        contributions_created += 1
+                    elif kind == 'billing':
+                        fees_created += 1
+
+        # The statement only lists transactions for the period it covers (e.g.
+        # the current financial year), but `total_contribution` is the
+        # subscriber's full lifetime contribution to this tier. Without a
+        # backfill, net_invested (summed purely from imported Transactions)
+        # would only reflect this period, making gain = market_value -
+        # net_invested wildly overstated. Backfill the gap as a single
+        # historical buy dated just before this statement's earliest imported
+        # row, keyed per-tier so re-importing (or importing the other tier)
+        # doesn't double-count it.
+        if total_contribution is not None:
+            all_tx_dates = [
+                tx['tx_date']
+                for scheme in schemes
+                for tx in scheme.get('transactions', [])
+                if tx.get('kind') == 'contribution'
+            ]
+            earliest_date = min(all_tx_dates) if all_tx_dates else statement_date
+            backfill_date = _to_date(earliest_date) - timedelta(days=1)
+
+            statement_contribution_total = sum(
+                (_to_decimal(tx['amount']) or Decimal('0'))
+                for scheme in schemes
+                for tx in scheme.get('transactions', [])
+                if tx.get('kind') == 'contribution'
+            )
+            backfill_amount = total_contribution - statement_contribution_total
+
+            if backfill_amount > 0:
+                _, backfill_created = Transaction.objects.get_or_create(
+                    household=household,
+                    instrument=instrument,
+                    tx_date=backfill_date,
+                    idempotency_key=f"nps-import-{instrument.id}-tier{tier}-opening-contribution",
+                    defaults={
+                        'member': member,
+                        'account': None,
+                        'amount': backfill_amount,
+                        'direction': Transaction.Direction.OUTFLOW,
+                        'transaction_type': Transaction.TransactionType.BUY,
+                        'currency': 'INR',
+                        'source': Transaction.SourceType.CSV,
+                        'affects_balance': True,
+                        'description': f'NPS Tier {tier} contributions before this statement\'s period',
+                        'metadata': {'nps_tier': tier, 'nps_backfill': True},
+                    },
+                )
+                backfilled = backfilled or backfill_created
+
+        if total_value is not None:
+            ValuationSnapshot.objects.update_or_create(
+                household=household,
+                instrument=instrument,
+                account=None,
+                valuation_date=statement_date,
+                defaults={
+                    'market_value': total_value,
+                    'source': ValuationSnapshot.SourceType.CSV,
+                },
+            )
+
+    return {
+        'instrument_id': instrument.id,
+        'instrument_name': instrument.name,
+        'created': inst_created,
+        'contributions_created': contributions_created,
+        'fees_created': fees_created,
+        'opening_contribution_backfilled': backfilled,
     }
 
 

@@ -81,6 +81,7 @@ export type ParsedSmsTransaction = {
   taxes?: string
   external_reference?: string
   classification?: TransactionClassification
+  affects_balance?: boolean
   spend_category?: string
   merchant?: string
   description?: string
@@ -263,6 +264,7 @@ export type Transaction = {
   idempotency_key: string
   metadata: Record<string, unknown>
   classification: TransactionClassification
+  affects_balance: boolean
   spend_category: string
   description: string
   for_members: number[]

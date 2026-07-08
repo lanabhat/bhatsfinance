@@ -10,6 +10,7 @@ export type RecordTransactionPayload = {
   direction: 'inflow' | 'outflow'
   transaction_type: string
   classification: TransactionClassification
+  affects_balance?: boolean
   spend_category?: string
   description?: string
   for_members?: number[]

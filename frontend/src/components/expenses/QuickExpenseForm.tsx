@@ -233,6 +233,7 @@ type FormState = {
   member: number | null
   for_members: number[]
   account: number | null
+  affects_balance: boolean
   tags: number[]
   notes: string
 }
@@ -281,6 +282,7 @@ export function QuickExpenseForm({
     member: null,
     for_members: [],
     account: null,
+    affects_balance: true,
     tags: [],
     notes: '',
   }))
@@ -324,7 +326,7 @@ export function QuickExpenseForm({
   }
 
   function selectAccount(id: number) {
-    setForm(p => ({ ...p, account: id }))
+    setForm(p => ({ ...p, account: id, affects_balance: true }))
     setStep(3)
     setTimeout(() => amountRef.current?.focus(), 120)
   }
@@ -361,6 +363,7 @@ export function QuickExpenseForm({
       direction: classificationDirection(),
       transaction_type: classificationTxType(),
       classification: form.classification,
+      affects_balance: form.account ? form.affects_balance : true,
       spend_category: isSpend ? form.spend_category : undefined,
       description: form.description,
       for_members: form.for_members.length > 0 ? form.for_members : undefined,
@@ -473,6 +476,23 @@ export function QuickExpenseForm({
                 </button>
               )}
             </div>
+          )}
+          {form.account !== null && (
+            <label className="mt-2 flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={form.affects_balance}
+                onChange={e => setForm(p => ({ ...p, affects_balance: e.target.checked }))}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--border)] text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-xs text-[var(--text-2)]">
+                <span className="font-medium">Deduct from account balance</span>
+                <br />
+                <span className="text-[var(--text-muted)]">
+                  Turn off if this account never actually held the money (e.g. NPS debited straight from payroll) — the transaction is still recorded and tagged to the account, just excluded from its balance.
+                </span>
+              </span>
+            </label>
           )}
         </section>
       )}

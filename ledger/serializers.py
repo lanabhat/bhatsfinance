@@ -57,6 +57,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             'idempotency_key',
             'metadata',
             'classification',
+            'affects_balance',
             'spend_category',
             'description',
             'for_members',

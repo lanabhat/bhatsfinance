@@ -3,9 +3,9 @@ import type { ApiListResponse, DashboardAccount, DashboardPayload, Transaction, 
 
 type TransactionCreatePayload = Omit<
   Transaction,
-  'id' | 'source' | 'classification' | 'spend_category' | 'description' | 'for_members' | 'tags' | 'notes'
+  'id' | 'source' | 'classification' | 'affects_balance' | 'spend_category' | 'description' | 'for_members' | 'tags' | 'notes'
 > &
-  Partial<Pick<Transaction, 'classification' | 'spend_category' | 'description' | 'for_members' | 'tags' | 'notes'>>
+  Partial<Pick<Transaction, 'classification' | 'affects_balance' | 'spend_category' | 'description' | 'for_members' | 'tags' | 'notes'>>
 
 export type TransactionListParams = {
   householdId: number

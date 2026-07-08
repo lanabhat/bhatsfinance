@@ -159,13 +159,23 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
   const [quantity, setQuantity] = useState('')
   const [pricePerUnit, setPricePerUnit] = useState('')
   const [amount, setAmount] = useState('')
-  const [account] = useState('')
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [account, setAccount] = useState('')
+  const [affectsBalance, setAffectsBalance] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     portfolioApi.listInstruments(householdId).then(setInstruments).catch(() => {})
   }, [householdId])
+  useEffect(() => {
+    portfolioApi.listAccounts(householdId).then(setAccounts).catch(() => {})
+  }, [householdId])
+
+  useEffect(() => {
+    const inst = instruments.find((i) => String(i.id) === instrumentId)
+    if (inst?.default_account) setAccount(String(inst.default_account))
+  }, [instrumentId, instruments])
 
   // auto-compute amount when qty + price both filled
   useEffect(() => {
@@ -216,6 +226,7 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
         external_reference: '',
         idempotency_key: `buy-${finalInstrumentId}-${Date.now()}`,
         metadata: {},
+        affects_balance: account ? affectsBalance : true,
       })
 
       // create ownership if member selected and none exists yet
@@ -308,6 +319,32 @@ function BuyForm({ householdId, instrumentId: initInstrumentId, onSave, onCancel
         <input type="number" min="0" step="0.01" placeholder="e.g. 5000" value={amount}
           onChange={(e) => setAmount(e.target.value)} className={inp} />
       </div>
+
+      {/* account */}
+      <div>
+        <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Paid from account (optional)</label>
+        <select value={account} onChange={(e) => setAccount(e.target.value)} className={inp}>
+          <option value="">— None —</option>
+          {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </div>
+      {account && (
+        <label className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={affectsBalance}
+            onChange={(e) => setAffectsBalance(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--border)] text-primary-600 focus:ring-primary-500"
+          />
+          <span className="text-xs text-[var(--text-2)]">
+            <span className="font-medium">Deduct from account balance</span>
+            <br />
+            <span className="text-[var(--text-muted)]">
+              Turn off if this account never actually held the money (e.g. NPS debited straight from payroll) — still recorded and tagged to the account, just excluded from its balance.
+            </span>
+          </span>
+        </label>
+      )}
 
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2 border-t border-[var(--border)] pt-3">

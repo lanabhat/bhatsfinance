@@ -25,11 +25,11 @@ def compute_account_balance(account) -> dict:
     if snapshot:
         anchor_balance = Decimal(str(snapshot.balance))
         anchor_date = snapshot.valuation_date
-        txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date)
+        txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date, affects_balance=True)
     else:
         anchor_balance = Decimal(str(account.opening_balance))
         anchor_date = None
-        txs = Transaction.objects.filter(account=account)
+        txs = Transaction.objects.filter(account=account, affects_balance=True)
 
     total_inflow = txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or Decimal('0')
     total_outflow = txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or Decimal('0')
