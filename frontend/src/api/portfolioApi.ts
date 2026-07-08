@@ -31,7 +31,7 @@ export const portfolioApi = {
     return patchJson<AccountOwnership>(`/api/account-ownerships/${id}/`, payload)
   },
   async listInstruments(householdId: number) {
-    const q = toQueryString({ household: householdId })
+    const q = toQueryString({ household: householdId, page_size: 200 })
     const data = await getJson<ApiListResponse<Instrument>>(`/api/instruments/?${q}`)
     return unwrapList(data)
   },

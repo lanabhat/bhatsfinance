@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { portfolioApi } from '../../api/portfolioApi'
 import { useApp } from '../../context/AppContext'
 import type { Instrument } from '../../types/domain'
@@ -15,7 +15,7 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
   householdId: number; instrument?: Instrument
   onSave: () => void; onCancel: () => void; onDelete?: () => void
 }) {
-  const { categories, accounts } = useApp()
+  const { categories, accounts, members } = useApp()
   const [form, setForm] = useState<Omit<Instrument, 'id'>>({
     household: householdId,
     name: instrument?.name ?? '',
@@ -26,10 +26,22 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
     metadata: instrument?.metadata ?? {},
     is_active: instrument?.is_active ?? true,
   })
+  const [ownerId, setOwnerId] = useState<string>('')
+  const [existingOwnershipId, setExistingOwnershipId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const investmentStartDate = metadataString(form.metadata, 'investment_start_date')
   const maturityDate = metadataString(form.metadata, 'maturity_date')
+
+  useEffect(() => {
+    if (!instrument) return
+    portfolioApi.listInstrumentOwnerships(instrument.id).then((owns) => {
+      if (owns.length > 0) {
+        setOwnerId(String(owns[0].member))
+        setExistingOwnershipId(owns[0].id)
+      }
+    }).catch(() => {})
+  }, [instrument])
 
   const setMetadataValue = (key: string, value: string) => {
     setForm((current) => {
@@ -43,8 +55,19 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setError('')
     try {
-      if (instrument) await portfolioApi.updateInstrument(instrument.id, form)
-      else await portfolioApi.createInstrument(form)
+      const saved = instrument
+        ? await portfolioApi.updateInstrument(instrument.id, form)
+        : await portfolioApi.createInstrument(form)
+
+      if (ownerId) {
+        if (existingOwnershipId) {
+          await portfolioApi.updateInstrumentOwnership(existingOwnershipId, { member: Number(ownerId) })
+        } else {
+          await portfolioApi.createInstrumentOwnership({ instrument: saved.id, member: Number(ownerId), allocation_percent: '100.00' })
+        }
+      } else if (existingOwnershipId) {
+        await portfolioApi.deleteInstrumentOwnership(existingOwnershipId)
+      }
       onSave()
     } catch { setError('Failed to save instrument') } finally { setSaving(false) }
   }
@@ -68,6 +91,13 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
           {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
         </select>
         <p className="mt-1 text-[11px] text-[var(--text-muted)]">The bank/demat account SIP debits come from. Used to filter instruments when approving SMS.</p>
+      </div>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Owner</label>
+        <select className={INP} value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+          <option value="">— Unassigned —</option>
+          {members.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+        <p className="mt-1 text-[11px] text-[var(--text-muted)]">Which household member owns this holding — drives per-member net worth.</p>
       </div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Symbol / Ticker</label>
         <input className={INP} value={form.symbol ?? ''} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} /></div>

@@ -137,14 +137,15 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
             {txs.length === 0 ? (
               <p className="px-4 py-2.5 text-xs text-emerald-600">✓ Clear</p>
             ) : (
-              txs.slice(0, 5).map((t) => (
-                <div key={t.id} className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 last:border-0">
-                  <p className="text-xs text-[var(--text-2)]">{t.tx_date} · {t.transaction_type}</p>
-                  <Money value={t.amount} className="text-xs font-medium text-[var(--text-2)]" />
-                </div>
-              ))
+              <div className="max-h-64 overflow-y-auto">
+                {txs.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 last:border-0">
+                    <p className="text-xs text-[var(--text-2)]">{t.tx_date} · {t.transaction_type}{t.account === null && ' · no account'}</p>
+                    <Money value={t.amount} className="text-xs font-medium text-[var(--text-2)]" />
+                  </div>
+                ))}
+              </div>
             )}
-            {txs.length > 5 && <p className="px-4 py-2 text-xs text-[var(--text-muted)]">…and {txs.length - 5} more</p>}
           </div>
 
           {/* Valuations */}
@@ -161,14 +162,15 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
             {valuations.length === 0 ? (
               <p className="px-4 py-2.5 text-xs text-emerald-600">✓ Clear</p>
             ) : (
-              valuations.slice(0, 5).map((v) => (
-                <div key={v.id} className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 last:border-0">
-                  <p className="text-xs text-[var(--text-2)]">{v.valuation_date}</p>
-                  <p className="text-xs font-medium text-[var(--text-2)]">{v.market_value ? <Money value={v.market_value} /> : v.unit_price ? `@ ${v.unit_price}` : '—'}</p>
-                </div>
-              ))
+              <div className="max-h-64 overflow-y-auto">
+                {valuations.map((v) => (
+                  <div key={v.id} className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2 last:border-0">
+                    <p className="text-xs text-[var(--text-2)]">{v.valuation_date}</p>
+                    <p className="text-xs font-medium text-[var(--text-2)]">{v.market_value ? <Money value={v.market_value} /> : v.unit_price ? `@ ${v.unit_price}` : '—'}</p>
+                  </div>
+                ))}
+              </div>
             )}
-            {valuations.length > 5 && <p className="px-4 py-2 text-xs text-[var(--text-muted)]">…and {valuations.length - 5} more</p>}
           </div>
 
           {/* Ownerships */}
