@@ -5,7 +5,7 @@ from alerts.views import MissedRDAlertsView, MissedSIPAlertsView, RDMandateViewS
 from insurance.views import InsurancePolicyViewSet, InsuranceSummaryView, MissedPremiumRemindersView, VehicleClaimViewSet
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
-from ingestion.views import CSVImportView, FDAdviceApplyView, FDAdvicePreviewView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView, NpsApplyView, NpsPreviewView
+from ingestion.views import CSVImportView, EpfPassbookApplyView, EpfPassbookPreviewView, FDAdviceApplyView, FDAdvicePreviewView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView, NpsApplyView, NpsPreviewView
 from insights.views import AllocationView, CategoryBreakdownView, CashFlowView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, SpendAnalyticsView, XIRRView
 from reports.views import StatementExportView, StatementPreviewView
 from instruments.views import (
@@ -115,6 +115,8 @@ urlpatterns = router.urls + [
     path('imports/fd-advice-apply', FDAdviceApplyView.as_view(), name='imports-fd-advice-apply'),
     path('imports/nps-preview', NpsPreviewView.as_view(), name='imports-nps-preview'),
     path('imports/nps-apply', NpsApplyView.as_view(), name='imports-nps-apply'),
+    path('imports/epf-passbook-preview', EpfPassbookPreviewView.as_view(), name='imports-epf-passbook-preview'),
+    path('imports/epf-passbook-apply', EpfPassbookApplyView.as_view(), name='imports-epf-passbook-apply'),
     path('reports/statement-preview', StatementPreviewView.as_view(), name='reports-statement-preview'),
     path('reports/statement-export', StatementExportView.as_view(), name='reports-statement-export'),
     path('valuations/bulk-snapshot', BulkSnapshotView.as_view(), name='bulk-snapshot'),

@@ -911,6 +911,155 @@ def apply_nps_statement_import(household, member, item: dict, account=None, affe
     }
 
 
+def apply_epf_passbook_import(household, member, item: dict) -> dict:
+    """
+    Create/update a single household 'EPF' Instrument + backfill monthly
+    contribution Transactions + a ValuationSnapshot from a user-confirmed,
+    parsed EPFO Member Passbook (one financial year per import — see
+    ingestion.epf_parser.parse_epf_passbook).
+
+    EPF reports three sub-buckets (Employee/Employer/Pension) under one UAN,
+    unlike NPS's genuinely separate Tier I/II accounts — so all three roll up
+    into one Instrument, with each contribution month split into 3
+    metadata-tagged Transactions (one per bucket) rather than 3 instruments.
+
+    EPF contributions are deducted from salary before the money ever reaches
+    a tracked account, so these transactions are never linked to an account
+    and always affects_balance=True is moot (account is always None here) —
+    matches the FD/RD/NPS backfill convention of leaving account unset for
+    historical employer-side money movements.
+    """
+    from instruments.models import Instrument, InstrumentOwnership
+    from ledger.models import Transaction
+    from valuations.models import ValuationSnapshot
+
+    epf_category = _get_asset_category(household, 'EPF') or _get_asset_category(household, 'Retirement')
+
+    instrument, inst_created = Instrument.objects.get_or_create(
+        household=household,
+        name='EPF',
+        defaults={
+            'instrument_type': Instrument.InstrumentType.EPF,
+            'symbol': item.get('uan', ''),
+            'asset_category': epf_category,
+        },
+    )
+    if not inst_created and not instrument.asset_category and epf_category:
+        instrument.asset_category = epf_category
+        instrument.save(update_fields=['asset_category'])
+    if not instrument.symbol and item.get('uan'):
+        instrument.symbol = item['uan']
+        instrument.save(update_fields=['symbol'])
+
+    contributions_created = 0
+    opening_backfilled = False
+
+    with db_transaction.atomic():
+        if member:
+            InstrumentOwnership.objects.get_or_create(
+                instrument=instrument,
+                member=member,
+                defaults={'allocation_percent': Decimal('100')},
+            )
+
+        opening_date = _to_date(item['opening_date'])
+        opening_total = (
+            _to_decimal(item['opening_employee'])
+            + _to_decimal(item['opening_employer'])
+            + _to_decimal(item['opening_pension'])
+        )
+        # Each financial year's passbook restates the prior year's closing
+        # balance as its own "opening balance" line, so backfilling it from
+        # every imported file would double-count every earlier year's
+        # contributions and interest. Only seed an opening-balance entry if
+        # this is the earliest data seen for this instrument so far — i.e.
+        # no transaction already exists at or after this date. This assumes
+        # passbooks are imported in chronological order (oldest FY first);
+        # importing out of order raises rather than silently double-counting.
+        earliest_existing = (
+            Transaction.objects.filter(instrument=instrument).order_by('tx_date').values_list('tx_date', flat=True).first()
+        )
+        if earliest_existing is not None and opening_date < earliest_existing:
+            raise ValueError(
+                f'This passbook\'s opening balance ({opening_date.isoformat()}) is earlier than '
+                f'transactions already imported for this instrument (earliest: {earliest_existing.isoformat()}). '
+                'Import EPF passbooks in chronological order, oldest financial year first.'
+            )
+        has_history = earliest_existing is not None
+        if opening_total > 0 and not has_history:
+            _, opening_created = Transaction.objects.get_or_create(
+                household=household,
+                instrument=instrument,
+                tx_date=opening_date,
+                idempotency_key=f"epf-import-{instrument.id}-opening-{opening_date.isoformat()}",
+                defaults={
+                    'member': member,
+                    'account': None,
+                    'amount': opening_total,
+                    'direction': Transaction.Direction.OUTFLOW,
+                    'transaction_type': Transaction.TransactionType.BUY,
+                    'currency': 'INR',
+                    'source': Transaction.SourceType.CSV,
+                    'affects_balance': True,
+                    'description': f'EPF opening balance as of {opening_date.isoformat()}',
+                    'metadata': {'epf_bucket': 'opening'},
+                },
+            )
+            opening_backfilled = opening_backfilled or opening_created
+
+        for tx in item.get('transactions', []):
+            tx_date = _to_date(tx['tx_date'])
+            for bucket in ('employee', 'employer', 'pension'):
+                amount = _to_decimal(tx.get(bucket)) if tx.get(bucket) else None
+                if amount is None or amount == 0:
+                    continue
+                _, tx_created = Transaction.objects.get_or_create(
+                    household=household,
+                    instrument=instrument,
+                    tx_date=tx_date,
+                    idempotency_key=f"epf-import-{instrument.id}-{bucket}-{tx_date.isoformat()}",
+                    defaults={
+                        'member': member,
+                        'account': None,
+                        'amount': amount,
+                        'direction': Transaction.Direction.OUTFLOW,
+                        'transaction_type': Transaction.TransactionType.BUY,
+                        'currency': 'INR',
+                        'source': Transaction.SourceType.CSV,
+                        'affects_balance': True,
+                        'description': f"{tx.get('description', '')} ({bucket})".strip(),
+                        'metadata': {'epf_bucket': bucket, 'wage_month': tx.get('wage_month', '')},
+                    },
+                )
+                if tx_created:
+                    contributions_created += 1
+
+        closing_date = _to_date(item['closing_date'])
+        closing_total = (
+            _to_decimal(item['closing_employee'])
+            + _to_decimal(item['closing_employer'])
+            + _to_decimal(item['closing_pension'])
+        )
+        ValuationSnapshot.objects.update_or_create(
+            household=household,
+            instrument=instrument,
+            account=None,
+            valuation_date=closing_date,
+            defaults={
+                'market_value': closing_total,
+                'source': ValuationSnapshot.SourceType.CSV,
+            },
+        )
+
+    return {
+        'instrument_id': instrument.id,
+        'instrument_name': instrument.name,
+        'created': inst_created,
+        'contributions_created': contributions_created,
+        'opening_balance_backfilled': opening_backfilled,
+    }
+
+
 def apply_groww_import(household, member, parsed: dict) -> dict:
     """
     Import a parsed Groww Excel file (output of groww_parser.parse_groww_excel)

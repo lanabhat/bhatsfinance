@@ -3,10 +3,11 @@ import { ImportWizard } from './ImportWizard'
 import { GrowwImportWizard } from '../components/imports/GrowwImportWizard'
 import { FDAdviceImportWizard } from '../components/imports/FDAdviceImportWizard'
 import { NpsImportWizard } from '../components/imports/NpsImportWizard'
+import { EpfPassbookImportWizard } from '../components/imports/EpfPassbookImportWizard'
 import { UpstoxConnect } from '../components/integrations/UpstoxConnect'
 import type { OptionItem } from '../types/domain'
 
-type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'nps'
+type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'nps' | 'epf'
 
 type Props = {
   householdId: number
@@ -29,6 +30,7 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
         <button className={tabCls('upstox')} onClick={() => setTab('upstox')}>Upstox</button>
         <button className={tabCls('fd')} onClick={() => setTab('fd')}>FD Import</button>
         <button className={tabCls('nps')} onClick={() => setTab('nps')}>NPS Import</button>
+        <button className={tabCls('epf')} onClick={() => setTab('epf')}>EPF Import</button>
       </div>
 
       {tab === 'import' && (
@@ -83,6 +85,18 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
             portal. Contributions and quarterly fee deductions are backfilled against your NPS holding.
           </p>
           <NpsImportWizard householdId={householdId} />
+        </article>
+      )}
+
+      {tab === 'epf' && (
+        <article className="panel">
+          <h2>EPF Import</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Import EPFO Member Passbook PDFs (one per financial year). Monthly Employee/Employer/
+            Pension contributions are backfilled against your EPF holding, and interest updates are
+            reflected in the closing valuation.
+          </p>
+          <EpfPassbookImportWizard householdId={householdId} />
         </article>
       )}
     </section>

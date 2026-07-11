@@ -123,12 +123,28 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
                 'asset_category': tx.instrument.asset_category_id,
                 'quantity': Decimal('0'),
                 'net_invested': Decimal('0'),
+                'invested_since_snapshot': Decimal('0'),
             },
         )
         item['quantity'] += _signed_quantity(tx)
         item['net_invested'] += -_signed_amount(tx)
 
     valuations_by_instrument = _latest_valuations_by_instrument(by_instrument.keys(), as_of)
+
+    # For market_value-based instruments (no NAV/unit_price — e.g. EPF/PPF/FD,
+    # where a snapshot is only refreshed periodically), contributions made
+    # after the snapshot's date would otherwise inflate net_invested with no
+    # offsetting change to market_value, since the frozen snapshot can't know
+    # about money added after it was taken. Roll those newer contributions
+    # into market_value too (at face value — no growth assumed on money that
+    # hasn't had time to earn anything yet), so gain% reflects real growth up
+    # to the last snapshot rather than being diluted by recent contributions.
+    for tx in txs:
+        valuation = valuations_by_instrument.get(tx.instrument_id)
+        if valuation is None or valuation.unit_price is not None:
+            continue
+        if tx.tx_date > valuation.valuation_date:
+            by_instrument[tx.instrument_id]['invested_since_snapshot'] += -_signed_amount(tx)
 
     holdings = []
     for instrument_id, item in by_instrument.items():
@@ -137,7 +153,7 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
         if valuation and valuation.unit_price is not None:
             market_value = quantity * valuation.unit_price
         elif valuation and valuation.market_value is not None:
-            market_value = valuation.market_value
+            market_value = valuation.market_value + item['invested_since_snapshot']
         else:
             market_value = item['net_invested']
 
@@ -151,6 +167,7 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
             factor = household_instrument_share.get(instrument_id, Decimal('1'))
             market_value = market_value * factor
 
+        item.pop('invested_since_snapshot', None)
         holdings.append(
             {
                 **item,

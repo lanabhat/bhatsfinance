@@ -337,7 +337,8 @@ export function HoldingsPage() {
         is_active: true,
       }
 
-    const renderRow = (h: DashboardHolding, cat?: AssetCategory) => {
+    const renderRow = (h: DashboardHolding, catOverride?: AssetCategory) => {
+      const cat = catOverride ?? categories.find(c => c.id === h.asset_category)
       const inst = resolveInstrument(h)
       const isExpanded = cardExpand.isExpanded(h.instrument_id)
       return (
@@ -371,7 +372,8 @@ export function HoldingsPage() {
 
     const TABLE_COLS = 8
 
-    const renderTableRow = (h: DashboardHolding, cat?: AssetCategory) => {
+    const renderTableRow = (h: DashboardHolding, catOverride?: AssetCategory) => {
+      const cat = catOverride ?? categories.find(c => c.id === h.asset_category)
       const inst = resolveInstrument(h)
       const invested = parseFloat(h.net_invested)
       const marketValue = parseFloat(h.market_value)

@@ -149,6 +149,74 @@ export type NpsFileResult = {
   error?: string
 }
 
+export type EpfMemberPreview = { id: number; name: string; relation?: string }
+
+export type EpfTransactionPreview = {
+  tx_date: string
+  wage_month: string
+  tx_type: string
+  description: string
+  wages: string
+  eps_wages: string
+  employee: string
+  employer: string
+  pension: string
+}
+
+export type EpfFilePreview = {
+  filename: string
+  uan: string
+  member_id: string
+  member_name: string
+  establishment_id: string
+  establishment_name: string
+  fy_start_year: number
+  fy_end_year: number
+  opening_date: string
+  opening_employee: string
+  opening_employer: string
+  opening_pension: string
+  closing_date: string
+  closing_employee: string
+  closing_employer: string
+  closing_pension: string
+  total_contribution_employee: string
+  total_contribution_employer: string
+  total_contribution_pension: string
+  total_withdrawal_employee: string
+  total_withdrawal_employer: string
+  total_withdrawal_pension: string
+  transactions: EpfTransactionPreview[]
+  matched_member: { id: number; name: string; relation?: string; confidence: number } | null
+  members: EpfMemberPreview[]
+  error?: string
+}
+
+export type EpfConfirmedItem = {
+  filename: string
+  uan: string
+  opening_date: string
+  opening_employee: string
+  opening_employer: string
+  opening_pension: string
+  closing_date: string
+  closing_employee: string
+  closing_employer: string
+  closing_pension: string
+  transactions: EpfTransactionPreview[]
+  member_id: number | null
+}
+
+export type EpfFileResult = {
+  filename: string
+  instrument_id?: number
+  instrument_name?: string
+  created?: boolean
+  contributions_created?: number
+  opening_balance_backfilled?: boolean
+  error?: string
+}
+
 const BASE = '/api'
 
 async function getCsrf(): Promise<string> {
@@ -248,4 +316,17 @@ export const importApi = {
     items: NpsConfirmedItem[],
   ): Promise<NpsFileResult[]> =>
     httpPost(`${BASE}/imports/nps-apply`, { household_id: householdId, items }),
+
+  previewEpfPassbookFiles: async (householdId: number, files: File[]): Promise<EpfFilePreview[]> => {
+    const fd = new FormData()
+    fd.append('household_id', String(householdId))
+    for (const f of files) fd.append('files', f)
+    return postForm<EpfFilePreview[]>(`${BASE}/imports/epf-passbook-preview`, fd)
+  },
+
+  applyEpfPassbookImport: (
+    householdId: number,
+    items: EpfConfirmedItem[],
+  ): Promise<EpfFileResult[]> =>
+    httpPost(`${BASE}/imports/epf-passbook-apply`, { household_id: householdId, items }),
 }
