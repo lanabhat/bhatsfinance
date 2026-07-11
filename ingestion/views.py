@@ -303,6 +303,8 @@ class GrowwApplyView(APIView):
             except Exception as e:
                 all_results.append({'filename': f.name, 'member_name': member.full_name, 'error': str(e)})
 
+        return Response(all_results, status=201)
+
 
 class FDAdvicePreviewView(APIView):
     """
