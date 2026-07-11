@@ -32,6 +32,32 @@ def _latest_valuation(instrument_id: int, as_of: date):
     )
 
 
+def _latest_valuations_by_instrument(instrument_ids, as_of: date) -> dict[int, ValuationSnapshot]:
+    """Batch equivalent of calling _latest_valuation() once per instrument_id.
+
+    A naive per-instrument query (one _latest_valuation() call per row) turns
+    compute_holdings() into an N+1 that scales with instrument count — with
+    ~140 instruments that's 140 extra round-trips on every single call, and
+    compute_holdings() itself is invoked repeatedly per page load (directly,
+    via allocation/category-breakdown/xirr, and once per member in
+    members-networth). Instead, pull every candidate snapshot in one query,
+    ordered so the first row seen per instrument is the latest.
+    """
+    instrument_ids = list(instrument_ids)
+    if not instrument_ids:
+        return {}
+    snapshots = (
+        ValuationSnapshot.objects
+        .filter(instrument_id__in=instrument_ids, valuation_date__lte=as_of)
+        .order_by('instrument_id', '-valuation_date', '-id')
+    )
+    latest: dict[int, ValuationSnapshot] = {}
+    for snap in snapshots:
+        if snap.instrument_id not in latest:
+            latest[snap.instrument_id] = snap
+    return latest
+
+
 def _household_share_maps(household_id: int) -> tuple[dict[int, Decimal], dict[int, Decimal]]:
     """Return (instrument_share, account_share) maps where each value is the
     summed allocation_percent (as a 0..1 Decimal) across active members with
@@ -102,9 +128,11 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
         item['quantity'] += _signed_quantity(tx)
         item['net_invested'] += -_signed_amount(tx)
 
+    valuations_by_instrument = _latest_valuations_by_instrument(by_instrument.keys(), as_of)
+
     holdings = []
     for instrument_id, item in by_instrument.items():
-        valuation = _latest_valuation(instrument_id, as_of)
+        valuation = valuations_by_instrument.get(instrument_id)
         quantity = item['quantity']
         if valuation and valuation.unit_price is not None:
             market_value = quantity * valuation.unit_price
@@ -363,9 +391,15 @@ def compute_holdings_history(household_id: int, instrument_type: str | None = No
     instruments. For each date we sum:
       - net_invested: cumulative buy-minus-sell amounts up to that date
       - current:      sum of latest ValuationSnapshot market_value per instrument as of that date
-    """
-    from django.db.models import Q
 
+    Rather than re-querying "latest snapshot per instrument" and re-scanning all
+    transactions for every date in the series (an O(dates x instruments) query
+    pattern that turns into thousands of round-trips with years of history and
+    a large instrument count), all snapshots/transactions are fetched once up
+    front and walked with per-instrument cursors that only advance forward as
+    `d` increases — each snapshot/transaction row is visited at most once
+    across the whole date series.
+    """
     qs = ValuationSnapshot.objects.filter(
         household_id=household_id,
         instrument__isnull=False,
@@ -398,35 +432,48 @@ def compute_holdings_history(household_id: int, instrument_type: str | None = No
 
     all_txs = list(tx_qs)
 
+    # Pre-fetch every snapshot once (not just distinct dates), grouped per
+    # instrument and sorted ascending so we can walk each instrument's list
+    # forward in lockstep with the date series via a single cursor.
+    snap_qs = qs.order_by('instrument_id', 'valuation_date', 'id')
+    snaps_by_instrument: dict[int, list[ValuationSnapshot]] = {}
+    for snap in snap_qs:
+        snaps_by_instrument.setdefault(snap.instrument_id, []).append(snap)
+    snap_cursor: dict[int, int] = {inst_id: 0 for inst_id in snaps_by_instrument}
+    latest_snap: dict[int, ValuationSnapshot] = {}
+
+    # Running per-instrument quantity, updated as the transaction cursor advances.
+    tx_cursor = 0
+    running_qty: dict[int, Decimal] = {}
+    net_invested = ZERO
+    instrument_ids_seen: set[int] = set()
+
     result = []
     for d in dates:
-        # net_invested: sum transactions up to this date
-        net_invested = ZERO
-        instrument_ids_seen: set[int] = set()
-        for tx in all_txs:
-            if tx.tx_date > d:
-                break
+        while tx_cursor < len(all_txs) and all_txs[tx_cursor].tx_date <= d:
+            tx = all_txs[tx_cursor]
             net_invested += -_signed_amount(tx)
             instrument_ids_seen.add(tx.instrument_id)
+            running_qty[tx.instrument_id] = running_qty.get(tx.instrument_id, ZERO) + _signed_quantity(tx)
+            tx_cursor += 1
 
-        # current: latest snapshot per instrument as of this date
+        for inst_id, i in list(snap_cursor.items()):
+            snaps = snaps_by_instrument[inst_id]
+            n = len(snaps)
+            if i >= n:
+                continue
+            while i < n and snaps[i].valuation_date <= d:
+                latest_snap[inst_id] = snaps[i]
+                i += 1
+            snap_cursor[inst_id] = i
+
         current = ZERO
         for inst_id in instrument_ids_seen:
-            snap = (
-                ValuationSnapshot.objects
-                .filter(instrument_id=inst_id, valuation_date__lte=d)
-                .order_by('-valuation_date', '-id')
-                .first()
-            )
+            snap = latest_snap.get(inst_id)
             if snap is None:
                 continue
             if snap.unit_price is not None:
-                # Need quantity up to this date
-                qty = sum(
-                    (_signed_quantity(tx) for tx in all_txs if tx.instrument_id == inst_id and tx.tx_date <= d),
-                    ZERO,
-                )
-                val = qty * snap.unit_price
+                val = running_qty.get(inst_id, ZERO) * snap.unit_price
             elif snap.market_value is not None:
                 val = snap.market_value
             else:
