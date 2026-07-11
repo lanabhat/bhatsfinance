@@ -1060,6 +1060,185 @@ def apply_epf_passbook_import(household, member, item: dict) -> dict:
     }
 
 
+def apply_ppf_statement_import(household, member, item: dict, estimated_prior_principal: Decimal | None = None) -> dict:
+    """
+    Create/update a single household 'PPF' Instrument + backfill deposit/
+    interest Transactions + a ValuationSnapshot from a user-confirmed, parsed
+    HDFC PPF account statement (see ingestion.ppf_parser.parse_ppf_statement).
+
+    Bank PPF statements typically only cover a recent window (e.g. the past
+    year), not the account's full history since opening — the statement's
+    own `opening_balance` is a real number but its principal/interest split
+    for the pre-statement period is unknown. Rather than guessing, the caller
+    supplies `estimated_prior_principal` (the user's own best estimate of how
+    much of the opening balance is actual deposits vs. accumulated interest);
+    the shortfall (opening_balance - estimated_prior_principal) is treated as
+    unattributed prior-years' interest and is folded into the valuation
+    snapshot only — never counted as invested — same principle as the NPS/EPF
+    importers' opening-balance backfills, just with an explicit user estimate
+    standing in for data the bank won't provide.
+
+    Idempotent and safe to re-run: deposit/interest rows are keyed by date,
+    and the opening-balance backfill only fires once (guarded the same way
+    as the EPF importer — raises rather than silently double-counting if
+    statements are imported out of chronological order).
+    """
+    from instruments.models import Instrument, InstrumentOwnership
+    from ledger.models import Transaction
+    from valuations.models import ValuationSnapshot
+
+    ppf_category = _get_asset_category(household, 'PPF') or _get_asset_category(household, 'Retirement')
+
+    instrument, inst_created = Instrument.objects.get_or_create(
+        household=household,
+        name='PPF',
+        defaults={
+            'instrument_type': Instrument.InstrumentType.PPF,
+            'symbol': item.get('account_no', ''),
+            'asset_category': ppf_category,
+        },
+    )
+    if not inst_created and not instrument.asset_category and ppf_category:
+        instrument.asset_category = ppf_category
+        instrument.save(update_fields=['asset_category'])
+    if not instrument.symbol and item.get('account_no'):
+        instrument.symbol = item['account_no']
+        instrument.save(update_fields=['symbol'])
+
+    contributions_created = 0
+    interest_created = 0
+    opening_backfilled = False
+
+    with db_transaction.atomic():
+        if member:
+            InstrumentOwnership.objects.get_or_create(
+                instrument=instrument,
+                member=member,
+                defaults={'allocation_percent': Decimal('100')},
+            )
+
+        statement_from = _to_date(item['statement_from'])
+        opening_balance = _to_decimal(item['opening_balance'])
+        prior_principal = (
+            estimated_prior_principal if estimated_prior_principal is not None else opening_balance
+        )
+        prior_principal = max(min(prior_principal, opening_balance), Decimal('0'))
+        prior_interest = opening_balance - prior_principal
+
+        # Same ordering guard as apply_epf_passbook_import: only seed the
+        # opening-balance backfill if this is the earliest data seen for this
+        # instrument so far, and refuse (rather than silently double-count)
+        # if an earlier statement is imported after a later one already has
+        # history recorded.
+        earliest_existing = (
+            Transaction.objects.filter(instrument=instrument).order_by('tx_date').values_list('tx_date', flat=True).first()
+        )
+        if earliest_existing is not None and statement_from < earliest_existing:
+            raise ValueError(
+                f'This statement\'s opening balance ({statement_from.isoformat()}) is earlier than '
+                f'transactions already imported for this instrument (earliest: {earliest_existing.isoformat()}). '
+                'Import PPF statements in chronological order, oldest first.'
+            )
+        has_history = earliest_existing is not None
+        if opening_balance > 0 and not has_history:
+            backfill_date = statement_from - timedelta(days=1)
+            if prior_principal > 0:
+                _, opening_created = Transaction.objects.get_or_create(
+                    household=household,
+                    instrument=instrument,
+                    tx_date=backfill_date,
+                    idempotency_key=f"ppf-import-{instrument.id}-opening-principal-{backfill_date.isoformat()}",
+                    defaults={
+                        'member': member,
+                        'account': None,
+                        'amount': prior_principal,
+                        'direction': Transaction.Direction.OUTFLOW,
+                        'transaction_type': Transaction.TransactionType.BUY,
+                        'currency': 'INR',
+                        'source': Transaction.SourceType.CSV,
+                        'affects_balance': True,
+                        'description': f'PPF deposits before {statement_from.isoformat()} (user estimate)',
+                        'metadata': {'ppf_bucket': 'opening_principal', 'estimated': True},
+                    },
+                )
+                opening_backfilled = opening_backfilled or opening_created
+
+        for tx in item.get('transactions', []):
+            kind = tx.get('kind', 'deposit')
+            if kind == 'interest':
+                # Interest credits are not recorded as Transactions: PPF's
+                # market_value comes entirely from the flat ValuationSnapshot
+                # closing_balance below (not net_invested + growth), so an
+                # interest row here would add nothing to market_value while
+                # incorrectly inflating net_invested (compute_holdings' cost
+                # basis is driven by direction, not transaction_type — an
+                # INTEREST-typed row would still count as invested principal
+                # and understate the real return). The snapshot already
+                # reflects the interest; nothing further to record.
+                interest_created += 1
+                continue
+
+            amount = _to_decimal(tx['amount']) if tx.get('amount') else None
+            if amount is None or amount == 0:
+                continue
+            tx_date = _to_date(tx['tx_date'])
+            direction = tx.get('direction', 'deposit')
+            tx_direction = Transaction.Direction.OUTFLOW if direction == 'deposit' else Transaction.Direction.INFLOW
+
+            _, tx_created = Transaction.objects.get_or_create(
+                household=household,
+                instrument=instrument,
+                tx_date=tx_date,
+                idempotency_key=f"ppf-import-{instrument.id}-{kind}-{tx_date.isoformat()}",
+                defaults={
+                    'member': member,
+                    'account': None,
+                    'amount': amount,
+                    'direction': tx_direction,
+                    'transaction_type': Transaction.TransactionType.BUY,
+                    'currency': 'INR',
+                    'source': Transaction.SourceType.CSV,
+                    'affects_balance': True,
+                    'description': tx.get('description', ''),
+                    'metadata': {'ppf_bucket': kind},
+                },
+            )
+            if tx_created:
+                contributions_created += 1
+
+        statement_to = _to_date(item['statement_to'])
+        closing_balance = _to_decimal(item['closing_balance']) if item.get('closing_balance') else None
+        if closing_balance is not None:
+            # Fold the unattributed prior-years' interest estimate into every
+            # snapshot for this instrument (not just this one), so it isn't
+            # lost if a later statement's snapshot supersedes this one.
+            ValuationSnapshot.objects.update_or_create(
+                household=household,
+                instrument=instrument,
+                account=None,
+                valuation_date=statement_to,
+                defaults={
+                    'market_value': closing_balance,
+                    'source': ValuationSnapshot.SourceType.CSV,
+                    'notes': (
+                        f'Includes an estimated ₹{prior_interest} of pre-statement interest '
+                        f'(bank could not provide full history since account opening).'
+                        if prior_interest > 0 else ''
+                    ),
+                },
+            )
+
+    return {
+        'instrument_id': instrument.id,
+        'instrument_name': instrument.name,
+        'created': inst_created,
+        'contributions_created': contributions_created,
+        'interest_created': interest_created,
+        'opening_balance_backfilled': opening_backfilled,
+        'estimated_prior_interest': str(prior_interest),
+    }
+
+
 def apply_groww_import(household, member, parsed: dict) -> dict:
     """
     Import a parsed Groww Excel file (output of groww_parser.parse_groww_excel)

@@ -217,6 +217,56 @@ export type EpfFileResult = {
   error?: string
 }
 
+export type PpfMemberPreview = { id: number; name: string; relation?: string }
+
+export type PpfTransactionPreview = {
+  tx_date: string
+  description: string
+  amount: string
+  kind: 'deposit' | 'interest' | 'other'
+  direction: 'deposit' | 'withdrawal'
+}
+
+export type PpfFilePreview = {
+  filename: string
+  account_no: string
+  open_date: string
+  statement_from: string
+  statement_to: string
+  holder_name: string
+  opening_balance: string
+  closing_balance: string
+  transactions: PpfTransactionPreview[]
+  matched_member: { id: number; name: string; relation?: string; confidence: number } | null
+  members: PpfMemberPreview[]
+  error?: string
+}
+
+export type PpfConfirmedItem = {
+  filename: string
+  account_no: string
+  open_date: string
+  statement_from: string
+  statement_to: string
+  opening_balance: string
+  closing_balance: string
+  transactions: PpfTransactionPreview[]
+  member_id: number | null
+  estimated_prior_principal: string
+}
+
+export type PpfFileResult = {
+  filename: string
+  instrument_id?: number
+  instrument_name?: string
+  created?: boolean
+  contributions_created?: number
+  interest_created?: number
+  opening_balance_backfilled?: boolean
+  estimated_prior_interest?: string
+  error?: string
+}
+
 const BASE = '/api'
 
 async function getCsrf(): Promise<string> {
@@ -329,4 +379,17 @@ export const importApi = {
     items: EpfConfirmedItem[],
   ): Promise<EpfFileResult[]> =>
     httpPost(`${BASE}/imports/epf-passbook-apply`, { household_id: householdId, items }),
+
+  previewPpfStatementFiles: async (householdId: number, files: File[]): Promise<PpfFilePreview[]> => {
+    const fd = new FormData()
+    fd.append('household_id', String(householdId))
+    for (const f of files) fd.append('files', f)
+    return postForm<PpfFilePreview[]>(`${BASE}/imports/ppf-statement-preview`, fd)
+  },
+
+  applyPpfStatementImport: (
+    householdId: number,
+    items: PpfConfirmedItem[],
+  ): Promise<PpfFileResult[]> =>
+    httpPost(`${BASE}/imports/ppf-statement-apply`, { household_id: householdId, items }),
 }

@@ -4,10 +4,11 @@ import { GrowwImportWizard } from '../components/imports/GrowwImportWizard'
 import { FDAdviceImportWizard } from '../components/imports/FDAdviceImportWizard'
 import { NpsImportWizard } from '../components/imports/NpsImportWizard'
 import { EpfPassbookImportWizard } from '../components/imports/EpfPassbookImportWizard'
+import { PpfStatementImportWizard } from '../components/imports/PpfStatementImportWizard'
 import { UpstoxConnect } from '../components/integrations/UpstoxConnect'
 import type { OptionItem } from '../types/domain'
 
-type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'nps' | 'epf'
+type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'nps' | 'epf' | 'ppf'
 
 type Props = {
   householdId: number
@@ -31,6 +32,7 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
         <button className={tabCls('fd')} onClick={() => setTab('fd')}>FD Import</button>
         <button className={tabCls('nps')} onClick={() => setTab('nps')}>NPS Import</button>
         <button className={tabCls('epf')} onClick={() => setTab('epf')}>EPF Import</button>
+        <button className={tabCls('ppf')} onClick={() => setTab('ppf')}>PPF Import</button>
       </div>
 
       {tab === 'import' && (
@@ -97,6 +99,18 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
             reflected in the closing valuation.
           </p>
           <EpfPassbookImportWizard householdId={householdId} />
+        </article>
+      )}
+
+      {tab === 'ppf' && (
+        <article className="panel">
+          <h2>PPF Import</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Import PPF account statement .xls exports from your bank's net banking. Deposits are
+            backfilled against your PPF holding; if your bank can't provide statements covering the
+            account's full history, you can estimate the pre-statement principal on the review step.
+          </p>
+          <PpfStatementImportWizard householdId={householdId} />
         </article>
       )}
     </section>

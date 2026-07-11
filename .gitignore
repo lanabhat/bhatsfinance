@@ -12,3 +12,6 @@ frontend/node_modules/
 
 # Collected static files (regenerated via collectstatic on deploy)
 staticfiles/
+
+# Local scratch files (bank statements, personal exports) — never commit
+Files/
