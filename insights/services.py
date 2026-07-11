@@ -442,9 +442,10 @@ def compute_holdings_history(household_id: int, instrument_type: str | None = No
     snap_cursor: dict[int, int] = {inst_id: 0 for inst_id in snaps_by_instrument}
     latest_snap: dict[int, ValuationSnapshot] = {}
 
-    # Running per-instrument quantity, updated as the transaction cursor advances.
+    # Running per-instrument quantity/net-invested, updated as the transaction cursor advances.
     tx_cursor = 0
     running_qty: dict[int, Decimal] = {}
+    running_invested: dict[int, Decimal] = {}
     net_invested = ZERO
     instrument_ids_seen: set[int] = set()
 
@@ -455,6 +456,7 @@ def compute_holdings_history(household_id: int, instrument_type: str | None = No
             net_invested += -_signed_amount(tx)
             instrument_ids_seen.add(tx.instrument_id)
             running_qty[tx.instrument_id] = running_qty.get(tx.instrument_id, ZERO) + _signed_quantity(tx)
+            running_invested[tx.instrument_id] = running_invested.get(tx.instrument_id, ZERO) + -_signed_amount(tx)
             tx_cursor += 1
 
         for inst_id, i in list(snap_cursor.items()):
@@ -471,13 +473,19 @@ def compute_holdings_history(household_id: int, instrument_type: str | None = No
         for inst_id in instrument_ids_seen:
             snap = latest_snap.get(inst_id)
             if snap is None:
-                continue
-            if snap.unit_price is not None:
+                # No valuation snapshot recorded for this instrument (e.g. EPF,
+                # PPF, a personal loan given, gratuity) — mirror compute_holdings()'s
+                # fallback of treating cost basis as current value, rather than
+                # silently dropping it to 0. Otherwise these instruments' full
+                # invested amount still counts on the "invested" side while
+                # contributing nothing to "current", fabricating a paper loss.
+                val = running_invested.get(inst_id, ZERO)
+            elif snap.unit_price is not None:
                 val = running_qty.get(inst_id, ZERO) * snap.unit_price
             elif snap.market_value is not None:
                 val = snap.market_value
             else:
-                continue
+                val = running_invested.get(inst_id, ZERO)
 
             factor = Decimal('1')
             if member_allocation is not None:

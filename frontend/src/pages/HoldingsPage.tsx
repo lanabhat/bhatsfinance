@@ -14,6 +14,7 @@ import { useExpandable } from '../hooks/useExpandable'
 import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
+import { computeGain } from '../lib/fmt'
 import type { Account, AssetCategory, DashboardHolding, Instrument, InstrumentOwnership } from '../types/domain'
 
 // ── shared helpers ────────────────────────────────────────────────────────────
@@ -310,10 +311,14 @@ export function HoldingsPage() {
     const sortFn = (a: DashboardHolding, b: DashboardHolding) => {
       if (sortBy === 'name') return a.instrument_name.localeCompare(b.instrument_name)
       if (sortBy === 'invested') return parseFloat(b.net_invested) - parseFloat(a.net_invested)
-      if (sortBy === 'gain') return (parseFloat(b.market_value) - parseFloat(b.net_invested)) - (parseFloat(a.market_value) - parseFloat(a.net_invested))
+      if (sortBy === 'gain') {
+        const gainA = computeGain(parseFloat(a.market_value), parseFloat(a.net_invested), a.instrument_type).gain
+        const gainB = computeGain(parseFloat(b.market_value), parseFloat(b.net_invested), b.instrument_type).gain
+        return gainB - gainA
+      }
       if (sortBy === 'gainPct') {
-        const pctA = parseFloat(a.net_invested) > 0 ? (parseFloat(a.market_value) - parseFloat(a.net_invested)) / parseFloat(a.net_invested) : -Infinity
-        const pctB = parseFloat(b.net_invested) > 0 ? (parseFloat(b.market_value) - parseFloat(b.net_invested)) / parseFloat(b.net_invested) : -Infinity
+        const pctA = computeGain(parseFloat(a.market_value), parseFloat(a.net_invested), a.instrument_type).gainPct ?? -Infinity
+        const pctB = computeGain(parseFloat(b.market_value), parseFloat(b.net_invested), b.instrument_type).gainPct ?? -Infinity
         return pctB - pctA
       }
       return parseFloat(b.market_value) - parseFloat(a.market_value)
@@ -370,8 +375,7 @@ export function HoldingsPage() {
       const inst = resolveInstrument(h)
       const invested = parseFloat(h.net_invested)
       const marketValue = parseFloat(h.market_value)
-      const gain = marketValue - invested
-      const gainPct = invested > 0 ? (gain / invested) * 100 : null
+      const { gain, gainPct } = computeGain(marketValue, invested, h.instrument_type)
       const isExpanded = tableExpand.isExpanded(h.instrument_id)
       return (
         <Fragment key={h.instrument_id}>
@@ -400,7 +404,7 @@ export function HoldingsPage() {
             <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-[var(--text-2)]">{invested > 0 ? <Money value={invested} /> : '—'}</td>
             <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold"><Money value={marketValue} /></td>
             <td className={`whitespace-nowrap px-3 py-2 text-right text-xs font-medium ${gain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-              {invested > 0 ? <>{gain >= 0 ? '+' : ''}<Money value={gain} />{gainPct !== null ? ` (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)` : ''}</> : '—'}
+              {h.instrument_type !== 'cash' && invested > 0 ? <>{gain >= 0 ? '+' : ''}<Money value={gain} />{gainPct !== null ? ` (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)` : ''}</> : '—'}
             </td>
             <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-end gap-1">

@@ -18,3 +18,15 @@ export function fmtINRCompact(value: number | string): string {
   if (abs < 1e7) return `${sign}₹${(abs / 1e5).toFixed(1)} L`
   return `${sign}₹${(abs / 1e7).toFixed(1)} Cr`
 }
+
+/**
+ * Gain/loss for a holding. Cash never appreciates/depreciates — any
+ * market_value/net_invested mismatch there is a rounding or timing artifact,
+ * not real gain, so cash holdings always report flat (gain 0, gainPct null).
+ */
+export function computeGain(marketValue: number, netInvested: number, instrumentType?: string): { gain: number; gainPct: number | null } {
+  if (instrumentType === 'cash') return { gain: 0, gainPct: null }
+  const gain = marketValue - netInvested
+  const gainPct = netInvested > 0 ? (gain / netInvested) * 100 : null
+  return { gain, gainPct }
+}

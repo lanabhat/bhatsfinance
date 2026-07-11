@@ -11,6 +11,7 @@ import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import { usePrivacy } from '../context/PrivacyContext'
+import { computeGain } from '../lib/fmt'
 import type { Account, AccountOwnership, AssetCategory, DashboardHolding, Instrument, InstrumentOwnership, Transaction } from '../types/domain'
 
 type MainTab = 'holdings' | 'manage'
@@ -384,10 +385,8 @@ function HoldingDetailSheet({ householdId, holding, instrument, members, onBuy, 
   }, [householdId, instrument.id])
 
   const buys = txs.filter((t) => t.transaction_type === 'buy')
-  const gain = parseFloat(holding.market_value) - parseFloat(holding.net_invested)
-  const gainPct = parseFloat(holding.net_invested) > 0
-    ? ((gain / parseFloat(holding.net_invested)) * 100).toFixed(1)
-    : null
+  const { gain, gainPct: gainPctNum } = computeGain(parseFloat(holding.market_value), parseFloat(holding.net_invested), instrument.instrument_type)
+  const gainPct = gainPctNum !== null ? gainPctNum.toFixed(1) : null
 
   function fmt(v: string | number) {
     if (hidden) return '••••'

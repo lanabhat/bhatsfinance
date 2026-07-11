@@ -4,6 +4,7 @@ import { ledgerApi } from '../../api/ledgerApi'
 import { portfolioApi } from '../../api/portfolioApi'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
+import { computeGain } from '../../lib/fmt'
 import type { DashboardHolding, Instrument, InstrumentOwnership, Transaction } from '../../types/domain'
 
 type Props = {
@@ -164,8 +165,8 @@ export function InstrumentExpandedDetail({ householdId, holding, instrument, onB
   }
 
   const buys = txs.filter((t) => t.transaction_type === 'buy')
-  const gain = parseFloat(holding.market_value) - parseFloat(holding.net_invested)
-  const gainPct = parseFloat(holding.net_invested) > 0 ? ((gain / parseFloat(holding.net_invested)) * 100).toFixed(1) : null
+  const { gain, gainPct: gainPctNum } = computeGain(parseFloat(holding.market_value), parseFloat(holding.net_invested), instrument.instrument_type)
+  const gainPct = gainPctNum !== null ? gainPctNum.toFixed(1) : null
 
   const ownerLabel = ownerships.length > 0
     ? ownerships.map((o) => members.find((m) => m.id === o.member)?.label ?? `#${o.member}`).join(', ')
