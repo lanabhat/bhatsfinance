@@ -333,7 +333,7 @@ class SmsIngestView(APIView):
 
     POST /api/sms/ingest
     Authorization: Bearer <device token>
-    Body: { "sender": "...", "timestamp": <epoch millis | ISO-8601>, "body": "..." }
+    Body: { "sender": "...", "timestamp": <epoch millis | ISO-8601>, "body": "...", "device_id": "..." (optional) }
 
     Stages the message for later review/approval — does not create a
     Transaction directly, since the owning household member can't be
@@ -367,6 +367,7 @@ class SmsIngestView(APIView):
             sender=data['sender'],
             received_at=data['timestamp'],
             body=data['body'],
+            device_id=data.get('device_id', ''),
             defaults={
                 'api_key': api_key,
                 'raw_payload': raw_payload,

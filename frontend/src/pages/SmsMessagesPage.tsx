@@ -557,6 +557,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
                     </td>
                     <td className="px-3 py-2.5 font-medium text-[var(--text)]">
                       <span className="block truncate">{msg.sender}</span>
+                      {msg.device_id && <span className="block truncate text-[10px] font-normal text-[var(--text-muted)]">📱 {msg.device_id}</span>}
                     </td>
                     <td className="px-3 py-3 min-w-0">
                       <p className="line-clamp-2 break-words text-[var(--text-2)]">{msg.body}</p>
@@ -633,7 +634,9 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
                     <span className="text-sm font-semibold text-[var(--text)] truncate">{msg.sender}</span>
                     <Badge label={msg.status} color={STATUS_COLOR[msg.status]} />
                   </div>
-                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">{formatDateTime(msg.received_at)}</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    {formatDateTime(msg.received_at)}{msg.device_id && ` · 📱 ${msg.device_id}`}
+                  </p>
                   <p className="mt-2 text-sm text-[var(--text-2)] line-clamp-3 leading-relaxed">{msg.body}</p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {msg.categories.length === 0
@@ -719,6 +722,12 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
               <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Received</span>
               <p className="mt-0.5 text-[var(--text-2)]">{formatDateTime(selected.received_at)}</p>
             </div>
+            {selected.device_id && (
+              <div>
+                <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Device</span>
+                <p className="mt-0.5 text-[var(--text-2)]">📱 {selected.device_id}</p>
+              </div>
+            )}
             <div>
               <span className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Message</span>
               <p className="mt-1 whitespace-pre-wrap break-words rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3 text-[var(--text-2)]">{selected.body}</p>

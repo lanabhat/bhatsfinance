@@ -230,7 +230,9 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
                   <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">{position.current} of {position.total}</span>
                 )}
               </p>
-              <p className="truncate text-xs text-[var(--text-muted)]">{message.sender} · {message.received_at.slice(0, 10)}</p>
+              <p className="truncate text-xs text-[var(--text-muted)]">
+                {message.sender} · {message.received_at.slice(0, 10)}{message.device_id && ` · 📱 ${message.device_id}`}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <ConfidencePill value={message.confidence} />

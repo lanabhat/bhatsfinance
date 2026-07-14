@@ -40,6 +40,7 @@ class SmsIngestSerializer(serializers.Serializer):
     sender = serializers.CharField(max_length=64)
     body = serializers.CharField(allow_blank=True)
     timestamp = serializers.CharField()
+    device_id = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
 
     def validate_timestamp(self, value):
         value = value.strip()
@@ -61,7 +62,7 @@ class SmsMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = SmsMessage
         fields = [
-            'id', 'household', 'owner', 'sender', 'body', 'received_at',
+            'id', 'household', 'owner', 'sender', 'body', 'received_at', 'device_id',
             'status', 'template_key', 'confidence', 'parsed_tx',
             'imported_transaction_id', 'created_at', 'categories',
         ]

@@ -154,13 +154,21 @@ class SmsMessage(TimeStampedModel):
     received_at = models.DateTimeField()
     raw_payload = models.JSONField(default=dict, blank=True)
 
+    # App-supplied device identifier (e.g. Android ANDROID_ID), sent by the
+    # forwarding app independently of the bearer token — lets a single API
+    # key be shared across several phones and still tell messages apart in
+    # the UI, and disambiguates two devices forwarding an identical SMS
+    # (see unique_together below). Blank for messages ingested before the
+    # app started sending it, or if the user leaves the Settings field empty.
+    device_id = models.CharField(max_length=100, blank=True)
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
     template_key = models.CharField(max_length=60, blank=True)
     confidence = models.FloatField(null=True, blank=True)
     imported_transaction_id = models.IntegerField(null=True, blank=True)
 
     class Meta:
-        unique_together = ('household', 'sender', 'received_at', 'body')
+        unique_together = ('household', 'sender', 'received_at', 'body', 'device_id')
         indexes = [
             models.Index(fields=['household', 'status']),
         ]

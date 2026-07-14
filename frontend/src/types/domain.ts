@@ -97,6 +97,7 @@ export type SmsMessage = {
   sender: string
   body: string
   received_at: string
+  device_id: string
   status: 'pending' | 'approved' | 'rejected'
   template_key: string
   confidence: number | null

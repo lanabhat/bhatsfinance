@@ -20,6 +20,7 @@ export function SmsTestPage() {
   const [sender, setSender] = useState('AX-HDFCBK')
   const [body, setBody] = useState(SAMPLE_BODIES[0])
   const [when, setWhen] = useState(nowAsLocalInput())
+  const [deviceId, setDeviceId] = useState('')
 
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<{ status: number; body: unknown } | null>(null)
@@ -34,13 +35,15 @@ export function SmsTestPage() {
     setResult(null)
     try {
       const timestampMillis = new Date(when).getTime()
+      const payload: Record<string, unknown> = { sender: sender.trim(), body, timestamp: timestampMillis }
+      if (deviceId.trim()) payload.device_id = deviceId.trim()
       const response = await fetch(`${API_BASE}/api/sms/ingest`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token.trim()}`,
         },
-        body: JSON.stringify({ sender: sender.trim(), body, timestamp: timestampMillis }),
+        body: JSON.stringify(payload),
       })
       const json = await response.json().catch(() => null)
       setResult({ status: response.status, body: json })
@@ -96,6 +99,17 @@ export function SmsTestPage() {
             />
           </label>
         </div>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-[var(--text-muted)]">Device ID (optional)</span>
+          <input
+            type="text"
+            value={deviceId}
+            onChange={(e) => setDeviceId(e.target.value)}
+            placeholder="e.g. kitchen-pixel-6a — omitted from the request if left blank"
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
+          />
+        </label>
 
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-[var(--text-muted)]">Message body</span>
