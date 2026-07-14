@@ -77,6 +77,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [sender, setSender] = useState('')
+  const [deviceFilter, setDeviceFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [ordering, setOrdering] = useState('-received_at')
@@ -99,6 +100,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
     category: categoryFilter === 'all' ? undefined : categoryFilter,
     search: search || undefined,
     sender: sender.trim() || undefined,
+    device_id: deviceFilter || undefined,
     received_after: dateFrom || undefined,
     received_before: dateTo || undefined,
   }
@@ -112,7 +114,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
   // Reset to page 1 whenever filters (or page size) change
   useEffect(() => {
     setPage(1)
-  }, [householdId, statusFilter, categoryFilter, search, sender, dateFrom, dateTo, ordering, pageSize])
+  }, [householdId, statusFilter, categoryFilter, search, sender, deviceFilter, dateFrom, dateTo, ordering, pageSize])
 
   const load = () => {
     if (!householdId) return
@@ -131,7 +133,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [householdId, statusFilter, categoryFilter, search, sender, dateFrom, dateTo, ordering, page, pageSize])
+  }, [householdId, statusFilter, categoryFilter, search, sender, deviceFilter, dateFrom, dateTo, ordering, page, pageSize])
 
   // Arrow-key navigation while the detail viewer is open
   useEffect(() => {
@@ -394,6 +396,22 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
               placeholder="e.g. HDFCBK"
               className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
             />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[var(--text-muted)]">Device</span>
+            <input
+              type="text"
+              list="sms-device-ids"
+              value={deviceFilter}
+              onChange={(e) => setDeviceFilter(e.target.value)}
+              placeholder="e.g. kitchen-pixel-6a"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
+            />
+            <datalist id="sms-device-ids">
+              {Array.from(new Set(messages.map((m) => m.device_id).filter(Boolean))).map((id) => (
+                <option key={id} value={id} />
+              ))}
+            </datalist>
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-[var(--text-muted)]">Sort</span>

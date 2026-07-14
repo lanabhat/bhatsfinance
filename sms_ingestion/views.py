@@ -95,6 +95,10 @@ class SmsMessageViewSet(viewsets.ModelViewSet):
         if sender:
             qs = qs.filter(sender__icontains=sender)
 
+        device_id = self.request.query_params.get('device_id')
+        if device_id:
+            qs = qs.filter(device_id=device_id)
+
         search = self.request.query_params.get('search')
         if search:
             qs = qs.filter(Q(body__icontains=search) | Q(sender__icontains=search))

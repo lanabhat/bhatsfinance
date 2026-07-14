@@ -8,6 +8,7 @@ export type SmsApprovalResult = SmsMessage & { transaction_id?: number }
 export type SmsMessageListParams = {
   status?: string
   sender?: string
+  device_id?: string
   category?: string
   search?: string
   ordering?: string
