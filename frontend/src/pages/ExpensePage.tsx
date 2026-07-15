@@ -79,6 +79,9 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   const [page, setPage] = useState(1)
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
   const [allTags, setAllTags] = useState<Tag[]>([])
+  const [tagsMenuOpen, setTagsMenuOpen] = useState(false)
+  const [tagsCleaning, setTagsCleaning] = useState(false)
+  const [tagsCleanupMessage, setTagsCleanupMessage] = useState('')
 
   // Category management state
   const [editingCat, setEditingCat] = useState<ExpenseCategory | null>(null)
@@ -123,6 +126,22 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
     try {
       setAllTags(await tagApi.list(householdId))
     } catch { /* non-fatal */ }
+  }
+
+  const cleanupUnusedTags = async () => {
+    setTagsCleaning(true)
+    setTagsCleanupMessage('')
+    try {
+      const { deleted } = await tagApi.cleanup(householdId)
+      setTagsCleanupMessage(deleted > 0 ? `Removed ${deleted} unused tag${deleted === 1 ? '' : 's'}.` : 'No unused tags found.')
+      setFilterTags(prev => prev.filter(id => allTags.some(t => t.id === id)))
+      await loadTags()
+    } catch {
+      setTagsCleanupMessage('Cleanup failed.')
+    } finally {
+      setTagsCleaning(false)
+      setTagsMenuOpen(false)
+    }
   }
 
   useEffect(() => {
@@ -584,6 +603,34 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
           {allTags.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-xs text-[var(--text-muted)]">Tags:</span>
+              {canWrite && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setTagsMenuOpen(p => !p) }}
+                    className="rounded px-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-2)] hover:text-[var(--text-2)]"
+                    aria-label="Tag options"
+                    title="Tag options"
+                  >
+                    ⋮
+                  </button>
+                  {tagsMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setTagsMenuOpen(false)} />
+                      <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1 text-left shadow-lg">
+                        <button
+                          type="button"
+                          disabled={tagsCleaning}
+                          onClick={() => void cleanupUnusedTags()}
+                          className="block w-full px-3 py-2 text-left text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50"
+                        >
+                          {tagsCleaning ? 'Cleaning up…' : 'Clean up unused tags'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               {allTags.map(t => {
                 const selected = filterTags.includes(t.id)
                 return (
@@ -603,6 +650,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
               })}
             </div>
           )}
+          {tagsCleanupMessage && <p className="text-xs text-[var(--text-2)]">{tagsCleanupMessage}</p>}
         </div>
 
         <div className="overflow-x-auto">
