@@ -10,6 +10,10 @@ export const tagApi = {
 
   delete: (id: number) => deleteJson(`/api/tags/${id}/`),
 
+  /** Delete every currently-unused tag for the household in one sweep. */
+  cleanup: (householdId: number) =>
+    postJson<{ deleted: number }>('/api/tags/cleanup/', { household: householdId }),
+
   /** Find an existing tag by (case-insensitive) name, or create it. Used by
    * "type to create" tag pickers so the same tag isn't duplicated with
    * different casing. Strips any leading '#' the user may have typed —

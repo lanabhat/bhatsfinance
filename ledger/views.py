@@ -30,6 +30,20 @@ class TagViewSet(viewsets.ModelViewSet):
             return Tag.objects.all()
         return Tag.objects.none()
 
+    @action(detail=False, methods=['post'], url_path='cleanup')
+    def cleanup(self, request):
+        """
+        Delete every currently-unused tag for a household — a manual sweep
+        for stale tags that predate the auto-delete-on-unused signals (see
+        ledger/signals.py), or any that slipped through some other way.
+        """
+        household_id = request.data.get('household') or request.query_params.get('household')
+        if not household_id:
+            return Response({'detail': 'household is required'}, status=400)
+        unused = Tag.objects.filter(household_id=household_id, transactions__isnull=True)
+        deleted_count, _ = unused.delete()
+        return Response({'deleted': deleted_count})
+
 
 class TransactionViewSet(viewsets.ModelViewSet):
     queryset = Transaction.objects.select_related('household', 'account', 'instrument', 'member').prefetch_related('tags').all().order_by('-tx_date', '-id')

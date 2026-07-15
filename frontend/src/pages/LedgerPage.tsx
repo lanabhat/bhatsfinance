@@ -104,6 +104,9 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
   const [totalCount, setTotalCount] = useState(0)
   const [fullAccounts, setFullAccounts] = useState<Account[]>([])
   const [tags, setTags] = useState<Tag[]>([])
+  const [tagsMenuOpen, setTagsMenuOpen] = useState(false)
+  const [tagsCleaning, setTagsCleaning] = useState(false)
+  const [tagsCleanupMessage, setTagsCleanupMessage] = useState('')
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
   const [snapshotPrompt, setSnapshotPrompt] = useState(false)
@@ -173,6 +176,21 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
       setTags(await tagApi.list(householdId))
     } catch {
       // non-fatal — tags just won't show if this fails
+    }
+  }
+
+  const cleanupUnusedTags = async () => {
+    setTagsCleaning(true)
+    setTagsCleanupMessage('')
+    try {
+      const { deleted } = await tagApi.cleanup(householdId)
+      setTagsCleanupMessage(deleted > 0 ? `Removed ${deleted} unused tag${deleted === 1 ? '' : 's'}.` : 'No unused tags found.')
+      await loadTags()
+    } catch {
+      setTagsCleanupMessage('Cleanup failed.')
+    } finally {
+      setTagsCleaning(false)
+      setTagsMenuOpen(false)
     }
   }
 
@@ -403,6 +421,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
         </div>
       )}
       {error && <p className="mb-3 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
+      {tagsCleanupMessage && <p className="mb-3 text-sm text-[var(--text-2)]">{tagsCleanupMessage}</p>}
 
       <EntityPageLayout
         title="Transactions"
@@ -546,7 +565,39 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                     <th className={thCls}>Type</th>
                     <th className={thCls}>Account / Member / Instrument</th>
                     <th className={thCls}>Reference</th>
-                    <th className={thCls}>Tags</th>
+                    <th className={thCls}>
+                      <div className="relative flex items-center gap-1">
+                        <span>Tags</span>
+                        {canWrite && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setTagsMenuOpen(p => !p) }}
+                              className="rounded px-1 text-[var(--text-faint)] hover:bg-[var(--surface-2)] hover:text-[var(--text-2)]"
+                              aria-label="Tag options"
+                              title="Tag options"
+                            >
+                              ⋮
+                            </button>
+                            {tagsMenuOpen && (
+                              <>
+                                <div className="fixed inset-0 z-10" onClick={() => setTagsMenuOpen(false)} />
+                                <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1 text-left font-normal normal-case tracking-normal shadow-lg">
+                                  <button
+                                    type="button"
+                                    disabled={tagsCleaning}
+                                    onClick={() => void cleanupUnusedTags()}
+                                    className="block w-full px-3 py-2 text-left text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50"
+                                  >
+                                    {tagsCleaning ? 'Cleaning up…' : 'Clean up unused tags'}
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </th>
                     <th className={`${thCls} text-right`} onClick={() => toggleSort('amount')}>Amount{sortIndicator('amount')}</th>
                     <th className={thCls}>Source</th>
                     <th className={thCls} title="Buy transactions with no classification set — likely need review (e.g. funded from existing savings rather than this month's income, or a duplicate import row)">⚠</th>
