@@ -477,7 +477,7 @@ class SmsStagedActionView(APIView):
         tx_row = dict(msg.raw_payload.get('parsed_tx') or {})
         for field in ('account', 'member', 'direction', 'amount', 'transaction_type', 'tx_date', 'currency',
                       'fees', 'taxes', 'external_reference', 'classification', 'spend_category',
-                      'description', 'notes', 'merchant', 'instrument', 'quantity', 'affects_balance'):
+                      'description', 'notes', 'merchant', 'instrument', 'quantity', 'affects_balance', 'tags'):
             if field in overrides:
                 tx_row[field] = overrides[field]
 
@@ -542,6 +542,9 @@ class SmsStagedActionView(APIView):
             if quantity is not None:
                 create_kwargs['quantity'] = quantity
             created = _Tx.objects.create(**create_kwargs)
+            tag_ids = tx_row.get('tags')
+            if tag_ids:
+                created.tags.set(tag_ids)
         except (InvalidOperation, KeyError, Exception) as ex:
             return Response({'error': f'Failed to create transaction: {ex}'}, status=status.HTTP_400_BAD_REQUEST)
 

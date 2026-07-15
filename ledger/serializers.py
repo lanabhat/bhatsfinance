@@ -25,6 +25,12 @@ class TagSerializer(serializers.ModelSerializer):
         fields = ['id', 'household', 'name', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def validate_name(self, value):
+        # Tags are displayed with a '#' prefix in the UI but stored without
+        # one — strip any leading '#' a client sends so "#groceries" and
+        # "groceries" always resolve to the same tag.
+        return value.strip().lstrip('#').strip()
+
 
 class TransactionSerializer(serializers.ModelSerializer):
     account = serializers.PrimaryKeyRelatedField(

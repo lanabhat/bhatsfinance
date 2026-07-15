@@ -89,16 +89,19 @@ export function TagPicker({ householdId, tags, selectedIds, onChange, onTagCreat
         ))}
       </div>
       <div className="relative mt-2 flex gap-2">
-        <input
-          type="text"
-          value={draft}
-          onChange={e => { setDraft(e.target.value); setError(''); setShowSuggestions(true); setHighlighted(0) }}
-          onFocus={() => setShowSuggestions(true)}
-          onBlur={() => { blurTimeout.current = setTimeout(() => setShowSuggestions(false), 150) }}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-500"
-        />
+        <div className="relative flex-1">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-faint)]">#</span>
+          <input
+            type="text"
+            value={draft}
+            onChange={e => { setDraft(e.target.value.replace(/^#+/, '')); setError(''); setShowSuggestions(true); setHighlighted(0) }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => { blurTimeout.current = setTimeout(() => setShowSuggestions(false), 150) }}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 pl-6 pr-3 text-xs text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
         <button
           type="button"
           disabled={!draft.trim() || creating}

@@ -88,6 +88,7 @@ export type ParsedSmsTransaction = {
   notes?: string
   instrument?: string
   quantity?: string
+  tags?: number[]
 }
 
 export type SmsMessage = {

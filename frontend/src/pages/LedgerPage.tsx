@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useState } from 'react'
 import { ledgerApi } from '../api/ledgerApi'
 import { getJson } from '../api/http'
+import { tagApi } from '../api/tagApi'
 import { EntityPageLayout } from '../components/common/EntityPageLayout'
 import { DeleteButton } from '../components/common/DeleteButton'
 import { TX_TYPES, TxFormFields, blankTxForm, txFormFromTransaction, type TxForm } from '../components/ledger/TransactionEditForm'
 import { useAuth } from '../context/AuthContext'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { normalizeApiError } from '../hooks/errorUtils'
-import type { Account, OptionItem, Transaction } from '../types/domain'
+import type { Account, OptionItem, Tag, Transaction } from '../types/domain'
 
 type Props = {
   householdId: number
@@ -102,6 +103,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [fullAccounts, setFullAccounts] = useState<Account[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
   const [snapshotPrompt, setSnapshotPrompt] = useState(false)
@@ -166,6 +168,14 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
     }
   }
 
+  const loadTags = async () => {
+    try {
+      setTags(await tagApi.list(householdId))
+    } catch {
+      // non-fatal — tags just won't show if this fails
+    }
+  }
+
   const loadTransactions = async () => {
     setLoading(true)
     try {
@@ -195,6 +205,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
 
   useEffect(() => {
     void loadAccounts()
+    void loadTags()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [householdId])
 
@@ -535,6 +546,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                     <th className={thCls}>Type</th>
                     <th className={thCls}>Account / Member / Instrument</th>
                     <th className={thCls}>Reference</th>
+                    <th className={thCls}>Tags</th>
                     <th className={`${thCls} text-right`} onClick={() => toggleSort('amount')}>Amount{sortIndicator('amount')}</th>
                     <th className={thCls}>Source</th>
                     <th className={thCls} title="Buy transactions with no classification set — likely need review (e.g. funded from existing savings rather than this month's income, or a duplicate import row)">⚠</th>
@@ -543,9 +555,9 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={9} className="px-3 py-8 text-center text-[var(--text-muted)]">Loading…</td></tr>
+                    <tr><td colSpan={10} className="px-3 py-8 text-center text-[var(--text-muted)]">Loading…</td></tr>
                   ) : transactions.length === 0 ? (
-                    <tr><td colSpan={9} className="px-3 py-8 text-center text-[var(--text-muted)]">No transactions match these filters.</td></tr>
+                    <tr><td colSpan={10} className="px-3 py-8 text-center text-[var(--text-muted)]">No transactions match these filters.</td></tr>
                   ) : (
                     transactions.map((t) => {
                       const accountName = accountOptions.find(a => a.id === t.account)?.label ?? null
@@ -564,7 +576,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                         <Fragment key={t.id}>
                           {showDivider && (
                             <tr key={`group-${label}`}>
-                              <td colSpan={9} className="bg-[var(--surface-2)] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                              <td colSpan={10} className="bg-[var(--surface-2)] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                                 {label}
                               </td>
                             </tr>
@@ -598,6 +610,22 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                             <td className="max-w-[16rem] truncate px-3 py-2 text-xs italic text-[var(--text-muted)]" title={t.external_reference}>
                               {t.external_reference || '—'}
                             </td>
+                            <td className="px-3 py-2">
+                              {t.tags.length === 0 ? (
+                                <span className="text-xs text-[var(--text-faint)]">—</span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {t.tags.map(tagId => {
+                                    const tag = tags.find(x => x.id === tagId)
+                                    return tag ? (
+                                      <span key={tagId} className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--text-2)]">
+                                        {tag.name}
+                                      </span>
+                                    ) : null
+                                  })}
+                                </div>
+                              )}
+                            </td>
                             <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold">{amountStr}</td>
                             <td className="px-3 py-2">{sourceBadge(t.source)}</td>
                             <td className="px-3 py-2 text-center">
@@ -621,7 +649,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                               </div>
                             </td>
                           </tr>
-                          {isExpanded && <TransactionDetailRow key={`detail-${t.id}`} t={t} accountFull={accountFull} colSpan={9} />}
+                          {isExpanded && <TransactionDetailRow key={`detail-${t.id}`} t={t} accountFull={accountFull} colSpan={10} />}
                         </Fragment>
                       )
                     })

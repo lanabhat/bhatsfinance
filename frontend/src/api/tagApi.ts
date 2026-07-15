@@ -12,9 +12,11 @@ export const tagApi = {
 
   /** Find an existing tag by (case-insensitive) name, or create it. Used by
    * "type to create" tag pickers so the same tag isn't duplicated with
-   * different casing. */
+   * different casing. Strips any leading '#' the user may have typed —
+   * tags are displayed with a '#' prefix but stored without one, so
+   * "#groceries" and "groceries" resolve to the same tag. */
   async findOrCreate(householdId: number, name: string, existing: Tag[]): Promise<Tag> {
-    const trimmed = name.trim()
+    const trimmed = name.trim().replace(/^#+/, '').trim()
     const match = existing.find(t => t.name.toLowerCase() === trimmed.toLowerCase())
     if (match) return match
     return this.create({ household: householdId, name: trimmed })

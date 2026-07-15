@@ -151,6 +151,7 @@ export function SmsApprovalForm({ message, accountOptions, memberOptions, instru
         description: payload.description ?? '',
         notes: payload.notes ?? '',
         external_reference: '',
+        tags: payload.tags && payload.tags.length > 0 ? payload.tags : undefined,
       }
       const result = await smsApi.approveStaged(message.id, overrides)
       onApproved(result.transaction_id)
