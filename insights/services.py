@@ -340,6 +340,7 @@ def compute_members_networth(household_id: int, as_of: date) -> list[dict]:
             'relation_type': member.relation_type,
             'networth': str(nw.quantize(Decimal('0.01'))),
             'include_in_networth': member.include_in_networth,
+            'photo': member.photo,
         })
     return result
 

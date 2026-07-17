@@ -1,4 +1,5 @@
 import { Money } from '../common/Money'
+import { Avatar } from '../common/Avatar'
 import type { MemberNetWorth } from '../../types/domain'
 
 
@@ -17,7 +18,6 @@ type Props = {
 
 export function MemberNetWorthRow({ member, householdTotal }: Props) {
   const colorClass = RELATION_COLOR[member.relation_type] ?? RELATION_COLOR.other
-  const initials = member.member_name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
   const excluded = !member.include_in_networth
   const memberValue = parseFloat(member.networth)
   const sharePct = householdTotal && householdTotal > 0
@@ -27,9 +27,7 @@ export function MemberNetWorthRow({ member, householdTotal }: Props) {
   return (
     <div className={`tap min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-card)] ${excluded ? 'opacity-50 grayscale' : ''}`}>
       <div className="flex min-w-0 items-center gap-2.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm font-semibold text-[var(--text-2)]">
-          {initials}
-        </span>
+        <Avatar photo={member.photo} name={member.member_name} size={36} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-[var(--text)]">{member.member_name}</p>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">

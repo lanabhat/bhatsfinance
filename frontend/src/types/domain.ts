@@ -35,6 +35,7 @@ export type Member = {
   relation_type: 'self' | 'spouse' | 'child' | 'parent' | 'other'
   is_active: boolean
   include_in_networth: boolean
+  photo: string
 }
 
 export type Account = {
@@ -407,6 +408,7 @@ export type MemberNetWorth = {
   relation_type: string
   networth: string
   include_in_networth: boolean
+  photo: string
 }
 
 export type DashboardAccount = {

@@ -37,6 +37,10 @@ class Member(TimeStampedModel):
         default=True,
         help_text="If false, this member's share of holdings/accounts is excluded from household net worth calculations.",
     )
+    photo = models.TextField(
+        blank=True,
+        help_text='Data URI (base64) of the member photo, e.g. "data:image/jpeg;base64,...".',
+    )
 
     class Meta:
         unique_together = ('household', 'full_name')
@@ -63,6 +67,10 @@ class UserProfile(TimeStampedModel):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     google_email = models.EmailField(blank=True)
     google_picture = models.URLField(max_length=500, blank=True)
+    photo = models.TextField(
+        blank=True,
+        help_text='Data URI (base64) of the uploaded profile photo; takes precedence over google_picture when set.',
+    )
 
     def __str__(self):
         return f'{self.google_email or self.user.email} ({self.role}/{self.status})'

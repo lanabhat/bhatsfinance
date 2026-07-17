@@ -5,6 +5,8 @@ import { usePrivacy } from '../../context/PrivacyContext'
 import { useApp } from '../../context/AppContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useTerms } from '../../context/TermsContext'
+import { InvestmentsIcon, AccountsIcon, ExpensesIcon } from '../icons'
+import { AvatarUpload } from '../common/AvatarUpload'
 
 type Props = {
   route: string
@@ -28,29 +30,17 @@ const TABS: Tab[] = [
   {
     key: 'holdings',
     label: 'Investments',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-      </svg>
-    ),
+    icon: <InvestmentsIcon strokeWidth={2} className="h-5 w-5" />,
   },
   {
     key: 'accounts',
     label: 'Accounts',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-      </svg>
-    ),
+    icon: <AccountsIcon strokeWidth={2} className="h-5 w-5" />,
   },
   {
     key: 'expenses',
     label: 'Transactions',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75l-2.489-2.489m0 0a3.375 3.375 0 10-4.773-4.773 3.375 3.375 0 004.774 4.774zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
+    icon: <ExpensesIcon strokeWidth={2} className="h-5 w-5" />,
   },
   {
     key: 'spend-trends',
@@ -113,7 +103,7 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
   })
   const menuRef = useRef<HTMLDivElement>(null)
   const householdMenuRef = useRef<HTMLDivElement>(null)
-  const { user, logout, selectHousehold } = useAuth()
+  const { user, logout, selectHousehold, updatePhoto } = useAuth()
   const { households, householdId, refreshOptions } = useApp()
   const { hidden, toggle: togglePrivacy } = usePrivacy()
   const { theme, setTheme } = useTheme()
@@ -351,10 +341,18 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
                   )}
                 </button>
                 {userMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 shadow-[var(--shadow-modal)]">
-                    <div className="border-b border-[var(--border)] px-3 py-2">
-                      <p className="truncate text-xs font-medium text-[var(--text)]">{user.name || user.email}</p>
-                      <p className="truncate text-xs text-[var(--text-muted)]">{user.email}</p>
+                  <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 shadow-[var(--shadow-modal)]">
+                    <div className="flex items-center gap-3 border-b border-[var(--border)] px-3 py-3">
+                      <AvatarUpload
+                        photo={user.picture}
+                        name={user.name || user.email}
+                        size={44}
+                        onChange={(photo) => updatePhoto(photo)}
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-[var(--text)]">{user.name || user.email}</p>
+                        <p className="truncate text-xs text-[var(--text-muted)]">{user.email}</p>
+                      </div>
                     </div>
                     <button
                       type="button"

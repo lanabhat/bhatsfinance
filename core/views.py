@@ -8,7 +8,13 @@ from rest_framework.views import APIView
 
 from core.models import Household, IntegrationCredential, Member, UserProfile
 from core.permissions import IsApprovedUser, IsSuperAdmin
-from core.serializers import HouseholdSerializer, IntegrationCredentialSerializer, MemberSerializer, UserProfileSerializer
+from core.serializers import (
+    HouseholdSerializer,
+    IntegrationCredentialSerializer,
+    MemberSerializer,
+    UserProfileSerializer,
+    validate_photo_data_uri,
+)
 
 
 class HouseholdViewSet(viewsets.ModelViewSet):
@@ -46,13 +52,31 @@ class CsrfView(APIView):
 
 
 class MeView(APIView):
-    """Returns current user info. Any authenticated user can call this (even pending)."""
+    """Returns current user info, and lets the current user update their own photo."""
     permission_classes = [AllowAny]
 
     def get(self, request):
         if not request.user or not request.user.is_authenticated:
             return Response({'authenticated': False}, status=401)
         profile = getattr(request.user, 'profile', None)
+        return Response(_me_payload(request.user, profile=profile))
+
+    def patch(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response({'authenticated': False}, status=401)
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+
+        if 'photo' in (request.data or {}):
+            photo = request.data.get('photo') or ''
+            try:
+                validate_photo_data_uri(photo)
+            except Exception as exc:
+                detail = getattr(exc, 'detail', None)
+                message = detail[0] if isinstance(detail, list) and detail else str(exc)
+                return Response({'error': str(message)}, status=400)
+            profile.photo = photo
+            profile.save(update_fields=['photo', 'updated_at'])
+
         return Response(_me_payload(request.user, profile=profile))
 
 
@@ -63,7 +87,7 @@ def _me_payload(user, *, profile=None) -> dict:
         'id': user.id,
         'email': user.email,
         'name': user.get_full_name() or (profile.google_email if profile else ''),
-        'picture': profile.google_picture if profile else '',
+        'picture': (profile.photo or profile.google_picture) if profile else '',
         'role': profile.role if profile else 'viewer',
         'status': profile.status if profile else 'pending',
         'household_id': profile.household_id if profile else None,

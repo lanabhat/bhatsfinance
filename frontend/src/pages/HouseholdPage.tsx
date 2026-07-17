@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { householdApi } from '../api/householdApi'
-import { BaseForm } from '../components/common/BaseForm'
-import { EntityPageLayout } from '../components/common/EntityPageLayout'
 import { FormActions } from '../components/common/FormActions'
 import { AsyncSelect, SelectField, TextField } from '../components/common/FormField'
 import { DeleteButton } from '../components/common/DeleteButton'
+import { AvatarUpload } from '../components/common/AvatarUpload'
+import { ValidationMessage } from '../components/common/ValidationMessage'
+import { Sheet } from '../components/ui/Sheet'
 import { useAuth } from '../context/AuthContext'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { normalizeApiError } from '../hooks/errorUtils'
@@ -17,6 +18,8 @@ type Props = {
   canDelete: (e: DeleteEntity) => boolean
 }
 
+type Tab = 'households' | 'members'
+
 const RELATION_OPTIONS: OptionItem[] = [
   { id: 1, label: 'self' },
   { id: 2, label: 'spouse' },
@@ -25,22 +28,34 @@ const RELATION_OPTIONS: OptionItem[] = [
   { id: 5, label: 'other' },
 ]
 
+const blankHouseholdForm = () => ({ id: 0, name: '', base_currency: 'INR' })
+const blankMemberForm = (household: number) => ({
+  id: 0,
+  household,
+  full_name: '',
+  email: '',
+  relation_type: 'self' as Member['relation_type'],
+  is_active: true,
+  include_in_networth: true,
+  photo: '',
+})
+
+type HouseholdSheetState = { type: 'none' } | { type: 'household'; item?: Household }
+type MemberSheetState = { type: 'none' } | { type: 'member'; item?: Member }
+
 export function HouseholdPage({ householdId, householdOptions, onHouseholdsChanged, canDelete }: Props) {
   const { canWrite } = useAuth()
+  const [tab, setTab] = useState<Tab>('households')
   const [households, setHouseholds] = useState<Household[]>([])
   const [members, setMembers] = useState<Member[]>([])
-
-  const [householdForm, setHouseholdForm] = useState({ id: 0, name: '', base_currency: 'INR' })
-  const [memberForm, setMemberForm] = useState({
-    id: 0,
-    household: householdId,
-    full_name: '',
-    email: '',
-    relation_type: 'self' as Member['relation_type'],
-    is_active: true,
-    include_in_networth: true,
-  })
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const [householdSheet, setHouseholdSheet] = useState<HouseholdSheetState>({ type: 'none' })
+  const [householdForm, setHouseholdForm] = useState(blankHouseholdForm())
+
+  const [memberSheet, setMemberSheet] = useState<MemberSheetState>({ type: 'none' })
+  const [memberForm, setMemberForm] = useState(blankMemberForm(householdId))
 
   const selectedHouseholdName = useMemo(() => {
     return householdOptions.find((h) => h.id === householdId)?.label || `Household ${householdId}`
@@ -57,13 +72,25 @@ export function HouseholdPage({ householdId, householdOptions, onHouseholdsChang
   }
 
   useEffect(() => {
-    setMemberForm((p) => ({ ...p, household: householdId }))
     void loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [householdId])
 
+  const openHousehold = (item?: Household) => {
+    setError('')
+    setHouseholdForm(item ? { id: item.id, name: item.name, base_currency: item.base_currency } : blankHouseholdForm())
+    setHouseholdSheet({ type: 'household', item })
+  }
+
+  const openMember = (item?: Member) => {
+    setError('')
+    setMemberForm(item ? { ...item } : blankMemberForm(householdId))
+    setMemberSheet({ type: 'member', item })
+  }
+
   const saveHousehold = async () => {
     setError('')
+    setSaving(true)
     try {
       if (householdForm.id) {
         await householdApi.updateHousehold(householdForm.id, {
@@ -73,128 +100,207 @@ export function HouseholdPage({ householdId, householdOptions, onHouseholdsChang
       } else {
         await householdApi.createHousehold({ name: householdForm.name, base_currency: householdForm.base_currency })
       }
-      setHouseholdForm({ id: 0, name: '', base_currency: 'INR' })
+      setHouseholdSheet({ type: 'none' })
       await onHouseholdsChanged()
       await loadData()
     } catch (e) {
       setError(normalizeApiError(e))
+    } finally {
+      setSaving(false)
     }
   }
 
   const saveMember = async () => {
     setError('')
+    setSaving(true)
     try {
       if (memberForm.id) {
         await householdApi.updateMember(memberForm.id, memberForm)
       } else {
         await householdApi.createMember(memberForm)
       }
-      setMemberForm({
-        id: 0,
-        household: householdId,
-        full_name: '',
-        email: '',
-        relation_type: 'self' as Member['relation_type'],
-        is_active: true,
-        include_in_networth: true,
-      })
+      setMemberSheet({ type: 'none' })
       await loadData()
     } catch (e) {
       setError(normalizeApiError(e))
+    } finally {
+      setSaving(false)
     }
   }
 
-  const resetMemberForm = () => {
-    setMemberForm({
-      id: 0,
-      household: householdId,
-      full_name: '',
-      email: '',
-      relation_type: 'self' as Member['relation_type'],
-      is_active: true,
-      include_in_networth: true,
-    })
-  }
+  const tabCls = (t: Tab) =>
+    `px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === t ? 'bg-primary-600 text-white' : 'text-[var(--text-2)] hover:bg-[var(--surface-2)]'}`
 
   return (
-    <>
-      <EntityPageLayout
-        title="Households"
-        subtitle={`Managing ${selectedHouseholdName}`}
-        list={
-          <article className="panel">
-            <h3>Existing Households</h3>
-            <ul className="simple-list">
-              {households.map((h) => (
-                <li key={h.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <button className="list-link" disabled={!canWrite} onClick={() => setHouseholdForm({ id: h.id, name: h.name, base_currency: h.base_currency })}>
-                    {h.name} ({h.base_currency})
-                  </button>
-                  <DeleteButton
-                    disabled={!canDelete('household')}
-                    onDelete={async () => {
-                      setError('')
-                      try {
-                        await householdApi.deleteHousehold(h.id)
-                        if (householdForm.id === h.id) setHouseholdForm({ id: 0, name: '', base_currency: 'INR' })
-                        await onHouseholdsChanged()
-                        await loadData()
-                      } catch (e) {
-                        setError(normalizeApiError(e))
-                      }
-                    }}
-                  />
-                </li>
-              ))}
-            </ul>
-          </article>
-        }
-        form={
-          <BaseForm title={householdForm.id ? 'Edit Household' : 'Create Household'} error={error}>
+    <section className="grid min-w-0 gap-5">
+      <div className="flex items-start justify-between gap-3">
+        <header>
+          <h1 className="text-xl font-semibold text-[var(--text)]">Household</h1>
+          <p className="mt-0.5 text-sm text-[var(--text-muted)]">Managing {selectedHouseholdName}</p>
+        </header>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button className={tabCls('households')} onClick={() => setTab('households')}>Households</button>
+        <button className={tabCls('members')} onClick={() => setTab('members')}>Members</button>
+      </div>
+
+      {tab === 'households' && (
+        <div className="grid min-w-0 gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-[var(--text-muted)]">{households.length} {households.length === 1 ? 'household' : 'households'}</p>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => openHousehold()}
+                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+              >
+                + Add Household
+              </button>
+            )}
+          </div>
+
+          {households.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-[var(--border-2)] bg-[var(--surface)] p-8 text-center">
+              <p className="mt-2 text-sm font-medium text-[var(--text-2)]">No households yet</p>
+              {canWrite && (
+                <button
+                  type="button"
+                  onClick={() => openHousehold()}
+                  className="mt-4 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                >
+                  Add First Household
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {households.map((h) => (
+              <div
+                key={h.id}
+                className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-card)]"
+              >
+                <button
+                  type="button"
+                  disabled={!canWrite}
+                  onClick={() => openHousehold(h)}
+                  className="min-w-0 flex-1 truncate text-left text-sm font-medium text-[var(--text)] hover:text-primary-600 disabled:cursor-not-allowed"
+                >
+                  {h.name} <span className="text-[var(--text-muted)]">({h.base_currency})</span>
+                </button>
+                <DeleteButton
+                  disabled={!canDelete('household')}
+                  onDelete={async () => {
+                    setError('')
+                    try {
+                      await householdApi.deleteHousehold(h.id)
+                      await onHouseholdsChanged()
+                      await loadData()
+                    } catch (e) {
+                      setError(normalizeApiError(e))
+                    }
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'members' && (
+        <div className="grid min-w-0 gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-[var(--text-muted)]">{members.length} {members.length === 1 ? 'member' : 'members'}</p>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => openMember()}
+                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+              >
+                + Add Member
+              </button>
+            )}
+          </div>
+
+          {members.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-[var(--border-2)] bg-[var(--surface)] p-8 text-center">
+              <p className="mt-2 text-sm font-medium text-[var(--text-2)]">No members yet</p>
+              {canWrite && (
+                <button
+                  type="button"
+                  onClick={() => openMember()}
+                  className="mt-4 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                >
+                  Add First Member
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {members.map((m) => (
+              <div
+                key={m.id}
+                className={`flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-card)] ${!m.include_in_networth ? 'opacity-60' : ''}`}
+              >
+                <AvatarUpload
+                  photo={m.photo}
+                  name={m.full_name}
+                  size={36}
+                  disabled={!canWrite}
+                  onChange={async (photo) => { await householdApi.updateMember(m.id, { photo }); await loadData() }}
+                />
+                <button
+                  type="button"
+                  disabled={!canWrite}
+                  onClick={() => openMember(m)}
+                  className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
+                >
+                  <p className="truncate text-sm font-medium text-[var(--text)] hover:text-primary-600">{m.full_name}</p>
+                  <p className="text-xs capitalize text-[var(--text-muted)]">
+                    {m.relation_type}
+                    {!m.include_in_networth && ' · excluded from net worth'}
+                  </p>
+                </button>
+                <DeleteButton
+                  disabled={!canDelete('member')}
+                  onDelete={async () => { await householdApi.deleteMember(m.id); await loadData() }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {householdSheet.type === 'household' && (
+        <Sheet title={householdSheet.item ? 'Edit Household' : 'Add Household'} onClose={() => setHouseholdSheet({ type: 'none' })}>
+          <div className="space-y-3">
+            {error && <ValidationMessage message={error} />}
             <TextField label="Name" value={householdForm.name} onChange={(v) => setHouseholdForm((p) => ({ ...p, name: v }))} />
             <TextField
               label="Base Currency"
               value={householdForm.base_currency}
               onChange={(v) => setHouseholdForm((p) => ({ ...p, base_currency: v.toUpperCase() }))}
             />
-            <FormActions onSubmit={saveHousehold} onReset={() => setHouseholdForm({ id: 0, name: '', base_currency: 'INR' })} disabled={!canWrite} />
-          </BaseForm>
-        }
-      />
+            <FormActions onSubmit={saveHousehold} saving={saving} disabled={!canWrite} />
+          </div>
+        </Sheet>
+      )}
 
-      <EntityPageLayout
-        title="Members"
-        subtitle="Create and edit household members"
-        list={
-          <article className="panel">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3>Members</h3>
-              <button
-                type="button"
+      {memberSheet.type === 'member' && (
+        <Sheet title={memberSheet.item ? 'Edit Member' : 'Add Member'} onClose={() => setMemberSheet({ type: 'none' })}>
+          <div className="space-y-3">
+            {error && <ValidationMessage message={error} />}
+            <div className="mb-1 flex justify-center">
+              <AvatarUpload
+                photo={memberForm.photo}
+                name={memberForm.full_name}
+                size={72}
                 disabled={!canWrite}
-                onClick={resetMemberForm}
-                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-              >
-                + Add Member
-              </button>
+                onChange={(photo) => setMemberForm((p) => ({ ...p, photo }))}
+              />
             </div>
-            <ul className="simple-list">
-              {members.map((m) => (
-                <li key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <button className="list-link" disabled={!canWrite} onClick={() => setMemberForm({ ...m })}>
-                    {m.full_name} ({m.relation_type})
-                  </button>
-                  {!m.include_in_networth && (
-                    <span className="text-[10px] text-[var(--text-muted)]">excluded from net worth</span>
-                  )}
-                  <DeleteButton disabled={!canDelete('member')} onDelete={async () => { await householdApi.deleteMember(m.id); await loadData() }} />
-                </li>
-              ))}
-            </ul>
-          </article>
-        }
-        form={
-          <BaseForm title={memberForm.id ? 'Edit Member' : 'Create Member'} error={error}>
             <AsyncSelect
               label="Household"
               value={String(memberForm.household)}
@@ -229,14 +335,10 @@ export function HouseholdPage({ householdId, householdOptions, onHouseholdsChang
                 { id: 0, label: 'false' },
               ]}
             />
-            <FormActions
-              onSubmit={saveMember}
-              disabled={!canWrite}
-              onReset={resetMemberForm}
-            />
-          </BaseForm>
-        }
-      />
-    </>
+            <FormActions onSubmit={saveMember} saving={saving} disabled={!canWrite} />
+          </div>
+        </Sheet>
+      )}
+    </section>
   )
 }

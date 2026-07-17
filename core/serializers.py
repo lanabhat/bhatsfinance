@@ -1,6 +1,23 @@
+import re
+
 from rest_framework import serializers
 
 from core.models import Household, IntegrationCredential, Member, UserProfile
+
+# Data URI photos are stored inline in the DB (no media storage configured), so cap
+# the encoded size to keep rows small — 2MB of base64 is roughly a 1.5MB image.
+MAX_PHOTO_DATA_URI_LENGTH = 2 * 1024 * 1024
+PHOTO_DATA_URI_RE = re.compile(r'^data:image/(png|jpe?g|webp);base64,[A-Za-z0-9+/]+={0,2}$')
+
+
+def validate_photo_data_uri(value):
+    if not value:
+        return value
+    if len(value) > MAX_PHOTO_DATA_URI_LENGTH:
+        raise serializers.ValidationError('Photo is too large (max ~1.5MB).')
+    if not PHOTO_DATA_URI_RE.match(value):
+        raise serializers.ValidationError('Photo must be a base64 data URI (png, jpg, or webp).')
+    return value
 
 
 class HouseholdSerializer(serializers.ModelSerializer):
@@ -15,10 +32,13 @@ class MemberSerializer(serializers.ModelSerializer):
         model = Member
         fields = [
             'id', 'household', 'full_name', 'email',
-            'relation_type', 'is_active', 'include_in_networth',
+            'relation_type', 'is_active', 'include_in_networth', 'photo',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_photo(self, value):
+        return validate_photo_data_uri(value)
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -27,11 +47,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserProfile
-        fields = ['id', 'email', 'name', 'google_picture', 'role', 'status', 'household', 'created_at']
+        fields = ['id', 'email', 'name', 'google_picture', 'photo', 'role', 'status', 'household', 'created_at']
         read_only_fields = ['id', 'email', 'name', 'google_picture', 'created_at']
 
     def get_name(self, obj):
         return obj.user.get_full_name() or obj.google_email
+
+    def validate_photo(self, value):
+        return validate_photo_data_uri(value)
 
 
 class IntegrationCredentialSerializer(serializers.ModelSerializer):

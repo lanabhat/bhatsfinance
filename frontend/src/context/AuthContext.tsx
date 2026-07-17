@@ -20,6 +20,7 @@ type AuthContextValue = {
   user: AuthState
   canWrite: boolean
   selectHousehold: (householdId: number) => Promise<void>
+  updatePhoto: (photo: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -59,6 +60,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadMe()
   }
 
+  const updatePhoto = async (photo: string) => {
+    const csrf = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? ''
+    const r = await fetch('/api/auth/me/', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': decodeURIComponent(csrf) },
+      body: JSON.stringify({ photo }),
+    })
+    if (!r.ok) throw await r.json()
+    await loadMe()
+  }
+
   const logout = async () => {
     const csrf = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? ''
     await fetch('/api/auth/logout/', {
@@ -70,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, canWrite: userCanWrite(user), selectHousehold, logout }}>
+    <AuthContext.Provider value={{ user, canWrite: userCanWrite(user), selectHousehold, updatePhoto, logout }}>
       {children}
     </AuthContext.Provider>
   )

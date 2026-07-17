@@ -1,27 +1,18 @@
 import { useEffect, useState } from 'react'
 import { getJson, patchJson } from '../api/http'
 import { useApp } from '../context/AppContext'
+import { Avatar } from '../components/common/Avatar'
 
 type UserProfile = {
   id: number
   email: string
   name: string
   google_picture: string
+  photo: string
   role: 'super_admin' | 'admin' | 'viewer'
   status: 'pending' | 'approved' | 'denied'
   household: number | null
   created_at: string
-}
-
-function Avatar({ picture, name }: { picture: string; name: string }) {
-  if (picture) {
-    return <img src={picture} alt={name} className="h-8 w-8 rounded-full object-cover" referrerPolicy="no-referrer" />
-  }
-  return (
-    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700">
-      {name.charAt(0).toUpperCase()}
-    </div>
-  )
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -94,7 +85,7 @@ export function AdminPage() {
         {filtered.map(user => (
           <div key={user.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <div className="flex items-center gap-3 mb-3">
-              <Avatar picture={user.google_picture} name={user.name || user.email} />
+              <Avatar photo={user.photo || user.google_picture} name={user.name || user.email} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-[var(--text)]">{user.name || '—'}</p>
                 <p className="truncate text-xs text-[var(--text-muted)]">{user.email}</p>

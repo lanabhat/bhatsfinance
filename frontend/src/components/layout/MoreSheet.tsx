@@ -1,7 +1,14 @@
+import type { ComponentType, SVGProps } from 'react'
+import {
+  TagsIcon, LedgerIcon, ValuationIcon, ExpensesIcon, MutualFundsIcon,
+  AlertsIcon, TaxIcon, InsuranceIcon, ReportsIcon, FamilyIcon, ImportIcon,
+  MailIcon, MessageIcon, SettingsIcon, HelpIcon, UsersIcon,
+} from '../icons'
+
 type SecondaryRoute = {
   key: string
   label: string
-  icon: string
+  icon: ComponentType<SVGProps<SVGSVGElement>>
 }
 
 type RouteGroup = {
@@ -13,31 +20,31 @@ const BASE_GROUPS: RouteGroup[] = [
   {
     label: 'Portfolio',
     items: [
-      { key: 'instruments', label: 'Instruments', icon: '🏷️' },
-      { key: 'ledger', label: 'Ledger', icon: '📒' },
-      { key: 'valuation', label: 'Valuation', icon: '📈' },
-      { key: 'spend-trends', label: 'Spend Trends', icon: '📉' },
-      { key: 'analytics', label: 'Analytics', icon: '📊' },
-      { key: 'alerts', label: 'Alerts', icon: '🔔' },
-      { key: 'tax', label: 'Tax', icon: '🧾' },
-      { key: 'insurance', label: 'Insurance', icon: '🛡' },
-      { key: 'reports', label: 'Reports', icon: '🖨️' },
+      { key: 'instruments', label: 'Instruments', icon: TagsIcon },
+      { key: 'ledger', label: 'Ledger', icon: LedgerIcon },
+      { key: 'valuation', label: 'Valuation', icon: ValuationIcon },
+      { key: 'spend-trends', label: 'Spend Trends', icon: ExpensesIcon },
+      { key: 'analytics', label: 'Analytics', icon: MutualFundsIcon },
+      { key: 'alerts', label: 'Alerts', icon: AlertsIcon },
+      { key: 'tax', label: 'Tax', icon: TaxIcon },
+      { key: 'insurance', label: 'Insurance', icon: InsuranceIcon },
+      { key: 'reports', label: 'Reports', icon: ReportsIcon },
     ],
   },
   {
     label: 'Setup',
     items: [
-      { key: 'household', label: 'Household & Members', icon: '👪' },
-      { key: 'import', label: 'Import', icon: '📥' },
-      { key: 'gmail', label: 'Gmail', icon: '📧' },
-      { key: 'sms', label: 'SMS', icon: '💬' },
+      { key: 'household', label: 'Household & Members', icon: FamilyIcon },
+      { key: 'import', label: 'Import', icon: ImportIcon },
+      { key: 'gmail', label: 'Gmail', icon: MailIcon },
+      { key: 'sms', label: 'SMS', icon: MessageIcon },
     ],
   },
   {
     label: 'Account',
     items: [
-      { key: 'settings', label: 'Settings', icon: '⚙️' },
-      { key: 'help', label: 'Help', icon: '❓' },
+      { key: 'settings', label: 'Settings', icon: SettingsIcon },
+      { key: 'help', label: 'Help', icon: HelpIcon },
     ],
   },
 ]
@@ -56,7 +63,7 @@ export function MoreSheet({ open, onClose, onNavigate, currentRoute, role, sideb
   if (!open) return null
 
   const groups = role === 'super_admin'
-    ? [...BASE_GROUPS, { label: 'Admin', items: [{ key: 'admin', label: 'User Management', icon: '👥' }] }]
+    ? [...BASE_GROUPS, { label: 'Admin', items: [{ key: 'admin', label: 'User Management', icon: UsersIcon }] }]
     : BASE_GROUPS
 
   return (
@@ -99,7 +106,7 @@ export function MoreSheet({ open, onClose, onNavigate, currentRoute, role, sideb
                     }`}
                     onClick={() => { onNavigate(item.key); onClose() }}
                   >
-                    <span className="shrink-0 text-base">{item.icon}</span>
+                    <item.icon className="h-[18px] w-[18px] shrink-0" />
                     <span className="truncate">{item.label}</span>
                   </button>
                 ))}
@@ -138,7 +145,7 @@ export function MoreSheet({ open, onClose, onNavigate, currentRoute, role, sideb
                     }`}
                     onClick={() => { onNavigate(item.key); onClose() }}
                   >
-                    <span className="text-base">{item.icon}</span>
+                    <item.icon className="h-5 w-5 shrink-0" />
                     {item.label}
                   </button>
                 ))}
