@@ -267,6 +267,97 @@ export type PpfFileResult = {
   error?: string
 }
 
+export type SbiMemberPreview = { id: number; name: string; relation?: string }
+
+export type SbiSavingsAccountPreview = {
+  account_number: string
+  account_type: string
+  branch: string
+  roi: string
+  currency: string
+  mode_of_operation: string
+  available_balance: string
+}
+
+export type SbiDepositPreview = {
+  account_number: string
+  deposit_type: string
+  branch: string
+  mode_of_operation: string
+  bank_name: string
+  annual_rate: string
+  currency: string
+  investment_date: string
+  maturity_date: string
+  tenor_raw: string
+  tenure_days: number | null
+  compounding: 'simple' | 'monthly' | 'quarterly' | 'half_yearly' | 'annually'
+  warnings: string[]
+  doc_type: 'fd_advice' | 'rd_statement'
+  // fd_advice-only
+  principal?: string
+  maturity_value?: string
+  // rd_statement-only
+  installment_amount?: string
+  current_balance?: string
+  installment_count_observed?: number
+  statement_date?: string
+}
+
+export type SbiExistingAccount = { id: number; name: string; institution_name: string }
+
+export type SbiStatementFilePreview = {
+  filename: string
+  savings_accounts: SbiSavingsAccountPreview[]
+  deposits: SbiDepositPreview[]
+  account_numbers: string[]
+  members: SbiMemberPreview[]
+  existing_accounts: SbiExistingAccount[]
+  error?: string
+  error_code?: 'bad_password' | string
+}
+
+export type SbiAccountMappingEntry =
+  | { account_id: number }
+  | { name: string; member_id?: number | null }
+
+export type SbiConfirmedSavingsAccount = SbiSavingsAccountPreview & {
+  member_id: number | null
+  statement_date?: string
+}
+
+export type SbiConfirmedDeposit = SbiDepositPreview & {
+  member_id: number | null
+  // rd_statement-only, required before apply
+  tenure_months?: number
+}
+
+export type SbiSavingsAccountResult = {
+  account_number: string
+  account_id?: number
+  account_name?: string
+  balance?: string
+  valuation_date?: string
+  snapshot_created?: boolean
+  error?: string
+}
+
+export type SbiDepositResult = {
+  account_number: string
+  instrument_id?: number
+  instrument_name?: string
+  mandate_id?: number
+  installments_backfilled?: number
+  created?: boolean
+  fd_details_created?: boolean
+  error?: string
+}
+
+export type SbiStatementApplyResult = {
+  savings_accounts: SbiSavingsAccountResult[]
+  deposits: SbiDepositResult[]
+}
+
 const BASE = '/api'
 
 async function getCsrf(): Promise<string> {
@@ -392,4 +483,31 @@ export const importApi = {
     items: PpfConfirmedItem[],
   ): Promise<PpfFileResult[]> =>
     httpPost(`${BASE}/imports/ppf-statement-apply`, { household_id: householdId, items }),
+
+  previewSBIStatementFiles: async (
+    householdId: number,
+    files: File[],
+    passwords?: Record<string, string>,
+    savePasswords?: Record<string, boolean>,
+  ): Promise<SbiStatementFilePreview[]> => {
+    const fd = new FormData()
+    fd.append('household_id', String(householdId))
+    if (passwords && Object.keys(passwords).length > 0) fd.append('passwords', JSON.stringify(passwords))
+    if (savePasswords && Object.keys(savePasswords).length > 0) fd.append('save_passwords', JSON.stringify(savePasswords))
+    for (const f of files) fd.append('files', f)
+    return postForm<SbiStatementFilePreview[]>(`${BASE}/imports/sbi-statement-preview`, fd)
+  },
+
+  applySBIStatementImport: (
+    householdId: number,
+    accountMapping: Record<string, SbiAccountMappingEntry>,
+    savingsAccounts: SbiConfirmedSavingsAccount[],
+    deposits: SbiConfirmedDeposit[],
+  ): Promise<SbiStatementApplyResult> =>
+    httpPost(`${BASE}/imports/sbi-statement-apply`, {
+      household_id: householdId,
+      account_mapping: accountMapping,
+      savings_accounts: savingsAccounts,
+      deposits,
+    }),
 }

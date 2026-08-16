@@ -15,3 +15,4 @@ staticfiles/
 
 # Local scratch files (bank statements, personal exports) — never commit
 Files/
+Account statement files/

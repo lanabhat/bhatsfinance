@@ -482,6 +482,274 @@ class FDAdviceApplyView(APIView):
         return Response(all_results, status=201)
 
 
+class SBIStatementPreviewView(APIView):
+    """
+    Step 1: decrypt + parse one or more SBI YONO "Account Summary" .xlsx
+    exports (Transaction_Account_Summary + Deposits_Summary sheets) and
+    return extracted, user-editable fields per file. Saved household
+    passwords (shared with the PDF FD/RD import's SavedPdfPassword vault)
+    are tried automatically before falling back to any explicitly supplied
+    password.
+    """
+
+    def post(self, request):
+        import json
+
+        from core.models import Household
+        from ingestion.models import SavedPdfPassword
+        from ingestion.sbi_statement_parser import parse_deposits_sheet, parse_savings_accounts_sheet
+        from ingestion.xlsx_decrypt import IncorrectPasswordError, decrypt_and_load_workbook
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'error': 'household_id is required'}, status=400)
+
+        try:
+            household = Household.objects.get(pk=int(household_id))
+        except Household.DoesNotExist:
+            return Response({'error': 'Household not found'}, status=404)
+
+        try:
+            passwords = json.loads(request.data.get('passwords', '{}'))
+        except Exception:
+            passwords = {}
+        try:
+            save_passwords = json.loads(request.data.get('save_passwords', '{}'))
+        except Exception:
+            save_passwords = {}
+
+        members = household.members.filter(is_active=True)
+        member_list = [{'id': m.id, 'name': m.full_name, 'relation': m.relation_type} for m in members]
+
+        from instruments.models import Account
+        existing_accounts = [
+            {'id': a.id, 'name': a.name, 'institution_name': a.institution_name}
+            for a in Account.objects.filter(household=household, account_type='bank')
+        ]
+
+        saved_passwords = list(
+            SavedPdfPassword.objects.filter(household=household).order_by('-last_used_at', '-created_at')
+        )
+
+        files = request.FILES.getlist('files')
+        if not files:
+            single = request.FILES.get('file')
+            if single:
+                files = [single]
+        if not files:
+            return Response({'error': 'No files provided'}, status=400)
+
+        results = []
+        for f in files:
+            file_bytes = f.read()
+
+            candidates: list[tuple[str, object]] = []
+            supplied = passwords.get(f.name)
+            if supplied is not None:
+                candidates.append((supplied, None))
+            for saved in saved_passwords:
+                candidates.append((saved.password, saved))
+            if not candidates:
+                candidates.append(('', None))
+
+            wb = None
+            matched_saved = None
+            winning_password = None
+            password_error = None
+            corrupt_error = None
+            for pw, saved_obj in candidates:
+                try:
+                    wb = decrypt_and_load_workbook(file_bytes, pw)
+                    matched_saved = saved_obj
+                    winning_password = pw
+                    break
+                except IncorrectPasswordError as e:
+                    password_error = e
+                    continue
+                except ValueError as e:
+                    corrupt_error = e
+                    break
+
+            if wb is None:
+                if corrupt_error is not None:
+                    results.append({'filename': f.name, 'error': str(corrupt_error)})
+                else:
+                    results.append({'filename': f.name, 'error': str(password_error) if password_error else 'Could not read Excel file.', 'error_code': 'bad_password'})
+                continue
+
+            if matched_saved is not None:
+                from django.utils import timezone
+                matched_saved.last_used_at = timezone.now()
+                matched_saved.save(update_fields=['last_used_at'])
+            elif supplied is not None and save_passwords.get(f.name, True):
+                from django.utils import timezone
+                already_saved = any(s.password == winning_password for s in saved_passwords)
+                if not already_saved:
+                    new_saved = SavedPdfPassword.objects.create(
+                        household=household,
+                        password=winning_password,
+                        last_used_at=timezone.now(),
+                    )
+                    saved_passwords.insert(0, new_saved)
+
+            try:
+                accounts_sheet = wb['Transaction_Account_Summary'] if 'Transaction_Account_Summary' in wb.sheetnames else None
+                deposits_sheet = wb['Deposits_Summary'] if 'Deposits_Summary' in wb.sheetnames else None
+                savings_accounts = parse_savings_accounts_sheet(accounts_sheet) if accounts_sheet else []
+                deposits = parse_deposits_sheet(deposits_sheet) if deposits_sheet else []
+            except Exception as e:
+                results.append({'filename': f.name, 'error': f'Could not parse workbook: {e}'})
+                continue
+
+            if not savings_accounts and not deposits:
+                results.append({'filename': f.name, 'error': 'No recognizable SBI Account Summary sheets found in this file.'})
+                continue
+
+            distinct_account_numbers = sorted({a['account_number'] for a in savings_accounts} | {d['account_number'] for d in deposits})
+
+            results.append({
+                'filename': f.name,
+                'savings_accounts': savings_accounts,
+                'deposits': deposits,
+                'account_numbers': distinct_account_numbers,
+                'members': member_list,
+                'existing_accounts': existing_accounts,
+            })
+
+        return Response(results)
+
+
+class SBIStatementApplyView(APIView):
+    """
+    Step 2: commit records from user-confirmed SBI statement data.
+
+    Expects: household_id, account_mapping ({account_number: {account_id}
+    for an existing account, or {name, member_id} to create one}),
+    savings_accounts (confirmed rows), deposits (confirmed fd_advice/
+    rd_statement rows, each carrying account_number to resolve via
+    account_mapping and member_id for ownership).
+    """
+
+    def post(self, request):
+        from core.models import Household, Member
+        from ingestion.universal_importer import (
+            apply_fd_advice_import,
+            apply_rd_statement_import,
+            apply_sbi_savings_account_import,
+        )
+        from instruments.models import Account
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'error': 'household_id is required'}, status=400)
+
+        try:
+            household = Household.objects.get(pk=int(household_id))
+        except Household.DoesNotExist:
+            return Response({'error': 'Household not found'}, status=404)
+
+        account_mapping = request.data.get('account_mapping', {})
+        savings_accounts = request.data.get('savings_accounts', [])
+        deposits = request.data.get('deposits', [])
+
+        resolved_accounts: dict[str, Account] = {}
+        account_errors: dict[str, str] = {}
+
+        def resolve_account(account_number: str):
+            if account_number in resolved_accounts:
+                return resolved_accounts[account_number]
+            if account_number in account_errors:
+                return None
+
+            mapping = account_mapping.get(account_number)
+            if not mapping:
+                account_errors[account_number] = f'No account mapping provided for {account_number}'
+                return None
+
+            try:
+                if mapping.get('account_id'):
+                    account = Account.objects.get(pk=mapping['account_id'], household=household)
+                else:
+                    name = (mapping.get('name') or '').strip()
+                    if not name:
+                        account_errors[account_number] = f'No account name provided to create account for {account_number}'
+                        return None
+                    account, _ = Account.objects.get_or_create(
+                        household=household,
+                        name=name,
+                        defaults={
+                            'account_type': Account.AccountType.BANK,
+                            'institution_name': 'State Bank of India',
+                        },
+                    )
+                    member_id = mapping.get('member_id')
+                    if member_id:
+                        try:
+                            account.primary_member = Member.objects.get(pk=member_id, household=household)
+                            account.save(update_fields=['primary_member'])
+                        except Member.DoesNotExist:
+                            pass
+            except Account.DoesNotExist:
+                account_errors[account_number] = f'Account {mapping.get("account_id")} not found'
+                return None
+
+            resolved_accounts[account_number] = account
+            return account
+
+        def resolve_member(member_id):
+            if not member_id:
+                return None
+            try:
+                return Member.objects.get(pk=member_id, household=household)
+            except Member.DoesNotExist:
+                return None
+
+        savings_results = []
+        for item in savings_accounts:
+            account_number = (item.get('account_number') or '').strip()
+            try:
+                account = resolve_account(account_number)
+                if account is None:
+                    raise ValueError(account_errors.get(account_number, 'Could not resolve account'))
+                member = resolve_member(item.get('member_id'))
+                result = apply_sbi_savings_account_import(household, member, item, account)
+                result['account_number'] = account_number
+                savings_results.append(result)
+            except Exception as e:
+                savings_results.append({'account_number': account_number, 'error': str(e)})
+
+        deposit_results = []
+        for item in deposits:
+            account_number = (item.get('account_number') or '').strip()
+            metadata = {
+                'sbi_deposit_type': item.get('deposit_type', ''),
+                'sbi_branch': item.get('branch', ''),
+                'sbi_mode_of_operation': item.get('mode_of_operation', ''),
+                'sbi_currency': item.get('currency', ''),
+                'account_number': account_number,
+            }
+            item = {**item, 'metadata': metadata}
+            member = resolve_member(item.get('member_id'))
+            try:
+                if item.get('doc_type') == 'rd_statement':
+                    account = resolve_account(account_number)
+                    if account is None:
+                        raise ValueError(account_errors.get(account_number, 'Could not resolve account'))
+                    if not item.get('tenure_months'):
+                        raise ValueError('tenure_months is required for RD deposits (enter it in the confirm step).')
+                    if not item.get('installment_amount'):
+                        raise ValueError('installment_amount is required for RD deposits (enter it in the confirm step).')
+                    result = apply_rd_statement_import(household, member, item, account)
+                else:
+                    result = apply_fd_advice_import(household, member, item)
+                result['account_number'] = account_number
+                deposit_results.append(result)
+            except Exception as e:
+                deposit_results.append({'account_number': account_number, 'error': str(e)})
+
+        return Response({'savings_accounts': savings_results, 'deposits': deposit_results}, status=201)
+
+
 class NpsPreviewView(APIView):
     """Step 1: parse one or more uploaded NPS transaction statement CSVs (Tier I/II)."""
 

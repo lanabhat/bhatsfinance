@@ -5,10 +5,11 @@ import { FDAdviceImportWizard } from '../components/imports/FDAdviceImportWizard
 import { NpsImportWizard } from '../components/imports/NpsImportWizard'
 import { EpfPassbookImportWizard } from '../components/imports/EpfPassbookImportWizard'
 import { PpfStatementImportWizard } from '../components/imports/PpfStatementImportWizard'
+import { SBIStatementImportWizard } from '../components/imports/SBIStatementImportWizard'
 import { UpstoxConnect } from '../components/integrations/UpstoxConnect'
 import type { OptionItem } from '../types/domain'
 
-type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'nps' | 'epf' | 'ppf'
+type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'nps' | 'epf' | 'ppf' | 'sbi'
 
 type Props = {
   householdId: number
@@ -33,6 +34,7 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
         <button className={tabCls('nps')} onClick={() => setTab('nps')}>NPS Import</button>
         <button className={tabCls('epf')} onClick={() => setTab('epf')}>EPF Import</button>
         <button className={tabCls('ppf')} onClick={() => setTab('ppf')}>PPF Import</button>
+        <button className={tabCls('sbi')} onClick={() => setTab('sbi')}>SBI Statement</button>
       </div>
 
       {tab === 'import' && (
@@ -111,6 +113,17 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
             account's full history, you can estimate the pre-statement principal on the review step.
           </p>
           <PpfStatementImportWizard householdId={householdId} />
+        </article>
+      )}
+
+      {tab === 'sbi' && (
+        <article className="panel">
+          <h2>SBI Statement Import</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Import SBI YONO's "Account Summary" Excel export (.xlsx) — savings account balances and
+            FD/RD deposits are imported together in one file. Password-protected files are supported.
+          </p>
+          <SBIStatementImportWizard householdId={householdId} />
         </article>
       )}
     </section>

@@ -525,6 +525,11 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
             instrument.asset_category = fd_category
             instrument.save(update_fields=['asset_category'])
 
+        extra_metadata = item.get('metadata')
+        if extra_metadata:
+            instrument.metadata = {**instrument.metadata, **extra_metadata}
+            instrument.save(update_fields=['metadata'])
+
         investment_date = _to_date(item['investment_date'])
         principal = _to_decimal(item['principal'])
 
@@ -647,6 +652,11 @@ def apply_rd_statement_import(household, member, item: dict, account) -> dict:
         if not inst_created and not instrument.asset_category and rd_category:
             instrument.asset_category = rd_category
             instrument.save(update_fields=['asset_category'])
+
+        extra_metadata = item.get('metadata')
+        if extra_metadata:
+            instrument.metadata = {**instrument.metadata, **extra_metadata}
+            instrument.save(update_fields=['metadata'])
 
         FDDetails.objects.update_or_create(
             instrument=instrument,
@@ -1582,4 +1592,53 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
         'holdings_created': created,
         'holdings_updated': updated,
         'errors': errors,
+    }
+
+
+def apply_sbi_savings_account_import(household, member, item: dict, account) -> dict:
+    """
+    Record a balance snapshot for a savings account from a user-confirmed
+    row of SBI YONO's Transaction_Account_Summary sheet (see
+    ingestion.sbi_statement_parser.parse_savings_accounts_sheet).
+
+    That sheet reports only a point-in-time available balance per account,
+    not individual transactions (SBI's export has no transaction ledger),
+    so this creates/updates a ValuationSnapshot rather than backfilling
+    Transaction rows — same anchor mechanism compute_account_balance()
+    already reads for every other account.
+
+    `account` is a real, user-mapped/created Account (instruments.models.Account);
+    account-number/branch/mode-of-operation extras are stashed in the
+    account's institution_name and left out of any typed field, matching how
+    other importers fold extras into free-text/metadata rather than adding
+    bank-statement-specific columns to the shared Account model.
+    """
+    from valuations.models import ValuationSnapshot
+
+    statement_date_raw = item.get('statement_date')
+    valuation_date = _to_date(statement_date_raw) if statement_date_raw else date.today()
+    balance = _to_decimal(item.get('available_balance'))
+
+    snapshot, created = ValuationSnapshot.objects.update_or_create(
+        household=household,
+        account=account,
+        instrument=None,
+        valuation_date=valuation_date,
+        defaults={'balance': balance, 'source': ValuationSnapshot.SourceType.CSV},
+    )
+
+    if member:
+        from instruments.models import AccountOwnership
+        AccountOwnership.objects.get_or_create(
+            account=account,
+            member=member,
+            defaults={'allocation_percent': Decimal('100')},
+        )
+
+    return {
+        'account_id': account.id,
+        'account_name': account.name,
+        'balance': str(balance),
+        'valuation_date': valuation_date.isoformat(),
+        'snapshot_created': created,
     }
