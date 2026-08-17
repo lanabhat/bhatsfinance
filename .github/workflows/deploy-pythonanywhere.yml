@@ -20,25 +20,47 @@ jobs:
           AUTH="Authorization: Token ${PA_TOKEN}"
 
           echo "Creating a fresh console for this deploy..."
-          CONSOLE_ID=$(curl -sf -X POST -H "$AUTH" \
+          CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST -H "$AUTH" \
             -d "executable=bash" \
             -d "working_directory=/home/${PA_USERNAME}/bhatsfinance" \
-            "${API}/consoles/" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
+            "${API}/consoles/")
+          CREATE_STATUS=$(echo "$CREATE_RESPONSE" | tail -n1)
+          CREATE_BODY=$(echo "$CREATE_RESPONSE" | sed '$d')
+          if [ "$CREATE_STATUS" -ge 300 ]; then
+            echo "Console creation failed (HTTP $CREATE_STATUS):"
+            echo "$CREATE_BODY"
+            exit 1
+          fi
+          CONSOLE_ID=$(echo "$CREATE_BODY" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
           echo "Console ID: $CONSOLE_ID"
 
           # Give the console a moment to actually spin up before sending input.
           sleep 5
 
           DONE_MARKER="__DEPLOY_DONE_${GITHUB_SHA}__"
-          curl -sf -X POST -H "$AUTH" \
-            --data-urlencode "input=bash deploy.sh; echo ${DONE_MARKER} \$?
-          " \
-            "${API}/consoles/${CONSOLE_ID}/send_input/" > /dev/null
+          INPUT_LINE="bash deploy.sh; echo ${DONE_MARKER} \$?"$'\n'
+          SEND_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST -H "$AUTH" \
+            --data-urlencode "input=${INPUT_LINE}" \
+            "${API}/consoles/${CONSOLE_ID}/send_input/")
+          SEND_STATUS=$(echo "$SEND_RESPONSE" | tail -n1)
+          SEND_BODY=$(echo "$SEND_RESPONSE" | sed '$d')
+          if [ "$SEND_STATUS" -ge 300 ]; then
+            echo "send_input failed (HTTP $SEND_STATUS):"
+            echo "$SEND_BODY"
+            exit 1
+          fi
 
           echo "Polling for completion (up to 5 minutes)..."
           for i in $(seq 1 60); do
             sleep 5
-            OUTPUT=$(curl -sf -H "$AUTH" "${API}/consoles/${CONSOLE_ID}/get_latest_output/" | python3 -c "import sys,json;print(json.load(sys.stdin)['output'])")
+            POLL_RESPONSE=$(curl -s -w "\n%{http_code}" -H "$AUTH" "${API}/consoles/${CONSOLE_ID}/get_latest_output/")
+            POLL_STATUS=$(echo "$POLL_RESPONSE" | tail -n1)
+            POLL_BODY=$(echo "$POLL_RESPONSE" | sed '$d')
+            if [ "$POLL_STATUS" -ge 300 ]; then
+              echo "get_latest_output failed (HTTP $POLL_STATUS): $POLL_BODY"
+              continue
+            fi
+            OUTPUT=$(echo "$POLL_BODY" | python3 -c "import sys,json;print(json.load(sys.stdin)['output'])")
             if echo "$OUTPUT" | grep -q "$DONE_MARKER"; then
               EXIT_CODE=$(echo "$OUTPUT" | grep -o "${DONE_MARKER} [0-9]*" | tail -1 | awk '{print $2}')
               echo "----- deploy.sh output -----"
