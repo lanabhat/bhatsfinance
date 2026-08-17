@@ -18,6 +18,8 @@ if [ -f ".venv/bin/activate" ]; then
   source .venv/bin/activate
 fi
 
+echo "==> pip install"
+pip install -r requirements.txt
 
 echo "==> migrate"
 python manage.py migrate --noinput
