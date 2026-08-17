@@ -26,23 +26,37 @@ jobs:
           # `set -e` (a failing arithmetic test inside an `if` doesn't trip -e).
           api_call() {
             local out_body="$1"; shift
-            local status
-            status=$(curl -s -o "$out_body" -w "%{http_code}" "$@") || { echo "curl itself failed (network error)"; return 1; }
-            if [ -z "$status" ] || ! [ "$status" -eq "$status" ] 2>/dev/null; then
-              echo "curl returned no usable HTTP status"
+            local status curl_exit
+            set +e
+            status=$(curl -sS -o "$out_body" -w "%{http_code}" "$@" 2>/tmp/curl_stderr.log)
+            curl_exit=$?
+            set -e
+            if [ "$curl_exit" != "0" ]; then
+              echo "curl failed with exit code $curl_exit:" >&2
+              cat /tmp/curl_stderr.log >&2
               return 1
             fi
             echo "$status"
           }
+
+          echo "Listing existing consoles (checking for a Free-plan quota ceiling)..."
+          LIST_STATUS=$(api_call /tmp/list_body.json -H "$AUTH" "${API}/consoles/") || { cat /tmp/list_body.json 2>/dev/null; exit 1; }
+          echo "List consoles HTTP status: [$LIST_STATUS]"
+          echo "List consoles response body:"
+          cat /tmp/list_body.json || echo "(no body file / empty)"
+          echo
 
           echo "Creating a fresh console for this deploy..."
           CREATE_STATUS=$(api_call /tmp/create_body.json -X POST -H "$AUTH" \
             -d "executable=bash" \
             -d "working_directory=/home/${PA_USERNAME}/bhatsfinance" \
             "${API}/consoles/") || { cat /tmp/create_body.json 2>/dev/null; exit 1; }
+          echo "Console creation HTTP status: [$CREATE_STATUS]"
+          echo "Console creation response body:"
+          cat /tmp/create_body.json || echo "(no body file / empty)"
+          echo
           if [ "$CREATE_STATUS" -ge 300 ]; then
-            echo "Console creation failed (HTTP $CREATE_STATUS):"
-            cat /tmp/create_body.json
+            echo "Console creation failed (HTTP $CREATE_STATUS)"
             exit 1
           fi
           CONSOLE_ID=$(python3 -c "import json;print(json.load(open('/tmp/create_body.json'))['id'])")
