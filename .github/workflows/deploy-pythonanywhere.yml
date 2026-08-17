@@ -19,19 +19,33 @@ jobs:
           API="https://www.pythonanywhere.com/api/v0/user/${PA_USERNAME}"
           AUTH="Authorization: Token ${PA_TOKEN}"
 
+          # Wraps a curl call, always writing status+body to separate files so
+          # a network-level curl failure (empty response) is distinguishable
+          # from a real HTTP error status, instead of silently falling through
+          # to "success" the way a bare `-w`/`tail`/`[ -ge ]` pipeline can under
+          # `set -e` (a failing arithmetic test inside an `if` doesn't trip -e).
+          api_call() {
+            local out_body="$1"; shift
+            local status
+            status=$(curl -s -o "$out_body" -w "%{http_code}" "$@") || { echo "curl itself failed (network error)"; return 1; }
+            if [ -z "$status" ] || ! [ "$status" -eq "$status" ] 2>/dev/null; then
+              echo "curl returned no usable HTTP status"
+              return 1
+            fi
+            echo "$status"
+          }
+
           echo "Creating a fresh console for this deploy..."
-          CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST -H "$AUTH" \
+          CREATE_STATUS=$(api_call /tmp/create_body.json -X POST -H "$AUTH" \
             -d "executable=bash" \
             -d "working_directory=/home/${PA_USERNAME}/bhatsfinance" \
-            "${API}/consoles/")
-          CREATE_STATUS=$(echo "$CREATE_RESPONSE" | tail -n1)
-          CREATE_BODY=$(echo "$CREATE_RESPONSE" | sed '$d')
+            "${API}/consoles/") || { cat /tmp/create_body.json 2>/dev/null; exit 1; }
           if [ "$CREATE_STATUS" -ge 300 ]; then
             echo "Console creation failed (HTTP $CREATE_STATUS):"
-            echo "$CREATE_BODY"
+            cat /tmp/create_body.json
             exit 1
           fi
-          CONSOLE_ID=$(echo "$CREATE_BODY" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
+          CONSOLE_ID=$(python3 -c "import json;print(json.load(open('/tmp/create_body.json'))['id'])")
           echo "Console ID: $CONSOLE_ID"
 
           # Give the console a moment to actually spin up before sending input.
@@ -39,28 +53,25 @@ jobs:
 
           DONE_MARKER="__DEPLOY_DONE_${GITHUB_SHA}__"
           INPUT_LINE="bash deploy.sh; echo ${DONE_MARKER} \$?"$'\n'
-          SEND_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST -H "$AUTH" \
+          SEND_STATUS=$(api_call /tmp/send_body.json -X POST -H "$AUTH" \
             --data-urlencode "input=${INPUT_LINE}" \
-            "${API}/consoles/${CONSOLE_ID}/send_input/")
-          SEND_STATUS=$(echo "$SEND_RESPONSE" | tail -n1)
-          SEND_BODY=$(echo "$SEND_RESPONSE" | sed '$d')
+            "${API}/consoles/${CONSOLE_ID}/send_input/") || { cat /tmp/send_body.json 2>/dev/null; exit 1; }
           if [ "$SEND_STATUS" -ge 300 ]; then
             echo "send_input failed (HTTP $SEND_STATUS):"
-            echo "$SEND_BODY"
+            cat /tmp/send_body.json
             exit 1
           fi
 
           echo "Polling for completion (up to 5 minutes)..."
           for i in $(seq 1 60); do
             sleep 5
-            POLL_RESPONSE=$(curl -s -w "\n%{http_code}" -H "$AUTH" "${API}/consoles/${CONSOLE_ID}/get_latest_output/")
-            POLL_STATUS=$(echo "$POLL_RESPONSE" | tail -n1)
-            POLL_BODY=$(echo "$POLL_RESPONSE" | sed '$d')
+            POLL_STATUS=$(api_call /tmp/poll_body.json -H "$AUTH" "${API}/consoles/${CONSOLE_ID}/get_latest_output/") || { echo "poll request failed, retrying"; continue; }
             if [ "$POLL_STATUS" -ge 300 ]; then
-              echo "get_latest_output failed (HTTP $POLL_STATUS): $POLL_BODY"
+              echo "get_latest_output failed (HTTP $POLL_STATUS):"
+              cat /tmp/poll_body.json
               continue
             fi
-            OUTPUT=$(echo "$POLL_BODY" | python3 -c "import sys,json;print(json.load(sys.stdin)['output'])")
+            OUTPUT=$(python3 -c "import json;print(json.load(open('/tmp/poll_body.json'))['output'])")
             if echo "$OUTPUT" | grep -q "$DONE_MARKER"; then
               EXIT_CODE=$(echo "$OUTPUT" | grep -o "${DONE_MARKER} [0-9]*" | tail -1 | awk '{print $2}')
               echo "----- deploy.sh output -----"
