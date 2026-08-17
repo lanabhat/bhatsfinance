@@ -87,8 +87,15 @@ jobs:
               continue
             fi
             RUN_OUTPUT=$(echo "$OUTPUT" | awk -v m="$START_MARKER" '$0 ~ m {found=1} found')
-            if echo "$RUN_OUTPUT" | grep -q "$DONE_MARKER"; then
-              EXIT_CODE=$(echo "$RUN_OUTPUT" | grep -o "${DONE_MARKER} [0-9]*" | tail -1 | awk '{print $2}')
+            # Require a digit right after the marker, not just the marker
+            # text — the terminal echoes the typed input line verbatim
+            # (including the literal "$?", not yet expanded) as soon as it's
+            # sent, so a plain text match on DONE_MARKER would false-positive
+            # on that echoed line before deploy.sh has even started running.
+            # Only the real `echo` invocation prints the marker followed by
+            # an actual expanded exit-code digit.
+            if echo "$RUN_OUTPUT" | grep -qE "${DONE_MARKER} [0-9]+"; then
+              EXIT_CODE=$(echo "$RUN_OUTPUT" | grep -oE "${DONE_MARKER} [0-9]+" | tail -1 | awk '{print $2}')
               echo "----- deploy.sh output -----"
               echo "$RUN_OUTPUT"
               echo "-----------------------------"
