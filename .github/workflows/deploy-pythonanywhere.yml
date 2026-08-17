@@ -14,13 +14,14 @@ jobs:
           PA_USERNAME: ${{ secrets.PYTHONANYWHERE_USERNAME }}
           PA_TOKEN: ${{ secrets.PYTHONANYWHERE_API_TOKEN }}
           PA_DOMAIN: ${{ secrets.PYTHONANYWHERE_DOMAIN }}
+          PA_CONSOLE_ID: ${{ secrets.PYTHONANYWHERE_DEPLOY_CONSOLE_ID }}
         run: |
           set -euo pipefail
           API="https://www.pythonanywhere.com/api/v0/user/${PA_USERNAME}"
           AUTH="Authorization: Token ${PA_TOKEN}"
 
-          # Wraps a curl call, always writing status+body to separate files so
-          # a network-level curl failure (empty response) is distinguishable
+          # Wraps a curl call, always writing status+body to a file so a
+          # network-level curl failure (empty response) is distinguishable
           # from a real HTTP error status, instead of silently falling through
           # to "success" the way a bare `-w`/`tail`/`[ -ge ]` pipeline can under
           # `set -e` (a failing arithmetic test inside an `if` doesn't trip -e).
@@ -39,58 +40,30 @@ jobs:
             echo "$status"
           }
 
-          echo "Listing existing consoles (checking for a Free-plan quota ceiling)..."
-          LIST_STATUS=$(api_call /tmp/list_body.json -H "$AUTH" "${API}/consoles/") || { cat /tmp/list_body.json 2>/dev/null; exit 1; }
-          echo "List consoles HTTP status: [$LIST_STATUS]"
-          echo "List consoles response body:"
-          cat /tmp/list_body.json || echo "(no body file / empty)"
-          echo
-
-          echo "Creating a fresh console for this deploy..."
-          CREATE_STATUS=$(api_call /tmp/create_body.json -X POST -H "$AUTH" \
-            -d "executable=bash" \
-            -d "working_directory=/home/${PA_USERNAME}/bhatsfinance" \
-            "${API}/consoles/") || { cat /tmp/create_body.json 2>/dev/null; exit 1; }
-          echo "Console creation HTTP status: [$CREATE_STATUS]"
-          if [ "$CREATE_STATUS" -ge 300 ]; then
-            echo "Console creation failed (HTTP $CREATE_STATUS):"
-            cat /tmp/create_body.json
+          echo "Verifying deploy console $PA_CONSOLE_ID exists..."
+          CHECK_STATUS=$(api_call /tmp/check_body.json -H "$AUTH" "${API}/consoles/${PA_CONSOLE_ID}/") || { cat /tmp/check_body.json 2>/dev/null; exit 1; }
+          if [ "$CHECK_STATUS" -ge 300 ]; then
+            echo "Console $PA_CONSOLE_ID is not reachable (HTTP $CHECK_STATUS):"
+            cat /tmp/check_body.json
+            echo "Create a dedicated console in the PythonAnywhere Consoles tab and update the PYTHONANYWHERE_DEPLOY_CONSOLE_ID secret with its id."
             exit 1
           fi
-          # PythonAnywhere returns this as HTTP 200 with an HTML body (not a
-          # proper error status) when the plan's concurrent-console quota is
-          # full — a stray console from a previous failed run is the usual
-          # cause. Detect it explicitly instead of failing on an opaque JSON
-          # parse error.
-          if grep -q "Console limit reached" /tmp/create_body.json; then
-            echo "Console limit reached on this PythonAnywhere plan."
-            echo "Close an existing console (Dashboard > Consoles tab) and re-run this workflow."
-            exit 1
-          fi
-          CONSOLE_ID=$(python3 -c "import json;print(json.load(open('/tmp/create_body.json'))['id'])") || {
-            echo "Could not parse console creation response as JSON:"
-            cat /tmp/create_body.json
-            exit 1
-          }
-          echo "Console ID: $CONSOLE_ID"
+          echo "Console reachable."
 
-          # Guarantee the console is deleted on any exit path (success,
-          # failure, or timeout) so a failed run never leaves an orphan
-          # eating this plan's console quota the way the first run's did.
-          cleanup() {
-            echo "Cleaning up console $CONSOLE_ID..."
-            curl -s -X DELETE -H "$AUTH" "${API}/consoles/${CONSOLE_ID}/" >/dev/null || true
-          }
-          trap cleanup EXIT
+          # A reused console may be sitting at a stale/mid-typed prompt from a
+          # previous run or manual use, so clear the line before sending the
+          # real command rather than assuming a clean shell.
+          echo "Clearing the console's input line..."
+          curl -s -X POST -H "$AUTH" --data-urlencode "input=$(printf '\x03')" \
+            "${API}/consoles/${PA_CONSOLE_ID}/send_input/" >/dev/null || true
+          sleep 1
 
-          # Give the console a moment to actually spin up before sending input.
-          sleep 5
-
+          START_MARKER="__DEPLOY_START_${GITHUB_SHA}__"
           DONE_MARKER="__DEPLOY_DONE_${GITHUB_SHA}__"
-          INPUT_LINE="bash deploy.sh; echo ${DONE_MARKER} \$?"$'\n'
+          INPUT_LINE="echo ${START_MARKER}; cd /home/${PA_USERNAME}/bhatsfinance && bash deploy.sh; echo ${DONE_MARKER} \$?"$'\n'
           SEND_STATUS=$(api_call /tmp/send_body.json -X POST -H "$AUTH" \
             --data-urlencode "input=${INPUT_LINE}" \
-            "${API}/consoles/${CONSOLE_ID}/send_input/") || { cat /tmp/send_body.json 2>/dev/null; exit 1; }
+            "${API}/consoles/${PA_CONSOLE_ID}/send_input/") || { cat /tmp/send_body.json 2>/dev/null; exit 1; }
           if [ "$SEND_STATUS" -ge 300 ]; then
             echo "send_input failed (HTTP $SEND_STATUS):"
             cat /tmp/send_body.json
@@ -100,17 +73,24 @@ jobs:
           echo "Polling for completion (up to 5 minutes)..."
           for i in $(seq 1 60); do
             sleep 5
-            POLL_STATUS=$(api_call /tmp/poll_body.json -H "$AUTH" "${API}/consoles/${CONSOLE_ID}/get_latest_output/") || { echo "poll request failed, retrying"; continue; }
+            POLL_STATUS=$(api_call /tmp/poll_body.json -H "$AUTH" "${API}/consoles/${PA_CONSOLE_ID}/get_latest_output/") || { echo "poll request failed, retrying"; continue; }
             if [ "$POLL_STATUS" -ge 300 ]; then
               echo "get_latest_output failed (HTTP $POLL_STATUS):"
               cat /tmp/poll_body.json
               continue
             fi
             OUTPUT=$(python3 -c "import json;print(json.load(open('/tmp/poll_body.json'))['output'])")
-            if echo "$OUTPUT" | grep -q "$DONE_MARKER"; then
-              EXIT_CODE=$(echo "$OUTPUT" | grep -o "${DONE_MARKER} [0-9]*" | tail -1 | awk '{print $2}')
+            if ! echo "$OUTPUT" | grep -q "$START_MARKER"; then
+              # This run's command hasn't started echoing yet (or the console's
+              # scrollback rolled it out of the tail PythonAnywhere returns) —
+              # keep waiting rather than risk matching a stale DONE_MARKER.
+              continue
+            fi
+            RUN_OUTPUT=$(echo "$OUTPUT" | awk -v m="$START_MARKER" '$0 ~ m {found=1} found')
+            if echo "$RUN_OUTPUT" | grep -q "$DONE_MARKER"; then
+              EXIT_CODE=$(echo "$RUN_OUTPUT" | grep -o "${DONE_MARKER} [0-9]*" | tail -1 | awk '{print $2}')
               echo "----- deploy.sh output -----"
-              echo "$OUTPUT"
+              echo "$RUN_OUTPUT"
               echo "-----------------------------"
               if [ "$EXIT_CODE" != "0" ]; then
                 echo "deploy.sh exited with code $EXIT_CODE"
