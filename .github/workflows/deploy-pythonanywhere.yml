@@ -1,0 +1,74 @@
+name: Deploy to PythonAnywhere
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run deploy.sh on PythonAnywhere
+        env:
+          PA_USERNAME: ${{ secrets.PYTHONANYWHERE_USERNAME }}
+          PA_TOKEN: ${{ secrets.PYTHONANYWHERE_API_TOKEN }}
+          PA_DOMAIN: ${{ secrets.PYTHONANYWHERE_DOMAIN }}
+        run: |
+          set -euo pipefail
+          API="https://www.pythonanywhere.com/api/v0/user/${PA_USERNAME}"
+          AUTH="Authorization: Token ${PA_TOKEN}"
+
+          echo "Creating a fresh console for this deploy..."
+          CONSOLE_ID=$(curl -sf -X POST -H "$AUTH" \
+            -d "executable=bash" \
+            -d "working_directory=/home/${PA_USERNAME}/bhatsfinance" \
+            "${API}/consoles/" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
+          echo "Console ID: $CONSOLE_ID"
+
+          # Give the console a moment to actually spin up before sending input.
+          sleep 5
+
+          DONE_MARKER="__DEPLOY_DONE_${GITHUB_SHA}__"
+          curl -sf -X POST -H "$AUTH" \
+            --data-urlencode "input=bash deploy.sh; echo ${DONE_MARKER} \$?
+          " \
+            "${API}/consoles/${CONSOLE_ID}/send_input/" > /dev/null
+
+          echo "Polling for completion (up to 5 minutes)..."
+          for i in $(seq 1 60); do
+            sleep 5
+            OUTPUT=$(curl -sf -H "$AUTH" "${API}/consoles/${CONSOLE_ID}/get_latest_output/" | python3 -c "import sys,json;print(json.load(sys.stdin)['output'])")
+            if echo "$OUTPUT" | grep -q "$DONE_MARKER"; then
+              EXIT_CODE=$(echo "$OUTPUT" | grep -o "${DONE_MARKER} [0-9]*" | tail -1 | awk '{print $2}')
+              echo "----- deploy.sh output -----"
+              echo "$OUTPUT"
+              echo "-----------------------------"
+              if [ "$EXIT_CODE" != "0" ]; then
+                echo "deploy.sh exited with code $EXIT_CODE"
+                exit 1
+              fi
+              echo "deploy.sh completed successfully."
+              DEPLOY_OK=1
+              break
+            fi
+          done
+
+          curl -sf -X DELETE -H "$AUTH" "${API}/consoles/${CONSOLE_ID}/" || true
+
+          if [ -z "${DEPLOY_OK:-}" ]; then
+            echo "Timed out waiting for deploy.sh to finish."
+            exit 1
+          fi
+
+      - name: Reload web app
+        env:
+          PA_USERNAME: ${{ secrets.PYTHONANYWHERE_USERNAME }}
+          PA_TOKEN: ${{ secrets.PYTHONANYWHERE_API_TOKEN }}
+          PA_DOMAIN: ${{ secrets.PYTHONANYWHERE_DOMAIN }}
+        run: |
+          set -euo pipefail
+          curl -sf -X POST \
+            -H "Authorization: Token ${PA_TOKEN}" \
+            "https://www.pythonanywhere.com/api/v0/user/${PA_USERNAME}/webapps/${PA_DOMAIN}/reload/"
+          echo "Web app reload triggered."
