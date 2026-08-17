@@ -52,15 +52,36 @@ jobs:
             -d "working_directory=/home/${PA_USERNAME}/bhatsfinance" \
             "${API}/consoles/") || { cat /tmp/create_body.json 2>/dev/null; exit 1; }
           echo "Console creation HTTP status: [$CREATE_STATUS]"
-          echo "Console creation response body:"
-          cat /tmp/create_body.json || echo "(no body file / empty)"
-          echo
           if [ "$CREATE_STATUS" -ge 300 ]; then
-            echo "Console creation failed (HTTP $CREATE_STATUS)"
+            echo "Console creation failed (HTTP $CREATE_STATUS):"
+            cat /tmp/create_body.json
             exit 1
           fi
-          CONSOLE_ID=$(python3 -c "import json;print(json.load(open('/tmp/create_body.json'))['id'])")
+          # PythonAnywhere returns this as HTTP 200 with an HTML body (not a
+          # proper error status) when the plan's concurrent-console quota is
+          # full — a stray console from a previous failed run is the usual
+          # cause. Detect it explicitly instead of failing on an opaque JSON
+          # parse error.
+          if grep -q "Console limit reached" /tmp/create_body.json; then
+            echo "Console limit reached on this PythonAnywhere plan."
+            echo "Close an existing console (Dashboard > Consoles tab) and re-run this workflow."
+            exit 1
+          fi
+          CONSOLE_ID=$(python3 -c "import json;print(json.load(open('/tmp/create_body.json'))['id'])") || {
+            echo "Could not parse console creation response as JSON:"
+            cat /tmp/create_body.json
+            exit 1
+          }
           echo "Console ID: $CONSOLE_ID"
+
+          # Guarantee the console is deleted on any exit path (success,
+          # failure, or timeout) so a failed run never leaves an orphan
+          # eating this plan's console quota the way the first run's did.
+          cleanup() {
+            echo "Cleaning up console $CONSOLE_ID..."
+            curl -s -X DELETE -H "$AUTH" "${API}/consoles/${CONSOLE_ID}/" >/dev/null || true
+          }
+          trap cleanup EXIT
 
           # Give the console a moment to actually spin up before sending input.
           sleep 5
@@ -100,8 +121,6 @@ jobs:
               break
             fi
           done
-
-          curl -sf -X DELETE -H "$AUTH" "${API}/consoles/${CONSOLE_ID}/" || true
 
           if [ -z "${DEPLOY_OK:-}" ]; then
             echo "Timed out waiting for deploy.sh to finish."
