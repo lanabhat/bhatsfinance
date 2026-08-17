@@ -511,6 +511,16 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
 
     fd_category = _get_asset_category(household, 'Fixed Deposit')
 
+    if account_number:
+        clash = Instrument.objects.filter(
+            household=household, instrument_type=Instrument.InstrumentType.FD, symbol=account_number,
+        ).exclude(name=instrument_name).first()
+        if clash:
+            raise ValueError(
+                f'FD account number {account_number} is already recorded as "{clash.name}" — '
+                f'add the new owner to that FD instead of importing it again under a different name.'
+            )
+
     with db_transaction.atomic():
         instrument, inst_created = Instrument.objects.get_or_create(
             household=household,

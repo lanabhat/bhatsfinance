@@ -1,7 +1,19 @@
 import { useEffect, useState } from 'react'
 import { portfolioApi } from '../../api/portfolioApi'
 import { useApp } from '../../context/AppContext'
-import type { Instrument } from '../../types/domain'
+import type { ApiErrorMap, Instrument } from '../../types/domain'
+
+function firstErrorMessage(err: unknown, fallback: string): string {
+  if (err && typeof err === 'object') {
+    const map = err as ApiErrorMap
+    for (const key of ['symbol', 'name', 'non_field_errors', 'detail']) {
+      const val = map[key]
+      if (Array.isArray(val) && val.length > 0) return val[0]
+      if (typeof val === 'string') return val
+    }
+  }
+  return fallback
+}
 
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const INSTRUMENT_TYPES = ['equity','mutual_fund','fd','rd','epf','ppf','nps','gold','real_estate','insurance','cash','other','vehicle','liability','sip'] as const
@@ -69,7 +81,9 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
         await portfolioApi.deleteInstrumentOwnership(existingOwnershipId)
       }
       onSave()
-    } catch { setError('Failed to save instrument') } finally { setSaving(false) }
+    } catch (e) {
+      setError(firstErrorMessage(e, 'Failed to save instrument'))
+    } finally { setSaving(false) }
   }
 
   return (

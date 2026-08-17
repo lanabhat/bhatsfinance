@@ -108,6 +108,21 @@ class Instrument(TimeStampedModel):
     class Meta:
         unique_together = ('household', 'name')
         ordering = ['name']
+        constraints = [
+            # Prevents the same FD account number from being entered twice
+            # under a different instrument name/owner — symbol holds the bank
+            # account number for FDs, and the (household, name) uniqueness
+            # above doesn't catch this because the two rows can have
+            # different names. Scoped to FD only (other instrument types use
+            # symbol differently, e.g. ISIN) and to non-blank symbol so
+            # multiple manually-added FDs without an account number don't
+            # collide with each other.
+            models.UniqueConstraint(
+                fields=['household', 'symbol'],
+                condition=models.Q(instrument_type='fd') & ~models.Q(symbol=''),
+                name='unique_fd_account_number_per_household',
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name

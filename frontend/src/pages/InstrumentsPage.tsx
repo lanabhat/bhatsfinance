@@ -211,6 +211,61 @@ function InstrumentDeleteSheet({ householdId, instrument, onDeleted, onCancel }:
   )
 }
 
+// ── bulk delete by type sheet ────────────────────────────────────────────────
+function BulkDeleteSheet({ householdId, instrumentType, count, onDeleted, onCancel }: {
+  householdId: number; instrumentType: string; count: number; onDeleted: () => void; onCancel: () => void
+}) {
+  const [confirmText, setConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
+  const label = instrumentType.replace(/_/g, ' ')
+  const canConfirm = confirmText.trim().toUpperCase() === 'DELETE'
+
+  const doDelete = async () => {
+    setDeleting(true); setError('')
+    try {
+      await portfolioApi.bulkDeleteInstruments(householdId, [instrumentType])
+      onDeleted()
+    } catch {
+      setError('Failed to delete. Please try again.')
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-4 px-5 py-4">
+      <div className="rounded-xl bg-red-50 dark:bg-red-900/15 border border-red-200 p-3 text-center">
+        <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+          Delete all {count} {label} instrument{count === 1 ? '' : 's'}?
+        </p>
+        <p className="mt-1 text-xs text-red-500">
+          This permanently deletes every {label} instrument for this household, along with their
+          valuation history and ownership assignments. Any linked transactions are kept but detached
+          (no longer counted against this instrument). This cannot be undone.
+        </p>
+      </div>
+      <label className="grid gap-1">
+        <span className="text-xs text-[var(--text-muted)]">Type <strong>DELETE</strong> to confirm</span>
+        <input
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-red-400"
+          placeholder="DELETE"
+          autoFocus
+        />
+      </label>
+      {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+      <div className="flex gap-2 pb-2">
+        <button type="button" onClick={onCancel} className="flex-1 rounded-xl border border-[var(--border)] py-2.5 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
+        <button type="button" disabled={!canConfirm || deleting} onClick={doDelete}
+          className="flex-1 rounded-xl py-2.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 bg-red-500 hover:bg-red-600">
+          {deleting ? 'Deleting…' : `Delete All ${count}`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── main page ─────────────────────────────────────────────────────────────────
 type GroupBy = 'none' | 'category' | 'type' | 'owner'
 type SortBy = 'name' | 'type' | 'category'
@@ -219,6 +274,7 @@ type SheetState =
   | { type: 'instrument'; item?: Instrument }
   | { type: 'delete'; instrument: Instrument }
   | { type: 'category'; item?: AssetCategory }
+  | { type: 'bulk-delete'; instrumentType: string; count: number }
 
 type ViewMode = 'table' | 'card'
 const VIEW_MODE_KEY = 'instruments:viewMode'
@@ -241,6 +297,7 @@ export function InstrumentsPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
+  const [bulkDeleteType, setBulkDeleteType] = useState('')
   const cardExpand = useExpandable<number>()
 
   const changeViewMode = (mode: ViewMode) => {
@@ -299,6 +356,12 @@ export function InstrumentsPage() {
       return a.name.localeCompare(b.name)
     })
   }, [instruments, sortBy, categories])
+
+  const typeCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const i of instruments) m.set(i.instrument_type, (m.get(i.instrument_type) ?? 0) + 1)
+    return new Map(Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b)))
+  }, [instruments])
 
   const grouped = useMemo(() => {
     const g = new Map<string, { items: Instrument[]; color?: string }>()
@@ -447,6 +510,29 @@ export function InstrumentsPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {typeCounts.size > 0 && (
+            <>
+              <select
+                value={bulkDeleteType}
+                onChange={(e) => setBulkDeleteType(e.target.value)}
+                disabled={!canWrite}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--text-2)] focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-50"
+              >
+                <option value="">Delete all of type…</option>
+                {Array.from(typeCounts.entries()).map(([t, c]) => (
+                  <option key={t} value={t}>{t.replace(/_/g, ' ')} ({c})</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!canWrite || !bulkDeleteType}
+                onClick={() => setSheet({ type: 'bulk-delete', instrumentType: bulkDeleteType, count: typeCounts.get(bulkDeleteType) ?? 0 })}
+                className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Delete All
+              </button>
+            </>
+          )}
           <button
             type="button"
             role="switch"
@@ -603,6 +689,12 @@ export function InstrumentsPage() {
         <Sheet title={sheet.item ? 'Edit Category' : 'New Category'} onClose={close}>
           <AssetCategoryForm householdId={householdId} category={sheet.item}
             onSave={async () => { close(); await refreshCategories() }} onCancel={close} />
+        </Sheet>
+      )}
+      {sheet.type === 'bulk-delete' && (
+        <Sheet title="Bulk Delete Instruments" onClose={close}>
+          <BulkDeleteSheet householdId={householdId} instrumentType={sheet.instrumentType} count={sheet.count}
+            onDeleted={async () => { close(); setBulkDeleteType(''); await load() }} onCancel={close} />
         </Sheet>
       )}
     </div>

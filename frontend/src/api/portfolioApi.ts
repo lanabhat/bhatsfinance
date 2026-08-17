@@ -1,4 +1,4 @@
-import { deleteJson, getJson, patchJson, postJson, toQueryString, unwrapList } from './http'
+import { deleteJson, deleteJsonResult, getJson, patchJson, postJson, toQueryString, unwrapList } from './http'
 import type {
   Account,
   AccountOwnership,
@@ -54,6 +54,11 @@ export const portfolioApi = {
   },
   async deleteAccount(id: number) { return deleteJson(`/api/accounts/${id}/`) },
   async deleteInstrument(id: number) { return deleteJson(`/api/instruments/${id}/`) },
+  async bulkDeleteInstruments(householdId: number, instrumentTypes: string[]) {
+    const q = new URLSearchParams({ household_id: String(householdId) })
+    for (const t of instrumentTypes) q.append('instrument_type', t)
+    return deleteJsonResult<{ deleted: number }>(`/api/instruments/bulk-delete/?${q.toString()}`)
+  },
   async deleteAccountOwnership(id: number) { return deleteJson(`/api/account-ownerships/${id}/`) },
   async deleteInstrumentOwnership(id: number) { return deleteJson(`/api/instrument-ownerships/${id}/`) },
 }
