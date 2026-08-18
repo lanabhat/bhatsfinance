@@ -88,7 +88,13 @@ router.register('sms-messages', SmsMessageViewSet, basename='sms-message')
 router.register('sms-rules', SmsRuleViewSet, basename='sms-rule')
 router.register('sms-rule-suggestions', SmsRuleSuggestionViewSet, basename='sms-rule-suggestion')
 
-urlpatterns = router.urls + [
+urlpatterns = [
+    # Must come before router.urls: DefaultRouter's 'instruments/<pk>/'
+    # detail route otherwise swallows 'instruments/bulk-delete/' by matching
+    # pk='bulk-delete', which 404s inside InstrumentViewSet instead of ever
+    # reaching BulkDeleteInstrumentsView.
+    path('instruments/bulk-delete/', BulkDeleteInstrumentsView.as_view(), name='instruments-bulk-delete'),
+] + router.urls + [
     path('csrf/', CsrfView.as_view(), name='csrf'),
     path('holdings', HoldingsView.as_view(), name='holdings'),
     path('holdings/history', HoldingsHistoryView.as_view(), name='holdings-history'),
@@ -126,7 +132,6 @@ urlpatterns = router.urls + [
     path('valuations/bulk-snapshot', BulkSnapshotView.as_view(), name='bulk-snapshot'),
     path('accounts/<int:pk>/balance/', AccountBalanceView.as_view(), name='account-balance'),
     path('fd-details/maturing', MaturingFDsView.as_view(), name='fd-details-maturing'),
-    path('instruments/bulk-delete', BulkDeleteInstrumentsView.as_view(), name='instruments-bulk-delete'),
     path('expense-categories/unmapped', UnmappedExpensesView.as_view(), name='expense-categories-unmapped'),
     path('cash-withdrawal/', CashWithdrawalView.as_view(), name='cash-withdrawal'),
     path('networth-tree/', NetWorthTreeView.as_view(), name='networth-tree'),
