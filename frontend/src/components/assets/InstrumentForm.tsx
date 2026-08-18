@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { portfolioApi } from '../../api/portfolioApi'
 import { useApp } from '../../context/AppContext'
-import type { ApiErrorMap, Instrument } from '../../types/domain'
+import type { ApiErrorMap, FDDetails, Instrument } from '../../types/domain'
 
 function firstErrorMessage(err: unknown, fallback: string): string {
   if (err && typeof err === 'object') {
@@ -17,10 +17,19 @@ function firstErrorMessage(err: unknown, fallback: string): string {
 
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const INSTRUMENT_TYPES = ['equity','mutual_fund','fd','rd','epf','ppf','nps','gold','real_estate','insurance','cash','other','vehicle','liability','sip'] as const
+const COMPOUNDING_OPTIONS = ['simple', 'monthly', 'quarterly', 'half_yearly', 'annually'] as const
 
-function metadataString(metadata: Record<string, unknown>, key: string) {
-  const value = metadata[key]
-  return typeof value === 'string' ? value : ''
+type FDForm = {
+  principal: string
+  annual_rate: string
+  investment_date: string
+  maturity_date: string
+  compounding: FDDetails['compounding']
+  maturity_value: string
+}
+
+const EMPTY_FD_FORM: FDForm = {
+  principal: '', annual_rate: '', investment_date: '', maturity_date: '', compounding: 'quarterly', maturity_value: '',
 }
 
 export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDelete }: {
@@ -42,8 +51,9 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
   const [existingOwnershipId, setExistingOwnershipId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const investmentStartDate = metadataString(form.metadata, 'investment_start_date')
-  const maturityDate = metadataString(form.metadata, 'maturity_date')
+  const [fdForm, setFdForm] = useState<FDForm>(EMPTY_FD_FORM)
+  const [existingFDDetailsId, setExistingFDDetailsId] = useState<number | null>(null)
+  const [fdLoaded, setFdLoaded] = useState(!instrument)
 
   useEffect(() => {
     if (!instrument) return
@@ -55,14 +65,22 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
     }).catch(() => {})
   }, [instrument])
 
-  const setMetadataValue = (key: string, value: string) => {
-    setForm((current) => {
-      const nextMetadata = { ...current.metadata }
-      if (value) nextMetadata[key] = value
-      else delete nextMetadata[key]
-      return { ...current, metadata: nextMetadata }
-    })
-  }
+  useEffect(() => {
+    if (!instrument || instrument.instrument_type !== 'fd') { setFdLoaded(true); return }
+    portfolioApi.getFDDetails(instrument.id).then((details) => {
+      if (details) {
+        setExistingFDDetailsId(details.id)
+        setFdForm({
+          principal: details.principal,
+          annual_rate: details.annual_rate,
+          investment_date: details.investment_date,
+          maturity_date: details.maturity_date,
+          compounding: details.compounding,
+          maturity_value: details.maturity_value ?? '',
+        })
+      }
+    }).finally(() => setFdLoaded(true))
+  }, [instrument])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setError('')
@@ -79,6 +97,23 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
         }
       } else if (existingOwnershipId) {
         await portfolioApi.deleteInstrumentOwnership(existingOwnershipId)
+      }
+
+      if (form.instrument_type === 'fd' && fdForm.principal && fdForm.annual_rate && fdForm.investment_date && fdForm.maturity_date) {
+        const payload = {
+          instrument: saved.id,
+          principal: fdForm.principal,
+          annual_rate: fdForm.annual_rate,
+          investment_date: fdForm.investment_date,
+          maturity_date: fdForm.maturity_date,
+          compounding: fdForm.compounding,
+          maturity_value: fdForm.maturity_value || null,
+        }
+        if (existingFDDetailsId) {
+          await portfolioApi.updateFDDetails(existingFDDetailsId, payload)
+        } else {
+          await portfolioApi.createFDDetails(payload)
+        }
       }
       onSave()
     } catch (e) {
@@ -114,18 +149,39 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
         <p className="mt-1 text-[11px] text-[var(--text-muted)]">Which household member owns this holding — drives per-member net worth.</p>
       </div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Symbol / Ticker</label>
-        <input className={INP} value={form.symbol ?? ''} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} /></div>
+        <input className={INP} value={form.symbol ?? ''} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} />
+        {form.instrument_type === 'fd' && (
+          <p className="mt-1 text-[11px] text-[var(--text-muted)]">For FDs, this is the bank account number — used to detect duplicate FDs.</p>
+        )}
+      </div>
+      <label className="flex items-center gap-2 py-1">
+        <input type="checkbox" checked={form.is_active} onChange={(e) => setForm((p) => ({ ...p, is_active: e.target.checked }))} />
+        <span className="text-sm text-[var(--text-2)]">Active</span>
+      </label>
       {form.instrument_type === 'fd' && (
         <div className="grid gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
           <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">Fixed Deposit Details</p>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Investment Start Date (Optional)</label>
-            <input type="date" className={INP} value={investmentStartDate} onChange={(e) => setMetadataValue('investment_start_date', e.target.value)} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Maturity Date (Optional)</label>
-            <input type="date" className={INP} value={maturityDate} onChange={(e) => setMetadataValue('maturity_date', e.target.value)} />
-          </div>
+          {!fdLoaded ? (
+            <p className="text-xs text-[var(--text-muted)]">Loading…</p>
+          ) : (
+            <>
+              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Principal (₹)</label>
+                <input type="number" className={INP} value={fdForm.principal} onChange={(e) => setFdForm((p) => ({ ...p, principal: e.target.value }))} /></div>
+              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Annual Rate (%)</label>
+                <input type="number" step="0.01" className={INP} value={fdForm.annual_rate} onChange={(e) => setFdForm((p) => ({ ...p, annual_rate: e.target.value }))} /></div>
+              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Investment Date</label>
+                <input type="date" className={INP} value={fdForm.investment_date} onChange={(e) => setFdForm((p) => ({ ...p, investment_date: e.target.value }))} /></div>
+              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Maturity Date</label>
+                <input type="date" className={INP} value={fdForm.maturity_date} onChange={(e) => setFdForm((p) => ({ ...p, maturity_date: e.target.value }))} /></div>
+              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Compounding</label>
+                <select className={INP} value={fdForm.compounding} onChange={(e) => setFdForm((p) => ({ ...p, compounding: e.target.value as FDForm['compounding'] }))}>
+                  {COMPOUNDING_OPTIONS.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+                </select></div>
+              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Maturity Value (₹, optional — bank-stated if known)</label>
+                <input type="number" className={INP} value={fdForm.maturity_value} onChange={(e) => setFdForm((p) => ({ ...p, maturity_value: e.target.value }))} /></div>
+              <p className="text-[11px] text-[var(--text-muted)]">Fill in principal, rate, and both dates to save/update the FD's maturity details.</p>
+            </>
+          )}
         </div>
       )}
       {error && <p className="text-xs text-red-500">{error}</p>}

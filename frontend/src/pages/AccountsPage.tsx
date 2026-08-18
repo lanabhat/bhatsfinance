@@ -127,6 +127,10 @@ function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
           <input type="number" min={1} max={31} className={INP} placeholder="e.g. 5 (5th of each month)"
             value={form.statement_due_day ?? ''} onChange={(e) => setForm((p) => ({ ...p, statement_due_day: e.target.value ? Number(e.target.value) : null }))} /></div>
       </>)}
+      <label className="flex items-center gap-2 py-1">
+        <input type="checkbox" checked={form.is_active} onChange={(e) => setForm((p) => ({ ...p, is_active: e.target.checked }))} />
+        <span className="text-sm text-[var(--text-2)]">Active</span>
+      </label>
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2 pt-2">
         <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">

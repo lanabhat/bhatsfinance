@@ -3,6 +3,7 @@ import type {
   Account,
   AccountOwnership,
   ApiListResponse,
+  FDDetails,
   Instrument,
   InstrumentOwnership,
 } from '../types/domain'
@@ -61,4 +62,15 @@ export const portfolioApi = {
   },
   async deleteAccountOwnership(id: number) { return deleteJson(`/api/account-ownerships/${id}/`) },
   async deleteInstrumentOwnership(id: number) { return deleteJson(`/api/instrument-ownerships/${id}/`) },
+  async getFDDetails(instrumentId: number) {
+    const q = toQueryString({ instrument: instrumentId })
+    const data = await getJson<ApiListResponse<FDDetails>>(`/api/fd-details/?${q}`)
+    return unwrapList(data)[0] ?? null
+  },
+  async createFDDetails(payload: Omit<FDDetails, 'id'>) {
+    return postJson<FDDetails>('/api/fd-details/', payload)
+  },
+  async updateFDDetails(id: number, payload: Partial<Omit<FDDetails, 'id'>>) {
+    return patchJson<FDDetails>(`/api/fd-details/${id}/`, payload)
+  },
 }
