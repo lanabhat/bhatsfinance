@@ -214,6 +214,7 @@ export type Instrument = {
     | 'sip'
     | 'fd'
     | 'rd'
+    | 'bond'
     | 'epf'
     | 'ppf'
     | 'nps'

@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
-import type { FundPerformanceRow } from '../../types/domain'
+import type { CagrByPeriod, FundPerformanceRow } from '../../types/domain'
 
 type Props = { rows: FundPerformanceRow[] }
 
-type SortKey = 'name' | 'allocation' | 'xirr' | '3M' | '6M' | '1Y' | '3Y' | '5Y'
+type SortKey = 'name' | 'allocation' | 'xirr' | keyof CagrByPeriod
 
-const PERIOD_KEYS: SortKey[] = ['3M', '6M', '1Y', '3Y', '5Y']
+const PERIOD_KEYS: (keyof CagrByPeriod)[] = ['3M', '6M', '1Y', '3Y', '5Y']
 
 function num(v: number | null | undefined): number {
   return v === null || v === undefined ? -Infinity : v
