@@ -12,3 +12,5 @@ xlrd==2.0.2
 reportlab==5.0.0
 cryptography==45.0.6
 whitenoise==6.11.0
+requests==2.33.1
+google-genai==2.19.0

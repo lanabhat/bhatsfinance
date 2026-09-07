@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { getJson, toQueryString, unwrapList, deleteJson } from '../api/http'
 import { Money } from '../components/common/Money'
+import { assetCategoryApi } from '../api/assetCategoryApi'
 import { portfolioApi } from '../api/portfolioApi'
 import { AssetCategoryForm } from '../components/assets/AssetCategoryForm'
 import { InstrumentForm } from '../components/assets/InstrumentForm'
 import { InstrumentRow } from '../components/assets/InstrumentRow'
 import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
+import { BulkClassifyReviewModal } from '../components/instruments/BulkClassifyReviewModal'
 import { useExpandable } from '../hooks/useExpandable'
 import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
@@ -298,6 +300,10 @@ export function InstrumentsPage() {
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
   const [bulkDeleteType, setBulkDeleteType] = useState('')
+  const [selectedInstrumentIds, setSelectedInstrumentIds] = useState<Set<number>>(new Set())
+  const [bulkTagCategory, setBulkTagCategory] = useState('')
+  const [bulkTagging, setBulkTagging] = useState(false)
+  const [showBulkClassify, setShowBulkClassify] = useState(false)
   const cardExpand = useExpandable<number>()
 
   const changeViewMode = (mode: ViewMode) => {
@@ -379,6 +385,37 @@ export function InstrumentsPage() {
   const close = () => setSheet({ type: 'none' })
   const afterSave = async () => { close(); await load() }
 
+  const toggleInstrumentSelected = (id: number) => {
+    setSelectedInstrumentIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const applyBulkTag = async () => {
+    if (selectedInstrumentIds.size === 0) return
+    setBulkTagging(true)
+    try {
+      await portfolioApi.bulkUpdateInstrumentCategory(
+        Array.from(selectedInstrumentIds),
+        bulkTagCategory ? Number(bulkTagCategory) : null,
+      )
+      setSelectedInstrumentIds(new Set())
+      setBulkTagCategory('')
+      await load()
+      await refreshCategories()
+    } finally {
+      setBulkTagging(false)
+    }
+  }
+
+  const deleteCategory = async (id: number) => {
+    if (!confirm('Delete this category? Instruments will become uncategorised.')) return
+    await assetCategoryApi.delete(id)
+    await refreshCategories()
+  }
+
   const pillCls = (active: boolean) =>
     `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`
 
@@ -386,41 +423,52 @@ export function InstrumentsPage() {
     const cat = categories.find((c) => c.id === inst.asset_category)
     const isExpanded = cardExpand.isExpanded(inst.id)
     return (
-      <ExpandableGridCard
-        key={inst.id}
-        expanded={isExpanded}
-        onToggle={() => cardExpand.toggle(inst.id)}
-        className={isExpanded ? 'ring-2 ring-primary-400 ring-offset-1 rounded-xl' : ''}
-        collapsed={<InstrumentRow instrument={inst} category={cat} />}
-      >
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <dt className="text-xs text-[var(--text-muted)]">Owner</dt>
-              <dd className="text-[var(--text)]">{ownerMap.get(inst.id) ?? 'Unassigned'}</dd>
+      <div key={inst.id} className="flex items-start gap-2">
+        {canWrite && (
+          <input
+            type="checkbox"
+            checked={selectedInstrumentIds.has(inst.id)}
+            onChange={() => toggleInstrumentSelected(inst.id)}
+            className="mt-3 h-4 w-4 shrink-0 rounded border-[var(--border)] text-primary-600 focus:ring-primary-500"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <ExpandableGridCard
+            expanded={isExpanded}
+            onToggle={() => cardExpand.toggle(inst.id)}
+            className={isExpanded ? 'ring-2 ring-primary-400 ring-offset-1 rounded-xl' : ''}
+            collapsed={<InstrumentRow instrument={inst} category={cat} />}
+          >
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt className="text-xs text-[var(--text-muted)]">Owner</dt>
+                  <dd className="text-[var(--text)]">{ownerMap.get(inst.id) ?? 'Unassigned'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[var(--text-muted)]">Category</dt>
+                  <dd className="text-[var(--text)]">{cat?.name ?? 'Uncategorised'}</dd>
+                </div>
+              </dl>
+              <div className="mt-3 flex gap-2">
+                <button type="button" onClick={() => setSheet({ type: 'instrument', item: inst })} disabled={!canWrite}
+                  className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
+                  Edit
+                </button>
+                <button type="button" onClick={() => setSheet({ type: 'delete', instrument: inst })} disabled={!canWrite}
+                  className="flex-1 rounded-lg border border-red-200 py-2 text-sm text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
+                  Delete
+                </button>
+              </div>
             </div>
-            <div>
-              <dt className="text-xs text-[var(--text-muted)]">Category</dt>
-              <dd className="text-[var(--text)]">{cat?.name ?? 'Uncategorised'}</dd>
-            </div>
-          </dl>
-          <div className="mt-3 flex gap-2">
-            <button type="button" onClick={() => setSheet({ type: 'instrument', item: inst })} disabled={!canWrite}
-              className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
-              Edit
-            </button>
-            <button type="button" onClick={() => setSheet({ type: 'delete', instrument: inst })} disabled={!canWrite}
-              className="flex-1 rounded-lg border border-red-200 py-2 text-sm text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
-              Delete
-            </button>
-          </div>
+          </ExpandableGridCard>
         </div>
-      </ExpandableGridCard>
+      </div>
     )
   }
 
   const TYPE_ICONS: Record<string, string> = {
-    mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡',
+    mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', bond: '📜', epf: '🛡',
     ppf: '🛡', nps: '🛡', gold: '🪙', real_estate: '🏠', sip: '🔄',
     insurance: '☂️', cash: '💵', other: '💼', vehicle: '🚗', liability: '⚠️',
   }
@@ -434,6 +482,14 @@ export function InstrumentsPage() {
       <tr key={inst.id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]">
         <td className="px-3 py-2">
           <div className="flex items-center gap-2">
+            {canWrite && (
+              <input
+                type="checkbox"
+                checked={selectedInstrumentIds.has(inst.id)}
+                onChange={() => toggleInstrumentSelected(inst.id)}
+                className="h-4 w-4 shrink-0 rounded border-[var(--border)] text-primary-600 focus:ring-primary-500"
+              />
+            )}
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
               {TYPE_ICONS[inst.instrument_type] ?? '💼'}
             </span>
@@ -510,6 +566,15 @@ export function InstrumentsPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {canWrite && (
+            <button
+              type="button"
+              onClick={() => setShowBulkClassify(true)}
+              className="shrink-0 rounded-lg border border-indigo-300 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-900/20"
+            >
+              Classify all with AI
+            </button>
+          )}
           {typeCounts.size > 0 && (
             <>
               <select
@@ -550,6 +615,35 @@ export function InstrumentsPage() {
           </button>
         </div>
       </div>
+
+      {canWrite && selectedInstrumentIds.size > 0 && (
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 dark:border-indigo-800/50 dark:bg-indigo-900/20">
+          <span className="text-xs font-medium text-indigo-700 dark:text-indigo-300">{selectedInstrumentIds.size} selected</span>
+          <select
+            value={bulkTagCategory}
+            onChange={(e) => setBulkTagCategory(e.target.value)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="">— Uncategorised —</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button
+            type="button"
+            disabled={bulkTagging}
+            onClick={applyBulkTag}
+            className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {bulkTagging ? 'Applying…' : 'Apply tag'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedInstrumentIds(new Set())}
+            className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-300"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
@@ -604,6 +698,7 @@ export function InstrumentsPage() {
                 <p className="flex-1 text-sm text-[var(--text-2)]">{cat.name}</p>
                 <p className="text-xs text-[var(--text-muted)]">{cat.instrument_count}</p>
                 <button type="button" onClick={() => setSheet({ type: 'category', item: cat })} disabled={!canWrite} className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-300 disabled:opacity-50">Edit</button>
+                <button type="button" onClick={() => deleteCategory(cat.id)} disabled={!canWrite} className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50">Delete</button>
               </div>
             ))}
           </div>
@@ -696,6 +791,13 @@ export function InstrumentsPage() {
           <BulkDeleteSheet householdId={householdId} instrumentType={sheet.instrumentType} count={sheet.count}
             onDeleted={async () => { close(); setBulkDeleteType(''); await load() }} onCancel={close} />
         </Sheet>
+      )}
+      {showBulkClassify && (
+        <BulkClassifyReviewModal
+          householdId={householdId}
+          onClose={() => setShowBulkClassify(false)}
+          onApplied={async () => { setShowBulkClassify(false); await load() }}
+        />
       )}
     </div>
   )

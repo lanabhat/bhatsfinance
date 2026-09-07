@@ -1,6 +1,18 @@
 from rest_framework import serializers
 
-from instruments.models import Account, AccountOwnership, AssetCategory, FDDetails, Instrument, InstrumentOwnership
+from instruments.models import (
+    Account,
+    AccountOwnership,
+    AllocationTarget,
+    AssetCategory,
+    BondDetails,
+    FDDetails,
+    FundHolding,
+    FundHoldingsSnapshot,
+    Instrument,
+    InstrumentOwnership,
+    MutualFundDetails,
+)
 
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -56,6 +68,7 @@ class InstrumentSerializer(serializers.ModelSerializer):
             'symbol',
             'metadata',
             'is_active',
+            'include_in_rebalancing',
             'created_at',
             'updated_at',
         ]
@@ -110,8 +123,81 @@ class FDDetailsSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
+class BondDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BondDetails
+        fields = [
+            'id',
+            'instrument',
+            'issuer_name',
+            'bond_type',
+            'isin',
+            'face_value',
+            'quantity',
+            'coupon_rate',
+            'coupon_frequency',
+            'investment_date',
+            'maturity_date',
+            'first_coupon_date',
+            'grace_days',
+            'maturity_value',
+            'credit_rating',
+            'notes',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
 class InstrumentOwnershipSerializer(serializers.ModelSerializer):
     class Meta:
         model = InstrumentOwnership
         fields = ['id', 'instrument', 'member', 'allocation_percent', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class MutualFundDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MutualFundDetails
+        fields = [
+            'id',
+            'instrument',
+            'amc',
+            'fund_category',
+            'fund_sub_category',
+            'folio_no',
+            'expense_ratio',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class AllocationTargetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AllocationTarget
+        fields = ['id', 'household', 'asset_category', 'target_percent', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class FundHoldingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FundHolding
+        fields = ['id', 'isin', 'instrument_name', 'industry', 'weight_percent']
+        read_only_fields = ['id']
+
+
+class FundHoldingsSnapshotSerializer(serializers.ModelSerializer):
+    holdings = FundHoldingSerializer(many=True, read_only=True)
+    holding_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FundHoldingsSnapshot
+        fields = [
+            'id', 'instrument', 'as_of_date', 'source_url', 'uploaded_file_name',
+            'holding_count', 'holdings', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'holding_count', 'holdings', 'created_at', 'updated_at']
+
+    def get_holding_count(self, obj):
+        return obj.holdings.count()

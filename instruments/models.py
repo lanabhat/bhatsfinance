@@ -73,6 +73,7 @@ class Instrument(TimeStampedModel):
         SIP = 'sip', 'SIP'
         FD = 'fd', 'Fixed Deposit'
         RD = 'rd', 'Recurring Deposit'
+        BOND = 'bond', 'Bond'
         EPF = 'epf', 'EPF'
         PPF = 'ppf', 'PPF'
         NPS = 'nps', 'NPS'
@@ -104,6 +105,12 @@ class Instrument(TimeStampedModel):
     symbol = models.CharField(max_length=32, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     is_active = models.BooleanField(default=True)
+    include_in_rebalancing = models.BooleanField(
+        default=True,
+        help_text="Uncheck to exclude this holding from allocation targets and rebalancing "
+                  "suggestions (e.g. an emergency-fund FD or an heirloom asset you don't want "
+                  "to rebalance).",
+    )
 
     class Meta:
         unique_together = ('household', 'name')
@@ -150,6 +157,69 @@ class FDDetails(TimeStampedModel):
         return f'{self.instrument.name} FD @ {self.annual_rate}%'
 
 
+class BondDetails(TimeStampedModel):
+    """Fixed-income bond details — coupon schedule and maturity, for computing
+    current value and generating coupon-due reminders."""
+
+    class CouponFrequency(models.TextChoices):
+        MONTHLY = 'monthly', 'Monthly'
+        QUARTERLY = 'quarterly', 'Quarterly'
+        HALF_YEARLY = 'half_yearly', 'Half-Yearly'
+        ANNUAL = 'annual', 'Annual'
+        CUMULATIVE = 'cumulative', 'Cumulative (paid at maturity)'
+
+    class BondType(models.TextChoices):
+        GOVERNMENT = 'government', 'Government Bond'
+        CORPORATE = 'corporate', 'Corporate Bond'
+        TAX_FREE = 'tax_free', 'Tax-Free Bond'
+        SGB = 'sgb', 'Sovereign Gold Bond'
+        NCD = 'ncd', 'NCD'
+        OTHER = 'other', 'Other'
+
+    instrument = models.OneToOneField(Instrument, on_delete=models.CASCADE, related_name='bond_details')
+    issuer_name = models.CharField(max_length=200, blank=True)
+    bond_type = models.CharField(max_length=20, choices=BondType.choices, default=BondType.OTHER)
+    isin = models.CharField(max_length=20, blank=True)
+    face_value = models.DecimalField(max_digits=18, decimal_places=2, help_text='Face value per unit, or total invested amount for a single holding')
+    quantity = models.PositiveIntegerField(default=1, help_text='Number of units held, if applicable')
+    coupon_rate = models.DecimalField(max_digits=6, decimal_places=4, help_text='Annual coupon rate as percentage, e.g. 7.75')
+    coupon_frequency = models.CharField(max_length=20, choices=CouponFrequency.choices, default=CouponFrequency.ANNUAL)
+    investment_date = models.DateField()
+    maturity_date = models.DateField()
+    first_coupon_date = models.DateField(
+        null=True, blank=True,
+        help_text='First coupon due date, if different from one period after investment_date',
+    )
+    grace_days = models.PositiveSmallIntegerField(default=15)
+    maturity_value = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True, help_text='Issuer-stated redemption value if known')
+    credit_rating = models.CharField(max_length=20, blank=True, help_text='e.g. AAA, AA+')
+    notes = models.TextField(blank=True)
+
+    def __str__(self) -> str:
+        return f'{self.instrument.name} bond @ {self.coupon_rate}%'
+
+
+class BondCouponAck(TimeStampedModel):
+    """Acknowledgement that a bond coupon payment was received/verified outside the ledger.
+
+    Suppresses the coupon-due reminder for the corresponding due date without
+    creating a Transaction (e.g. credited to an untracked account, or already
+    recorded elsewhere).
+    """
+
+    bond = models.ForeignKey(BondDetails, on_delete=models.CASCADE, related_name='coupon_acks')
+    due_date = models.DateField()
+    acknowledged_on = models.DateField()
+    note = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        unique_together = ('bond', 'due_date')
+        ordering = ['-due_date']
+
+    def __str__(self) -> str:
+        return f'{self.bond.instrument.name} coupon {self.due_date}'
+
+
 class InstrumentOwnership(TimeStampedModel):
     instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE, related_name='ownerships')
     member = models.ForeignKey('core.Member', on_delete=models.CASCADE, related_name='instrument_ownerships')
@@ -157,5 +227,71 @@ class InstrumentOwnership(TimeStampedModel):
 
     class Meta:
         unique_together = ('instrument', 'member')
+
+
+class MutualFundDetails(TimeStampedModel):
+    """Structured mutual-fund detail fields, promoted out of Instrument.metadata JSON."""
+
+    instrument = models.OneToOneField(Instrument, on_delete=models.CASCADE, related_name='mf_details')
+    amc = models.CharField(max_length=120, blank=True)
+    fund_category = models.CharField(max_length=80, blank=True, help_text='e.g. Equity, Debt, Hybrid')
+    fund_sub_category = models.CharField(max_length=80, blank=True, help_text='e.g. Large Cap, Flexi Cap')
+    folio_no = models.CharField(max_length=60, blank=True)
+    expense_ratio = models.DecimalField(
+        max_digits=5, decimal_places=3, null=True, blank=True,
+        help_text='Total expense ratio (TER) as a percentage, e.g. 0.450. From the fund factsheet.',
+    )
+
+    def __str__(self) -> str:
+        return f'{self.instrument.name} ({self.amc})'
+
+
+class AllocationTarget(TimeStampedModel):
+    """User-defined target allocation percentage per AssetCategory, used for rebalancing."""
+
+    household = models.ForeignKey('core.Household', on_delete=models.CASCADE, related_name='allocation_targets')
+    asset_category = models.ForeignKey(AssetCategory, on_delete=models.CASCADE, related_name='allocation_targets')
+    target_percent = models.DecimalField(max_digits=5, decimal_places=2)
+
+    class Meta:
+        unique_together = ('household', 'asset_category')
+        ordering = ['asset_category__sort_order']
+
+    def __str__(self) -> str:
+        return f'{self.asset_category.name} target {self.target_percent}%'
+
+
+class FundHoldingsSnapshot(TimeStampedModel):
+    """One monthly portfolio-disclosure upload for an MF/equity instrument, giving its
+    stock-level composition as of a specific date — used for overlap/diversification analysis."""
+
+    instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE, related_name='holdings_snapshots')
+    as_of_date = models.DateField()
+    source_url = models.URLField(blank=True, max_length=500, help_text='Where you downloaded this from, for next time.')
+    uploaded_file_name = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        unique_together = ('instrument', 'as_of_date')
+        ordering = ['-as_of_date']
+
+    def __str__(self) -> str:
+        return f'{self.instrument.name} holdings @ {self.as_of_date}'
+
+
+class FundHolding(TimeStampedModel):
+    """One stock position within a FundHoldingsSnapshot, parsed from the AMC's monthly
+    portfolio disclosure (ISIN, instrument name, industry, % to Net Assets)."""
+
+    snapshot = models.ForeignKey(FundHoldingsSnapshot, on_delete=models.CASCADE, related_name='holdings')
+    isin = models.CharField(max_length=20, blank=True)
+    instrument_name = models.CharField(max_length=200)
+    industry = models.CharField(max_length=120, blank=True)
+    weight_percent = models.DecimalField(max_digits=7, decimal_places=4)
+
+    class Meta:
+        ordering = ['-weight_percent']
+
+    def __str__(self) -> str:
+        return f'{self.instrument_name} ({self.weight_percent}%)'
 
 # Create your models here.

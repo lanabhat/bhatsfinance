@@ -5,7 +5,9 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from insights.services import compute_allocation, compute_cashflow, compute_category_breakdown, compute_holdings, compute_holdings_history, compute_household_accounts, compute_member_accounts, compute_members_networth, compute_networth, compute_spend_analytics, compute_xirr
+from insights.allocation_templates import calculate_age, suggest_category_targets
+from insights.overlap import compute_portfolio_diversification
+from insights.services import compute_allocation, compute_cashflow, compute_category_breakdown, compute_fund_performance, compute_holdings, compute_holdings_history, compute_household_accounts, compute_member_accounts, compute_members_networth, compute_networth, compute_rebalancing, compute_spend_analytics, compute_xirr
 
 
 def _get_member_id(request):
@@ -88,6 +90,50 @@ class CategoryBreakdownView(APIView):
         return Response({'breakdown': compute_category_breakdown(int(household_id), as_of, _get_member_id(request))})
 
 
+class RebalancingView(APIView):
+    def get(self, request):
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        as_of = date.fromisoformat(request.query_params['as_of']) if request.query_params.get('as_of') else date.today()
+        return Response({'as_of': as_of, **compute_rebalancing(int(household_id), as_of)})
+
+
+class AllocationSuggestionView(APIView):
+    def get(self, request):
+        from core.models import Member
+
+        household_id = request.query_params.get('household_id')
+        member_id = request.query_params.get('member_id')
+        if not household_id or not member_id:
+            return Response({'detail': 'household_id and member_id query parameters are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            member = Member.objects.get(pk=member_id, household_id=household_id)
+        except Member.DoesNotExist:
+            return Response({'detail': 'Member not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if member.date_of_birth is None:
+            return Response({'detail': 'This member has no date of birth set — add one to get an age-based suggestion.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        equity_base = int(request.query_params.get('equity_base', 100))
+        if equity_base not in (100, 110, 120):
+            return Response({'detail': 'equity_base must be 100, 110, or 120.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        as_of = date.fromisoformat(request.query_params['as_of']) if request.query_params.get('as_of') else date.today()
+        age = calculate_age(member.date_of_birth, as_of)
+        result = suggest_category_targets(int(household_id), as_of, age, equity_base)
+        return Response(result)
+
+
+class DiversificationView(APIView):
+    def get(self, request):
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        as_of = date.fromisoformat(request.query_params['as_of']) if request.query_params.get('as_of') else date.today()
+        return Response({'as_of': as_of, **compute_portfolio_diversification(int(household_id), as_of)})
+
+
 class SpendAnalyticsView(APIView):
     def get(self, request):
         household_id = request.query_params.get('household_id')
@@ -128,3 +174,12 @@ class HoldingsHistoryView(APIView):
         member_id = _get_member_id(request)
         history = compute_holdings_history(int(household_id), instrument_type, member_id)
         return Response({'history': history})
+
+
+class FundPerformanceView(APIView):
+    def get(self, request):
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        as_of = date.fromisoformat(request.query_params['as_of']) if request.query_params.get('as_of') else date.today()
+        return Response({'as_of': as_of, 'funds': compute_fund_performance(int(household_id), as_of)})

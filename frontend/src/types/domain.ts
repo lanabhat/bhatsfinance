@@ -25,6 +25,7 @@ export type Household = {
   id: number
   name: string
   base_currency: string
+  risk_free_rate_percent: string
 }
 
 export type Member = {
@@ -32,6 +33,7 @@ export type Member = {
   household: number
   full_name: string
   email: string
+  date_of_birth: string | null
   relation_type: 'self' | 'spouse' | 'child' | 'parent' | 'other'
   is_active: boolean
   include_in_networth: boolean
@@ -225,6 +227,7 @@ export type Instrument = {
   symbol: string
   metadata: Record<string, unknown>
   is_active: boolean
+  include_in_rebalancing: boolean
 }
 
 export type InstrumentOwnership = {
@@ -443,6 +446,89 @@ export type FDDetails = {
   maturity_value: string | null
 }
 
+export type BondDetails = {
+  id: number
+  instrument: number
+  issuer_name: string
+  bond_type: 'government' | 'corporate' | 'tax_free' | 'sgb' | 'ncd' | 'other'
+  isin: string
+  face_value: string
+  quantity: number
+  coupon_rate: string
+  coupon_frequency: 'monthly' | 'quarterly' | 'half_yearly' | 'annual' | 'cumulative'
+  investment_date: string
+  maturity_date: string
+  first_coupon_date: string | null
+  grace_days: number
+  maturity_value: string | null
+  credit_rating: string
+  notes: string
+}
+
+export type MaturingBond = {
+  instrument_id: number
+  instrument_name: string
+  instrument_type: string
+  issuer_name: string
+  face_value: string
+  quantity: number
+  coupon_rate: string
+  investment_date: string
+  maturity_date: string
+  days_remaining: number
+  total_tenure_days: number
+  elapsed_days: number
+  maturity_value: string
+  owners: MaturingFDOwner[]
+}
+
+export type BondCouponDue = {
+  bond_id: number
+  instrument_id: number
+  instrument_name: string
+  issuer_name: string
+  due_date: string
+  grace_end: string
+  coupon_amount: string
+}
+
+export type MutualFundDetails = {
+  id: number
+  instrument: number
+  amc: string
+  fund_category: string
+  fund_sub_category: string
+  folio_no: string
+  expense_ratio: string | null
+}
+
+export type AllocationTarget = {
+  id: number
+  household: number
+  asset_category: number
+  target_percent: string
+}
+
+export type RebalancingRow = {
+  category_id: number | null
+  category_name: string
+  color: string
+  current_value: string
+  current_percent: string
+  target_percent: string
+  target_value: string
+  drift_percent: string
+  suggested_action: 'buy' | 'sell' | 'hold'
+  suggested_amount: string
+}
+
+export type RebalancingPayload = {
+  as_of: string
+  total_portfolio_value: string
+  excluded_value: string
+  rows: RebalancingRow[]
+}
+
 export type MaturingFDOwner = {
   member_id: number
   member_name: string
@@ -617,4 +703,196 @@ export type InsuranceSummary = {
     due_date: string
     premium_amount: string
   }[]
+}
+
+// ── Age-based allocation suggestion ─────────────────────────────────────────
+
+export type AllocationSuggestionCategory = {
+  category_id: number
+  category_name: string
+  color: string
+  classification: 'equity' | 'debt' | 'mixed' | 'empty'
+  suggested_target_percent: string | null
+}
+
+export type AllocationSuggestion = {
+  age: number
+  equity_base: number
+  rule_label: string
+  equity_percent: number
+  debt_percent: number
+  categories: AllocationSuggestionCategory[]
+}
+
+// ── Fund holdings upload / overlap-diversification ─────────────────────────
+
+export type FundHolding = {
+  id: number
+  isin: string
+  instrument_name: string
+  industry: string
+  weight_percent: string
+}
+
+export type FundHoldingsSnapshot = {
+  id: number
+  instrument: number
+  as_of_date: string
+  source_url: string
+  uploaded_file_name: string
+  holding_count: number
+  holdings: FundHolding[]
+}
+
+export type OverlapPair = {
+  instrument_a_id: number
+  instrument_a_name: string
+  instrument_b_id: number
+  instrument_b_name: string
+  overlap_percent: string
+  shared_holdings: { isin: string; name: string; weight_a: string; weight_b: string; min_weight: string }[]
+}
+
+export type PortfolioTopHolding = {
+  isin: string
+  name: string
+  portfolio_weight_percent: string
+  via_funds: string[]
+}
+
+export type DiversificationPayload = {
+  as_of: string
+  pairs: OverlapPair[]
+  top_holdings: PortfolioTopHolding[]
+  covered_instrument_ids: number[]
+  uncovered_instrument_ids: number[]
+}
+
+// ── Fund NAV / risk metrics (Sharpe, alpha, beta) ───────────────────────────
+
+export type ExternalFund = {
+  id: number
+  instrument: number
+  mfapi_scheme_code: string
+  scheme_name: string
+  fund_house: string
+  last_synced_at: string | null
+}
+
+export type MfApiSearchResult = {
+  schemeCode: number
+  schemeName: string
+}
+
+export type FundRiskMetrics = {
+  available: boolean
+  reason?: string
+  date_range?: { start: string; end: string }
+  data_points?: number
+  benchmark_name?: string
+  risk_free_rate_percent?: string
+  annualized_return_percent?: number
+  standard_deviation_percent?: number
+  beta?: number | null
+  alpha_percent?: number | null
+  sharpe_ratio?: number | null
+}
+
+export type BenchmarkPeriodComparison = {
+  fund_cagr: number | null
+  benchmark_cagr: number | null
+  gap_percent: number | null
+}
+
+export type BenchmarkComparison = {
+  available: boolean
+  reason?: string
+  benchmark_name?: string
+  benchmark_category_match?: string
+  periods?: { '1Y': BenchmarkPeriodComparison; '3Y': BenchmarkPeriodComparison; '5Y': BenchmarkPeriodComparison }
+  underperforming?: boolean
+}
+
+export type FundComparisonRow = {
+  instrument_id: number
+  instrument_name: string
+  fund_category: string
+  expense_ratio: string | null
+  xirr_percent: number | null
+  max_overlap_percent: number
+  linked_to_nav_source: boolean
+  risk_metrics: FundRiskMetrics | null
+  benchmark_comparison: BenchmarkComparison | null
+}
+
+export type FundComparisonPayload = {
+  as_of: string
+  rows: FundComparisonRow[]
+}
+
+export type CagrByPeriod = {
+  '3M': number | null
+  '6M': number | null
+  '1Y': number | null
+  '3Y': number | null
+  '5Y': number | null
+}
+
+export type FundPerformanceRow = {
+  instrument_id: number
+  instrument_name: string
+  fund_category: string
+  fund_sub_category: string
+  market_value: string
+  net_invested: string
+  allocation_percent: string
+  xirr: number | null
+  cagr: CagrByPeriod
+}
+
+export type FundPerformancePayload = {
+  as_of: string
+  funds: FundPerformanceRow[]
+}
+
+// ── AI-assisted insights (manual trigger, cached results) ──────────────────
+
+export type FundClassification = {
+  id: number
+  instrument: number
+  bucket: 'equity' | 'debt' | 'hybrid'
+  rule_60_40_category: 'growth' | 'stability'
+  reasoning: string
+  model_used: string
+  generated_at: string
+}
+
+export type FundClassificationProposal = {
+  instrument_id: number
+  instrument_name: string
+  current_bucket?: 'equity' | 'debt' | 'hybrid' | null
+  current_rule_60_40_category?: 'growth' | 'stability' | null
+  bucket?: 'equity' | 'debt' | 'hybrid'
+  rule_60_40_category?: 'growth' | 'stability'
+  reasoning?: string
+  error?: string
+}
+
+export type FundReturnsComparison = {
+  id: number
+  instrument: number
+  summary: string
+  input_snapshot: Record<string, unknown>
+  model_used: string
+  generated_at: string
+}
+
+export type RebalancingExplanation = {
+  id: number
+  household: number
+  as_of_date: string
+  explanation: string
+  input_snapshot: Record<string, unknown>
+  model_used: string
+  generated_at: string
 }

@@ -11,7 +11,7 @@ type Props = {
 }
 
 const TYPE_ICONS: Record<string, string> = {
-  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡',
+  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', bond: '📜', epf: '🛡',
   ppf: '🛡', nps: '🛡', gold: '🪙', real_estate: '🏠', sip: '🔄',
   insurance: '☂️', cash: '💵', other: '💼', vehicle: '🚗', liability: '⚠️',
 }

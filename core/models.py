@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.db import models
 
@@ -15,6 +17,11 @@ class TimeStampedModel(models.Model):
 class Household(TimeStampedModel):
     name = models.CharField(max_length=120)
     base_currency = models.CharField(max_length=3, default='INR')
+    risk_free_rate_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal('6.50'),
+        help_text='Used as the risk-free rate in Sharpe ratio calculations (e.g. current 91-day '
+                   'T-bill yield ballpark). Not fetched live — update it yourself periodically.',
+    )
 
     def __str__(self) -> str:
         return self.name
@@ -31,6 +38,10 @@ class Member(TimeStampedModel):
     household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='members')
     full_name = models.CharField(max_length=120)
     email = models.EmailField(blank=True)
+    date_of_birth = models.DateField(
+        null=True, blank=True,
+        help_text='Used to derive age for allocation rule-of-thumb suggestions. Optional.',
+    )
     relation_type = models.CharField(max_length=20, choices=RelationType.choices, default=RelationType.SELF)
     is_active = models.BooleanField(default=True)
     include_in_networth = models.BooleanField(

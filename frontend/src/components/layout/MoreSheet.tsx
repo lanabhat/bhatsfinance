@@ -2,7 +2,8 @@ import type { ComponentType, SVGProps } from 'react'
 import {
   TagsIcon, LedgerIcon, ValuationIcon, ExpensesIcon, MutualFundsIcon,
   AlertsIcon, TaxIcon, InsuranceIcon, ReportsIcon, FamilyIcon, ImportIcon,
-  MailIcon, MessageIcon, SettingsIcon, HelpIcon, UsersIcon,
+  MailIcon, MessageIcon, SettingsIcon, HelpIcon, UsersIcon, InvestmentsIcon, NetWorthIcon,
+  AccountsIcon,
 } from '../icons'
 
 type SecondaryRoute = {
@@ -20,9 +21,13 @@ const BASE_GROUPS: RouteGroup[] = [
   {
     label: 'Portfolio',
     items: [
+      { key: 'accounts', label: 'Accounts', icon: AccountsIcon },
       { key: 'instruments', label: 'Instruments', icon: TagsIcon },
       { key: 'ledger', label: 'Ledger', icon: LedgerIcon },
       { key: 'valuation', label: 'Valuation', icon: ValuationIcon },
+      { key: 'allocation', label: 'Asset Allocation', icon: InvestmentsIcon },
+      { key: 'diversification', label: 'Diversification', icon: NetWorthIcon },
+      { key: 'fund-performance', label: 'Fund Performance', icon: MutualFundsIcon },
       { key: 'spend-trends', label: 'Spend Trends', icon: ExpensesIcon },
       { key: 'analytics', label: 'Analytics', icon: MutualFundsIcon },
       { key: 'alerts', label: 'Alerts', icon: AlertsIcon },

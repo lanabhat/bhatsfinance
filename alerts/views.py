@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 
 from alerts.models import RDMandate, RDPaymentAck, SIPMandate, SIPPaymentAck
 from alerts.serializers import RDMandateSerializer, SIPMandateSerializer
-from alerts.services import generate_missed_rd_installments, generate_missed_sip_alerts
+from alerts.services import generate_coupon_reminders, generate_missed_rd_installments, generate_missed_sip_alerts
 from ledger.models import Transaction
 
 
@@ -317,5 +317,15 @@ class MissedRDAlertsView(APIView):
         as_of = date.fromisoformat(as_of_str) if as_of_str else date.today()
         data = generate_missed_rd_installments(household_id=int(household_id), as_of=as_of)
         return Response({'as_of': as_of, 'missed': data})
+
+class BondCouponRemindersView(APIView):
+    def get(self, request):
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        as_of_str = request.query_params.get('as_of')
+        as_of = date.fromisoformat(as_of_str) if as_of_str else date.today()
+        data = generate_coupon_reminders(household_id=int(household_id), as_of=as_of)
+        return Response({'as_of': as_of, 'due': data})
 
 # Create your views here.

@@ -66,7 +66,7 @@ function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCa
 }
 
 // ── buy form ──────────────────────────────────────────────────────────────────
-const INSTRUMENT_TYPES_OPTS = ['equity','mutual_fund','fd','rd','epf','ppf','nps','gold','real_estate','insurance','lending','cash','other','vehicle','liability','sip'] as const
+const INSTRUMENT_TYPES_OPTS = ['equity','mutual_fund','fd','rd','bond','epf','ppf','nps','gold','real_estate','insurance','lending','cash','other','vehicle','liability','sip'] as const
 
 function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
   householdId: number; instrumentId?: number; onSave: () => void; onCancel: () => void
@@ -116,7 +116,7 @@ function BuyForm({ householdId, instrumentId: initId, onSave, onCancel }: {
           if (newInstInvestmentStartDate) metadata.investment_start_date = newInstInvestmentStartDate
           if (newInstMaturityDate) metadata.maturity_date = newInstMaturityDate
         }
-        const created = await portfolioApi.createInstrument({ household: householdId, name: newInstName.trim(), instrument_type: newInstType, asset_category: newInstCategory ? Number(newInstCategory) : null, symbol: '', default_account: null, metadata, is_active: true })
+        const created = await portfolioApi.createInstrument({ household: householdId, name: newInstName.trim(), instrument_type: newInstType, asset_category: newInstCategory ? Number(newInstCategory) : null, symbol: '', default_account: null, metadata, is_active: true, include_in_rebalancing: true })
         finalId = created.id
       }
       if (!finalId) { setError('Select an instrument.'); setSaving(false); return }
@@ -235,14 +235,14 @@ type HoldingGroupBy = 'type' | 'category' | 'none'
 type HoldingSortBy = 'value' | 'gain' | 'gainPct' | 'name' | 'invested'
 
 const TYPE_LABELS: Record<string, string> = {
-  equity: 'Equity', mutual_fund: 'Mutual Fund', fd: 'FD', rd: 'RD',
+  equity: 'Equity', mutual_fund: 'Mutual Fund', fd: 'FD', rd: 'RD', bond: 'Bond',
   epf: 'EPF', ppf: 'PPF', nps: 'NPS', gold: 'Gold',
   real_estate: 'Real Estate', sip: 'SIP', insurance: 'Insurance',
   cash: 'Cash', vehicle: 'Vehicle', liability: 'Liability', other: 'Other',
 }
 
 const TYPE_ICONS: Record<string, string> = {
-  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡',
+  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', bond: '📜', epf: '🛡',
   ppf: '🛡', nps: '🛡', gold: '🪙', real_estate: '🏠', sip: '🔄',
   insurance: '☂️', cash: '💵', other: '💼', vehicle: '🚗', liability: '⚠️',
 }
@@ -335,6 +335,7 @@ export function HoldingsPage() {
         symbol: '',
         metadata: {},
         is_active: true,
+        include_in_rebalancing: true,
       }
 
     const renderRow = (h: DashboardHolding, catOverride?: AssetCategory) => {

@@ -505,6 +505,14 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
     bank_name = (item.get('bank_name') or '').strip() or 'Bank'
     account_number = (item.get('account_number') or '').strip()
 
+    # Multi Option / sweep-in deposits auto-sweep money in and out with the
+    # linked savings account, so the "principal" a statement reports is a
+    # point-in-time balance, not a fixed sum that compounds — unlike a regular
+    # term deposit. Projecting it forward with _compute_fd_value would compare
+    # today's (possibly much smaller, post-sweep-out) balance against the very
+    # first imported principal as "invested", producing a nonsensical loss.
+    is_sweep_deposit = 'multi option' in (item.get('deposit_type') or '').strip().lower()
+
     instrument_name = (item.get('instrument_name') or '').strip()
     if not instrument_name:
         instrument_name = f'{bank_name} FD {account_number}' if account_number else f'{bank_name} FD'
@@ -540,8 +548,32 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
             instrument.metadata = {**instrument.metadata, **extra_metadata}
             instrument.save(update_fields=['metadata'])
 
+        # Persist the sweep-deposit flag on the instrument (not just re-derived
+        # from this import's deposit_type label) so bulk_snapshot and other code
+        # that revalues FDs later can skip the compound-interest formula for it
+        # even outside this import flow. Also recognize instruments imported
+        # before this flag existed, via the sbi_deposit_type metadata already
+        # stashed by earlier imports.
+        is_sweep_deposit = (
+            is_sweep_deposit
+            or bool(instrument.metadata.get('is_sweep_deposit'))
+            or 'multi option' in str(instrument.metadata.get('sbi_deposit_type') or '').lower()
+        )
+        if is_sweep_deposit and not instrument.metadata.get('is_sweep_deposit'):
+            instrument.metadata = {**instrument.metadata, 'is_sweep_deposit': True}
+            instrument.save(update_fields=['metadata'])
+
         investment_date = _to_date(item['investment_date'])
-        principal = _to_decimal(item['principal'])
+        imported_principal = _to_decimal(item['principal'])
+
+        existing_fd_details = FDDetails.objects.filter(instrument=instrument).first()
+        if is_sweep_deposit and existing_fd_details is not None:
+            # Don't let a re-import's point-in-time sweep balance clobber the
+            # original opening principal — that's what anchors the one-time
+            # funding transaction and the "invested" baseline below.
+            principal = existing_fd_details.principal
+        else:
+            principal = imported_principal
 
         maturity_value_raw = item.get('maturity_value')
         fd_details, fd_created = FDDetails.objects.update_or_create(
@@ -589,8 +621,11 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
         # falling back to net_invested (principal) if none exists — without this,
         # an imported FD shows at its original principal instead of its accrued
         # current value even though FDDetails has everything needed to compute it.
+        # Sweep deposits use each import's bank-stated balance directly (like RD
+        # statements do) rather than a compound-interest projection, since the
+        # balance moves with sweep-ins/sweep-outs, not a fixed compounding schedule.
         today = date.today()
-        current_value = _compute_fd_value(fd_details, today)
+        current_value = imported_principal if is_sweep_deposit else _compute_fd_value(fd_details, today)
         ValuationSnapshot.objects.update_or_create(
             household=household,
             instrument=instrument,
@@ -1429,6 +1464,17 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                         update_fields.append('asset_category')
                     if update_fields:
                         instrument.save(update_fields=update_fields)
+
+                from instruments.models import MutualFundDetails
+                MutualFundDetails.objects.update_or_create(
+                    instrument=instrument,
+                    defaults={
+                        'amc': mf.get('amc', ''),
+                        'fund_category': mf.get('category', ''),
+                        'fund_sub_category': mf.get('sub_category', ''),
+                        'folio_no': folio_no,
+                    },
+                )
 
                 InstrumentOwnership.objects.get_or_create(
                     instrument=instrument,

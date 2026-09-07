@@ -23,7 +23,7 @@ def validate_photo_data_uri(value):
 class HouseholdSerializer(serializers.ModelSerializer):
     class Meta:
         model = Household
-        fields = ['id', 'name', 'base_currency', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'base_currency', 'risk_free_rate_percent', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
@@ -31,7 +31,7 @@ class MemberSerializer(serializers.ModelSerializer):
     class Meta:
         model = Member
         fields = [
-            'id', 'household', 'full_name', 'email',
+            'id', 'household', 'full_name', 'email', 'date_of_birth',
             'relation_type', 'is_active', 'include_in_networth', 'photo',
             'created_at', 'updated_at',
         ]

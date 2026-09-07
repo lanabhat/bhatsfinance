@@ -28,12 +28,13 @@ const RELATION_OPTIONS: OptionItem[] = [
   { id: 5, label: 'other' },
 ]
 
-const blankHouseholdForm = () => ({ id: 0, name: '', base_currency: 'INR' })
+const blankHouseholdForm = () => ({ id: 0, name: '', base_currency: 'INR', risk_free_rate_percent: '6.50' })
 const blankMemberForm = (household: number) => ({
   id: 0,
   household,
   full_name: '',
   email: '',
+  date_of_birth: '' as string | null,
   relation_type: 'self' as Member['relation_type'],
   is_active: true,
   include_in_networth: true,
@@ -78,7 +79,7 @@ export function HouseholdPage({ householdId, householdOptions, onHouseholdsChang
 
   const openHousehold = (item?: Household) => {
     setError('')
-    setHouseholdForm(item ? { id: item.id, name: item.name, base_currency: item.base_currency } : blankHouseholdForm())
+    setHouseholdForm(item ? { id: item.id, name: item.name, base_currency: item.base_currency, risk_free_rate_percent: item.risk_free_rate_percent } : blankHouseholdForm())
     setHouseholdSheet({ type: 'household', item })
   }
 
@@ -96,6 +97,7 @@ export function HouseholdPage({ householdId, householdOptions, onHouseholdsChang
         await householdApi.updateHousehold(householdForm.id, {
           name: householdForm.name,
           base_currency: householdForm.base_currency,
+          risk_free_rate_percent: householdForm.risk_free_rate_percent,
         })
       } else {
         await householdApi.createHousehold({ name: householdForm.name, base_currency: householdForm.base_currency })
@@ -283,6 +285,14 @@ export function HouseholdPage({ householdId, householdOptions, onHouseholdsChang
               value={householdForm.base_currency}
               onChange={(v) => setHouseholdForm((p) => ({ ...p, base_currency: v.toUpperCase() }))}
             />
+            <TextField
+              label="Risk-Free Rate (%)"
+              value={householdForm.risk_free_rate_percent}
+              onChange={(v) => setHouseholdForm((p) => ({ ...p, risk_free_rate_percent: v }))}
+              type="number"
+              step="0.01"
+              helpTooltip="Used as the risk-free rate in Sharpe ratio calculations (e.g. current 91-day T-bill yield ballpark). Not fetched live — update it yourself periodically."
+            />
             <FormActions onSubmit={saveHousehold} saving={saving} disabled={!canWrite} />
           </div>
         </Sheet>
@@ -309,6 +319,13 @@ export function HouseholdPage({ householdId, householdOptions, onHouseholdsChang
             />
             <TextField label="Full Name" value={memberForm.full_name} onChange={(v) => setMemberForm((p) => ({ ...p, full_name: v }))} />
             <TextField label="Email" value={memberForm.email} onChange={(v) => setMemberForm((p) => ({ ...p, email: v }))} type="email" />
+            <TextField
+              label="Date of Birth"
+              value={memberForm.date_of_birth ?? ''}
+              onChange={(v) => setMemberForm((p) => ({ ...p, date_of_birth: v || null }))}
+              type="date"
+              helpTooltip="Used to derive age for allocation rule-of-thumb suggestions. Optional."
+            />
             <SelectField
               label="Relation"
               value={String(RELATION_OPTIONS.find((x) => x.label === memberForm.relation_type)?.id || 1)}

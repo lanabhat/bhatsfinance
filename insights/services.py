@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from math import isfinite
 
@@ -400,6 +400,103 @@ def compute_category_breakdown(household_id: int, as_of: date, member_id: int | 
         })
     result.sort(key=lambda x: Decimal(x['market_value']), reverse=True)
     return result
+
+
+def compute_rebalancing(household_id: int, as_of: date) -> dict:
+    """Current vs target allocation per AssetCategory, with buy/sell suggestions.
+
+    Liabilities are dropped entirely from the rebalancing view (a loan isn't an
+    asset class to allocate into). Instruments with include_in_rebalancing=False
+    are also excluded from the base, but their value is reported separately via
+    excluded_value so the user can see what's deliberately left out — unlike
+    liabilities, these are still real assets, just ones the user opted out of
+    targeting. Both groups still show up normally everywhere else (holdings,
+    net worth) — this function only affects the rebalancing math.
+    """
+    from instruments.models import AllocationTarget, Instrument
+
+    holdings = compute_holdings(household_id, as_of)
+    if not holdings:
+        return {'total_portfolio_value': str(ZERO), 'excluded_value': str(ZERO), 'rows': []}
+
+    instrument_ids = [h['instrument_id'] for h in holdings]
+    instruments_by_id = {
+        inst.id: inst
+        for inst in Instrument.objects.filter(id__in=instrument_ids).select_related('asset_category')
+    }
+
+    included_holdings = []
+    excluded_value = ZERO
+    for h in holdings:
+        inst = instruments_by_id.get(h['instrument_id'])
+        if inst is None:
+            continue
+        if inst.instrument_type == Instrument.InstrumentType.LIABILITY:
+            continue
+        if not inst.include_in_rebalancing:
+            excluded_value += h['market_value']
+            continue
+        included_holdings.append(h)
+
+    grouped: dict = {}
+    for h in included_holdings:
+        inst = instruments_by_id.get(h['instrument_id'])
+        cat = inst.asset_category if inst else None
+        key = cat.id if cat else None
+        if key not in grouped:
+            grouped[key] = {
+                'category_id': key,
+                'category_name': cat.name if cat else 'Uncategorised',
+                'color': cat.color if cat else '#94a3b8',
+                'current_value': ZERO,
+            }
+        grouped[key]['current_value'] += h['market_value']
+
+    total = sum(g['current_value'] for g in grouped.values()) or ZERO
+
+    targets = list(
+        AllocationTarget.objects.filter(household_id=household_id).select_related('asset_category')
+    )
+    for t in targets:
+        key = t.asset_category_id
+        if key not in grouped:
+            grouped[key] = {
+                'category_id': key,
+                'category_name': t.asset_category.name,
+                'color': t.asset_category.color,
+                'current_value': ZERO,
+            }
+    target_by_category = {t.asset_category_id: t.target_percent for t in targets}
+
+    rows = []
+    for key, entry in grouped.items():
+        current_value = entry['current_value']
+        current_percent = (current_value / total * Decimal('100')).quantize(Decimal('0.01')) if total else ZERO
+        target_percent = target_by_category.get(key, ZERO)
+        target_value = (total * target_percent / Decimal('100')).quantize(Decimal('0.01'))
+        drift_percent = (current_percent - target_percent).quantize(Decimal('0.01'))
+        delta_value = (target_value - current_value).quantize(Decimal('0.01'))
+        suggested_action = 'buy' if delta_value > ZERO else ('sell' if delta_value < ZERO else 'hold')
+
+        rows.append({
+            'category_id': entry['category_id'],
+            'category_name': entry['category_name'],
+            'color': entry['color'],
+            'current_value': str(current_value.quantize(Decimal('0.01'))),
+            'current_percent': str(current_percent),
+            'target_percent': str(target_percent),
+            'target_value': str(target_value),
+            'drift_percent': str(drift_percent),
+            'suggested_action': suggested_action,
+            'suggested_amount': str(abs(delta_value)),
+        })
+
+    rows.sort(key=lambda r: abs(Decimal(r['drift_percent'])), reverse=True)
+    return {
+        'total_portfolio_value': str(total.quantize(Decimal('0.01'))),
+        'excluded_value': str(excluded_value.quantize(Decimal('0.01'))),
+        'rows': rows,
+    }
 
 
 def compute_holdings_history(household_id: int, instrument_type: str | None = None, member_id: int | None = None) -> list[dict]:
@@ -826,6 +923,64 @@ def _xirr(flows: list[tuple[date, float]]) -> float:
     return guess
 
 
+def compute_cagr(household_id: int, as_of: date, period_months: int, instrument_id: int | None = None) -> float | None:
+    """Simple point-to-point CAGR over a fixed period ending at as_of — NOT
+    money-weighted like compute_xirr(). (end_value / start_value) ** (365/days) - 1.
+
+    For a single instrument, "value" is the fund's own NAV/unit price (not the
+    position's total market value) — total value moves with new contributions
+    as well as fund performance, which would make CAGR spike whenever a
+    contribution landed inside the lookback window even though nothing about
+    the fund's own growth changed. NAV isolates the fund's actual performance.
+    Household-wide (no instrument_id) has no single per-unit price to track,
+    so it falls back to total market value across all holdings.
+
+    Returns None (never extrapolates or fabricates) when the holding didn't
+    exist yet, or had zero value, at the start of the period — a fund bought
+    2 months ago has no meaningful 3-year CAGR.
+    """
+    period_days = period_months * 30
+    start_date = as_of - timedelta(days=period_days)
+
+    if instrument_id is not None:
+        # Require the position to already exist at start_date — a NAV lookup
+        # alone can't tell "held zero units" from "held some," and CAGR for a
+        # period before the holding existed would be fabricated.
+        held_at_start = any(
+            h['instrument_id'] == instrument_id and h['quantity'] > 0
+            for h in compute_holdings(household_id, start_date)
+        )
+        if not held_at_start:
+            return None
+
+        start_snap = _latest_valuation(instrument_id, start_date)
+        end_snap = _latest_valuation(instrument_id, as_of)
+        if not start_snap or not end_snap or start_snap.unit_price is None or end_snap.unit_price is None:
+            return None
+        start_value: Decimal | None = start_snap.unit_price if start_snap.unit_price > ZERO else None
+        end_value: Decimal | None = end_snap.unit_price if end_snap.unit_price > ZERO else None
+    else:
+        def _value_at(target_date: date) -> Decimal | None:
+            total = sum((h['market_value'] for h in compute_holdings(household_id, target_date)), start=ZERO)
+            return total if total > ZERO else None
+
+        start_value = _value_at(start_date)
+        end_value = _value_at(as_of)
+
+    if start_value is None or end_value is None:
+        return None
+
+    years = (as_of - start_date).days / 365.0
+    if years <= 0:
+        return None
+
+    try:
+        cagr = (float(end_value) / float(start_value)) ** (1 / years) - 1
+    except (ZeroDivisionError, ValueError, OverflowError):
+        return None
+    return round(cagr, 6)
+
+
 def compute_xirr(household_id: int, as_of: date, instrument_id: int | None = None) -> float | None:
     tx_query = Transaction.objects.filter(household_id=household_id, tx_date__lte=as_of).exclude(
         transaction_type=Transaction.TransactionType.WITHDRAWAL
@@ -838,8 +993,6 @@ def compute_xirr(household_id: int, as_of: date, instrument_id: int | None = Non
     flows = [(tx.tx_date, float(_signed_amount(tx))) for tx in tx_query.order_by('tx_date', 'id')]
     if not flows:
         return None
-    if all(amount >= 0 for _, amount in flows) or all(amount <= 0 for _, amount in flows):
-        return None
 
     if instrument_id:
         terminal = sum(
@@ -851,7 +1004,72 @@ def compute_xirr(household_id: int, as_of: date, instrument_id: int | None = Non
     if terminal:
         flows.append((as_of, float(terminal)))
 
+    # Needs both a negative (invested) and a positive (returned/current-value)
+    # flow to solve for a rate at all — checked only after the terminal value is
+    # appended, since a buy-only holding (the common case: no sells yet) is
+    # legitimately all-outflow until its current market value supplies the
+    # offsetting positive flow.
+    if all(amount >= 0 for _, amount in flows) or all(amount <= 0 for _, amount in flows):
+        return None
+
     try:
         return round(_xirr(flows), 6)
     except Exception:
         return None
+
+
+# 3M/6M/1Y/3Y/5Y is the fixed period set the fund performance view reports —
+# 3M/6M/1Y read as "short term", 3Y/5Y as "long term", matching how rebalancing
+# decisions are usually framed. (label, months) so the API response is
+# self-describing without the frontend hardcoding the same list separately.
+CAGR_PERIODS: list[tuple[str, int]] = [
+    ('3M', 3),
+    ('6M', 6),
+    ('1Y', 12),
+    ('3Y', 36),
+    ('5Y', 60),
+]
+
+
+def compute_fund_performance(household_id: int, as_of: date) -> list[dict]:
+    """Per-fund distribution %, XIRR, and CAGR across the standard periods —
+    the primitive the Fund Performance page and its charts are built from.
+
+    Only mutual_fund/sip instruments are included: CAGR's NAV-based math
+    (see compute_cagr) needs a per-unit price, which plain equities/other
+    instrument types in this codebase don't consistently carry.
+    """
+    from instruments.models import Instrument, MutualFundDetails
+
+    holdings = compute_holdings(household_id, as_of)
+    fund_holdings = [h for h in holdings if h['instrument_type'] in (Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP)]
+    if not fund_holdings:
+        return []
+
+    total_value = sum((h['market_value'] for h in fund_holdings), start=ZERO)
+    mf_details_by_instrument = {
+        d.instrument_id: d
+        for d in MutualFundDetails.objects.filter(instrument_id__in=[h['instrument_id'] for h in fund_holdings])
+    }
+
+    rows = []
+    for h in fund_holdings:
+        instrument_id = h['instrument_id']
+        allocation_percent = (
+            Decimal('0.00') if total_value == ZERO
+            else (h['market_value'] / total_value * Decimal('100')).quantize(Decimal('0.01'))
+        )
+        details = mf_details_by_instrument.get(instrument_id)
+        rows.append({
+            'instrument_id': instrument_id,
+            'instrument_name': h['instrument_name'],
+            'fund_category': details.fund_category if details else '',
+            'fund_sub_category': details.fund_sub_category if details else '',
+            'market_value': h['market_value'],
+            'net_invested': h['net_invested'],
+            'allocation_percent': allocation_percent,
+            'xirr': compute_xirr(household_id, as_of, instrument_id),
+            'cagr': {label: compute_cagr(household_id, as_of, months, instrument_id) for label, months in CAGR_PERIODS},
+        })
+    rows.sort(key=lambda r: r['market_value'], reverse=True)
+    return rows

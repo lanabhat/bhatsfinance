@@ -7,7 +7,9 @@ import { TermsProvider } from './context/TermsContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './components/ui/Toast'
 import { AlertsPage } from './pages/AlertsPage'
-import { AssetsPage } from './pages/AssetsPage'
+import { AssetAllocationPage } from './pages/AssetAllocationPage'
+import { DiversificationPage } from './pages/DiversificationPage'
+import { FundPerformancePage } from './pages/FundPerformancePage'
 import { HoldingsPage } from './pages/HoldingsPage'
 import { AccountsPage } from './pages/AccountsPage'
 import { InstrumentsPage } from './pages/InstrumentsPage'
@@ -33,13 +35,18 @@ import { PendingPage } from './pages/PendingPage'
 import { DeniedPage } from './pages/DeniedPage'
 import { CoinSpinner } from './components/common/CoinSpinner'
 
-type RouteKey = 'home' | 'holdings' | 'accounts' | 'assets' | 'expenses' | 'spend-trends' | 'analytics' | 'settings' | 'instruments' | 'ledger' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'reports' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail' | 'sms'
+type RouteKey = 'home' | 'holdings' | 'accounts' | 'allocation' | 'diversification' | 'fund-performance' | 'expenses' | 'spend-trends' | 'analytics' | 'settings' | 'instruments' | 'ledger' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'reports' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail' | 'sms'
 
-const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'assets', 'expenses', 'spend-trends', 'analytics', 'settings', 'instruments', 'ledger', 'alerts', 'tax', 'valuation', 'insurance', 'reports', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail', 'sms'])
+const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'allocation', 'diversification', 'fund-performance', 'expenses', 'spend-trends', 'analytics', 'settings', 'instruments', 'ledger', 'alerts', 'tax', 'valuation', 'insurance', 'reports', 'help', 'import', 'household', 'maintenance', 'admin', 'gmail', 'sms'])
+
+// 'assets' was retired in favor of 'instruments' (bulk-tag + AI-classify were
+// ported there) — redirect old bookmarks/muscle memory instead of 404ing to home.
+const LEGACY_ROUTE_REDIRECTS: Record<string, RouteKey> = { assets: 'instruments' }
 
 function routeFromHash(): RouteKey {
-  const value = window.location.hash.replace('#/', '') as RouteKey
-  return VALID_ROUTES.has(value) ? value : 'home'
+  const value = window.location.hash.replace('#/', '')
+  if (value in LEGACY_ROUTE_REDIRECTS) return LEGACY_ROUTE_REDIRECTS[value]
+  return VALID_ROUTES.has(value as RouteKey) ? (value as RouteKey) : 'home'
 }
 
 function setRouteHash(route: RouteKey) {
@@ -76,7 +83,9 @@ function AppInner() {
       case 'holdings': return <HoldingsPage />
       case 'accounts': return <AccountsPage />
       case 'instruments': return <InstrumentsPage />
-      case 'assets': return <AssetsPage />
+      case 'allocation': return <AssetAllocationPage />
+      case 'diversification': return <DiversificationPage />
+      case 'fund-performance': return <FundPerformancePage />
       case 'expenses': return <ExpensePage householdId={householdId} memberOptions={members} accountOptions={accounts} canDelete={canDelete} />
       case 'spend-trends': return <SpendTrendsPage householdId={householdId} />
       case 'analytics': return <AnalyticsPage />

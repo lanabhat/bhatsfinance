@@ -37,6 +37,27 @@ def _compute_fd_value(fd, as_of: date) -> Decimal:
     return value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
+def _compute_bond_value(bond, as_of: date) -> Decimal:
+    """Current value of a bond: face value held (coupons are paid out, not
+    compounded into price) plus straight-line accrued interest since the last
+    coupon date, capped at maturity value on/after maturity."""
+    principal = bond.face_value * bond.quantity
+
+    if as_of >= bond.maturity_date:
+        return bond.maturity_value if bond.maturity_value is not None else principal
+
+    if bond.coupon_frequency == 'cumulative':
+        rate = bond.coupon_rate / Decimal('100')
+        t_days = (as_of - bond.investment_date).days
+        if t_days <= 0:
+            return principal
+        t_years = Decimal(str(t_days)) / Decimal('365')
+        value = principal * (1 + rate * t_years)
+        return value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+    return principal.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
 def bulk_snapshot(household_id: int, as_of: date) -> dict:
     """
     Create ValuationSnapshot records for all active instruments and accounts
@@ -54,16 +75,27 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
     # --- Instruments ---
     instruments = Instrument.objects.filter(
         household_id=household_id, is_active=True
-    ).prefetch_related('fd_details')
+    ).prefetch_related('fd_details', 'bond_details')
 
     for instrument in instruments:
         value = None
         method = None
 
-        # Try FD auto-compute
+        # Try FD auto-compute — skipped for sweep/Multi Option Deposits, whose
+        # balance moves with sweep-ins/sweep-outs rather than compounding on a
+        # fixed principal; those fall through to carrying forward their last
+        # bank-stated import snapshot instead (see apply_fd_advice_import).
+        is_sweep_deposit = bool(instrument.metadata.get('is_sweep_deposit')) or \
+            'multi option' in str(instrument.metadata.get('sbi_deposit_type') or '').lower()
         fd = getattr(instrument, 'fd_details', None)
-        if fd is not None:
+        if fd is not None and not is_sweep_deposit:
             value = _compute_fd_value(fd, as_of)
+            method = 'formula'
+
+        # Try Bond auto-compute
+        bond = getattr(instrument, 'bond_details', None)
+        if bond is not None:
+            value = _compute_bond_value(bond, as_of)
             method = 'formula'
 
         # Carry forward last known snapshot

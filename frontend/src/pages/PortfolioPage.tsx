@@ -97,6 +97,7 @@ export function PortfolioPage({ householdId, memberOptions, accountOptions, inst
     symbol: '',
     metadata: {},
     is_active: true,
+    include_in_rebalancing: true,
   })
   const [metadataText, setMetadataText] = useState('{}')
   const [instrumentEditId, setInstrumentEditId] = useState(0)
@@ -203,7 +204,7 @@ export function PortfolioPage({ householdId, memberOptions, accountOptions, inst
       }
       setInstrumentEditId(0)
       setFdEditId(0)
-      setInstrumentForm({ household: householdId, default_account: null, asset_category: null, name: '', instrument_type: 'equity', symbol: '', metadata: {}, is_active: true })
+      setInstrumentForm({ household: householdId, default_account: null, asset_category: null, name: '', instrument_type: 'equity', symbol: '', metadata: {}, is_active: true, include_in_rebalancing: true })
       setMetadataText('{}')
       setFdForm(emptyFD())
       await refreshOptions()
@@ -374,7 +375,7 @@ export function PortfolioPage({ householdId, memberOptions, accountOptions, inst
             )}
             <FormActions onSubmit={saveInstrument} onReset={() => {
               setInstrumentEditId(0); setFdEditId(0)
-              setInstrumentForm({ household: householdId, default_account: null, asset_category: null, name: '', instrument_type: 'equity', symbol: '', metadata: {}, is_active: true })
+              setInstrumentForm({ household: householdId, default_account: null, asset_category: null, name: '', instrument_type: 'equity', symbol: '', metadata: {}, is_active: true, include_in_rebalancing: true })
               setMetadataText('{}'); setFdForm(emptyFD())
             }} />
           </BaseForm>

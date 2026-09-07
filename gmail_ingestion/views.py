@@ -521,6 +521,13 @@ class GmailApproveProposalsView(APIView):
         if save_fields:
             instrument.save(update_fields=save_fields + ['updated_at'])
 
+        if inst_type in ('mutual_fund', 'sip') and folio_no:
+            from instruments.models import MutualFundDetails
+            mf_details, _ = MutualFundDetails.objects.get_or_create(instrument=instrument)
+            if not mf_details.folio_no:
+                mf_details.folio_no = folio_no
+                mf_details.save(update_fields=['folio_no', 'updated_at'])
+
         # Create ownership for specified member if not already present
         if member_id:
             member = Member.objects.filter(pk=member_id, household=household).first()

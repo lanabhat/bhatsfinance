@@ -3,9 +3,11 @@ import type {
   Account,
   AccountOwnership,
   ApiListResponse,
+  BondDetails,
   FDDetails,
   Instrument,
   InstrumentOwnership,
+  MutualFundDetails,
 } from '../types/domain'
 
 export const portfolioApi = {
@@ -72,5 +74,33 @@ export const portfolioApi = {
   },
   async updateFDDetails(id: number, payload: Partial<Omit<FDDetails, 'id'>>) {
     return patchJson<FDDetails>(`/api/fd-details/${id}/`, payload)
+  },
+  async getBondDetails(instrumentId: number) {
+    const q = toQueryString({ instrument: instrumentId })
+    const data = await getJson<ApiListResponse<BondDetails>>(`/api/bond-details/?${q}`)
+    return unwrapList(data)[0] ?? null
+  },
+  async createBondDetails(payload: Omit<BondDetails, 'id'>) {
+    return postJson<BondDetails>('/api/bond-details/', payload)
+  },
+  async updateBondDetails(id: number, payload: Partial<Omit<BondDetails, 'id'>>) {
+    return patchJson<BondDetails>(`/api/bond-details/${id}/`, payload)
+  },
+  async getMutualFundDetails(instrumentId: number) {
+    const q = toQueryString({ instrument: instrumentId })
+    const data = await getJson<ApiListResponse<MutualFundDetails>>(`/api/mf-details/?${q}`)
+    return unwrapList(data)[0] ?? null
+  },
+  async createMutualFundDetails(payload: Omit<MutualFundDetails, 'id'>) {
+    return postJson<MutualFundDetails>('/api/mf-details/', payload)
+  },
+  async updateMutualFundDetails(id: number, payload: Partial<Omit<MutualFundDetails, 'id'>>) {
+    return patchJson<MutualFundDetails>(`/api/mf-details/${id}/`, payload)
+  },
+  async bulkUpdateInstrumentCategory(instrumentIds: number[], assetCategoryId: number | null) {
+    return patchJson<{ updated: number }>('/api/instruments/bulk-update-category/', {
+      instrument_ids: instrumentIds,
+      asset_category: assetCategoryId,
+    })
   },
 }

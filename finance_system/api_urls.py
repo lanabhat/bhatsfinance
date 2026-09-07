@@ -1,23 +1,30 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from alerts.views import MissedRDAlertsView, MissedSIPAlertsView, RDMandateViewSet, SIPMandateViewSet
+from alerts.views import BondCouponRemindersView, MissedRDAlertsView, MissedSIPAlertsView, RDMandateViewSet, SIPMandateViewSet
 from insurance.views import InsurancePolicyViewSet, InsuranceSummaryView, MissedPremiumRemindersView, VehicleClaimViewSet
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
 from ingestion.views import CSVImportView, EpfPassbookApplyView, EpfPassbookPreviewView, FDAdviceApplyView, FDAdvicePreviewView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView, NpsApplyView, NpsPreviewView, PpfStatementApplyView, PpfStatementPreviewView, SBIStatementApplyView, SBIStatementPreviewView
-from insights.views import AllocationView, CategoryBreakdownView, CashFlowView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, SpendAnalyticsView, XIRRView
+from insights.views import AllocationSuggestionView, AllocationView, CategoryBreakdownView, CashFlowView, DiversificationView, FundPerformanceView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, RebalancingView, SpendAnalyticsView, XIRRView
 from reports.views import StatementExportView, StatementPreviewView
 from instruments.views import (
     AccountBalanceView,
     AccountOwnershipViewSet,
     AccountViewSet,
+    AllocationTargetViewSet,
     AssetCategoryViewSet,
+    BondDetailsViewSet,
     BulkDeleteInstrumentsView,
+    BulkUpdateInstrumentCategoryView,
     FDDetailsViewSet,
+    FundHoldingsSnapshotViewSet,
     InstrumentOwnershipViewSet,
     InstrumentViewSet,
+    MaturingBondsView,
     MaturingFDsView,
+    MutualFundDetailsViewSet,
+    UploadFundHoldingsView,
 )
 from ledger.views import CashWithdrawalView, TagViewSet, TransactionViewSet
 from gmail_ingestion.views import (
@@ -61,6 +68,8 @@ from upstox_integration.views import (
     UpstoxUpdateMemberView,
 )
 from valuations.views import BulkSnapshotView, ValuationSnapshotViewSet
+from fund_data.views import ExternalFundViewSet, FundComparisonView, FundSearchView
+from ai_insights.views import ApplyClassificationsView, ClassifyAllFundsView, ClassifyFundView, CompareFundReturnsView, ExplainRebalancingView
 
 router = DefaultRouter()
 router.register('households', HouseholdViewSet)
@@ -75,7 +84,12 @@ router.register('transactions', TransactionViewSet)
 router.register('tags', TagViewSet, basename='tag')
 router.register('valuations', ValuationSnapshotViewSet)
 router.register('fd-details', FDDetailsViewSet)
+router.register('bond-details', BondDetailsViewSet)
+router.register('mf-details', MutualFundDetailsViewSet)
 router.register('asset-categories', AssetCategoryViewSet)
+router.register('allocation-targets', AllocationTargetViewSet)
+router.register('fund-holdings-snapshots', FundHoldingsSnapshotViewSet, basename='fund-holdings-snapshot')
+router.register('external-funds', ExternalFundViewSet, basename='external-fund')
 router.register('sip-mandates', SIPMandateViewSet)
 router.register('rd-mandates', RDMandateViewSet)
 router.register('insurance-policies', InsurancePolicyViewSet)
@@ -94,10 +108,13 @@ urlpatterns = [
     # pk='bulk-delete', which 404s inside InstrumentViewSet instead of ever
     # reaching BulkDeleteInstrumentsView.
     path('instruments/bulk-delete/', BulkDeleteInstrumentsView.as_view(), name='instruments-bulk-delete'),
+    path('instruments/bulk-update-category/', BulkUpdateInstrumentCategoryView.as_view(), name='instruments-bulk-update-category'),
+    path('instruments/<int:pk>/upload-holdings/', UploadFundHoldingsView.as_view(), name='instruments-upload-holdings'),
 ] + router.urls + [
     path('csrf/', CsrfView.as_view(), name='csrf'),
     path('holdings', HoldingsView.as_view(), name='holdings'),
     path('holdings/history', HoldingsHistoryView.as_view(), name='holdings-history'),
+    path('fund-performance', FundPerformanceView.as_view(), name='fund-performance'),
     path('household-accounts', HouseholdAccountsView.as_view(), name='household-accounts'),
     path('networth', NetWorthView.as_view(), name='networth'),
     path('networth/history', NetWorthHistoryView.as_view(), name='networth-history'),
@@ -106,10 +123,16 @@ urlpatterns = [
     path('allocation', AllocationView.as_view(), name='allocation'),
     path('xirr', XIRRView.as_view(), name='xirr'),
     path('category-breakdown', CategoryBreakdownView.as_view(), name='category-breakdown'),
+    path('rebalancing', RebalancingView.as_view(), name='rebalancing'),
+    path('diversification', DiversificationView.as_view(), name='diversification'),
+    path('allocation-suggestion', AllocationSuggestionView.as_view(), name='allocation-suggestion'),
+    path('fund-data/search', FundSearchView.as_view(), name='fund-data-search'),
+    path('fund-comparison', FundComparisonView.as_view(), name='fund-comparison'),
     path('members-networth', MembersNetWorthView.as_view(), name='members-networth'),
     path('alerts/missed-sip', MissedSIPAlertsView.as_view(), name='missed-sip-alerts'),
     path('alerts/missed-rd-installments', MissedRDAlertsView.as_view(), name='missed-rd-alerts'),
     path('alerts/missed-premiums', MissedPremiumRemindersView.as_view(), name='missed-premium-alerts'),
+    path('alerts/bond-coupons-due', BondCouponRemindersView.as_view(), name='bond-coupon-reminders'),
     path('insurance-summary', InsuranceSummaryView.as_view(), name='insurance-summary'),
     path('imports/csv', CSVImportView.as_view(), name='imports-csv'),
     path('imports/preview', ImportPreviewView.as_view(), name='imports-preview'),
@@ -132,6 +155,7 @@ urlpatterns = [
     path('valuations/bulk-snapshot', BulkSnapshotView.as_view(), name='bulk-snapshot'),
     path('accounts/<int:pk>/balance/', AccountBalanceView.as_view(), name='account-balance'),
     path('fd-details/maturing', MaturingFDsView.as_view(), name='fd-details-maturing'),
+    path('bond-details/maturing', MaturingBondsView.as_view(), name='bond-details-maturing'),
     path('expense-categories/unmapped', UnmappedExpensesView.as_view(), name='expense-categories-unmapped'),
     path('cash-withdrawal/', CashWithdrawalView.as_view(), name='cash-withdrawal'),
     path('networth-tree/', NetWorthTreeView.as_view(), name='networth-tree'),
@@ -168,4 +192,9 @@ urlpatterns = [
     path('sms-messages/<int:pk>/approve/', SmsStagedActionView.as_view(), {'action': 'approve'}, name='sms-staged-approve'),
     path('sms-messages/<int:pk>/reject/', SmsStagedActionView.as_view(), {'action': 'reject'}, name='sms-staged-reject'),
     path('sms-messages/<int:pk>/record-balance/', SmsStagedBalanceView.as_view(), name='sms-staged-balance'),
+    path('ai/classify-fund/<int:instrument_id>/', ClassifyFundView.as_view(), name='ai-classify-fund'),
+    path('ai/classify-all-funds/', ClassifyAllFundsView.as_view(), name='ai-classify-all-funds'),
+    path('ai/apply-classifications/', ApplyClassificationsView.as_view(), name='ai-apply-classifications'),
+    path('ai/compare-fund-returns/<int:instrument_id>/', CompareFundReturnsView.as_view(), name='ai-compare-fund-returns'),
+    path('ai/explain-rebalancing/', ExplainRebalancingView.as_view(), name='ai-explain-rebalancing'),
 ]

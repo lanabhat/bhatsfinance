@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { CategoryBreakdownCard } from '../components/home/CategoryBreakdownCard'
 import { MaturingFDsCard } from '../components/home/MaturingFDsCard'
+import { MaturingBondsCard } from '../components/home/MaturingBondsCard'
+import { BondCouponsCard } from '../components/home/BondCouponsCard'
 import { MissedSipsCard } from '../components/home/MissedSipsCard'
 import { MissedPremiumsCard } from '../components/home/MissedPremiumsCard'
 import { MissedRDsCard } from '../components/home/MissedRDsCard'
@@ -19,12 +21,13 @@ import { useExpandable } from '../hooks/useExpandable'
 import { Money } from '../components/common/Money'
 import { useApp } from '../context/AppContext'
 import { fdDetailsApi } from '../api/fdDetailsApi'
+import { bondDetailsApi } from '../api/bondDetailsApi'
 import { insuranceApi } from '../api/insuranceApi'
 import { getJson, toQueryString } from '../api/http'
-import type { CategoryBreakdownItem, DashboardHolding, InsuranceSummary, MaturingFD, MemberAccount } from '../types/domain'
+import type { BondCouponDue, CategoryBreakdownItem, DashboardHolding, InsuranceSummary, MaturingBond, MaturingFD, MemberAccount } from '../types/domain'
 
 const TYPE_ICONS: Record<string, string> = {
-  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡',
+  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', bond: '📜', epf: '🛡',
   ppf: '🛡', nps: '🛡', gold: '🪙', real_estate: '🏠', sip: '🔄',
   insurance: '☂️', cash: '💵', other: '💼', vehicle: '🚗', liability: '⚠️',
 }
@@ -52,14 +55,38 @@ export function HomePage({ onNavigate }: Props) {
   const [allMemberHoldings, setAllMemberHoldings] = useState<Record<number, DashboardHolding[]>>({})
   const [allMemberAccounts, setAllMemberAccounts] = useState<Record<number, MemberAccount[]>>({})
   const [maturingFDs, setMaturingFDs] = useState<MaturingFD[]>([])
+  const [maturingBonds, setMaturingBonds] = useState<MaturingBond[]>([])
   const MATURING_WINDOW_DAYS = 180
   const [insuranceSummary, setInsuranceSummary] = useState<InsuranceSummary | null>(null)
+  const [bondCouponsDue, setBondCouponsDue] = useState<BondCouponDue[]>([])
 
   useEffect(() => {
     let active = true
     fdDetailsApi.listMaturing(householdId, MATURING_WINDOW_DAYS)
       .then((rows) => { if (active) setMaturingFDs(rows) })
       .catch(() => { if (active) setMaturingFDs([]) })
+    return () => { active = false }
+  }, [householdId])
+
+  useEffect(() => {
+    let active = true
+    bondDetailsApi.listMaturing(householdId, MATURING_WINDOW_DAYS)
+      .then((rows) => { if (active) setMaturingBonds(rows) })
+      .catch(() => { if (active) setMaturingBonds([]) })
+    return () => { active = false }
+  }, [householdId])
+
+  const refreshBondCoupons = () => {
+    return bondDetailsApi.listCouponsDue(householdId)
+      .then((rows) => setBondCouponsDue(rows))
+      .catch(() => setBondCouponsDue([]))
+  }
+
+  useEffect(() => {
+    let active = true
+    bondDetailsApi.listCouponsDue(householdId)
+      .then((rows) => { if (active) setBondCouponsDue(rows) })
+      .catch(() => { if (active) setBondCouponsDue([]) })
     return () => { active = false }
   }, [householdId])
 
@@ -304,6 +331,16 @@ export function HomePage({ onNavigate }: Props) {
       {maturingFDs.length > 0 && (
         <MaturingFDsCard items={maturingFDs} windowDays={MATURING_WINDOW_DAYS} />
       )}
+
+      {maturingBonds.length > 0 && (
+        <MaturingBondsCard items={maturingBonds} windowDays={MATURING_WINDOW_DAYS} />
+      )}
+
+      <BondCouponsCard
+        items={bondCouponsDue}
+        accountOptions={accounts}
+        onReceived={refreshBondCoupons}
+      />
 
       <MissedSipsCard
         items={dashboard.missedSip}

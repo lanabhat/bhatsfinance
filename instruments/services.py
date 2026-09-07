@@ -1,4 +1,40 @@
-from decimal import Decimal
+from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
+
+_COUPON_PERIODS_PER_YEAR = {
+    'monthly': 12,
+    'quarterly': 4,
+    'half_yearly': 2,
+    'annual': 1,
+}
+
+
+def coupon_amount(bond) -> Decimal:
+    """One coupon payment for a bond, based on face_value * quantity * coupon_rate / periods_per_year."""
+    n = _COUPON_PERIODS_PER_YEAR.get(bond.coupon_frequency)
+    if not n:
+        return Decimal('0.00')
+    principal = bond.face_value * bond.quantity
+    rate = bond.coupon_rate / Decimal('100')
+    return (principal * rate / Decimal(str(n))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
+def first_coupon_due_date(bond) -> date:
+    if bond.first_coupon_date:
+        return bond.first_coupon_date
+    return next_coupon_due_date(bond.investment_date, bond.coupon_frequency)
+
+
+def next_coupon_due_date(base: date, frequency: str) -> date:
+    n = _COUPON_PERIODS_PER_YEAR.get(frequency)
+    if not n:
+        return base
+    months = 12 // n
+    month = base.month - 1 + months
+    year = base.year + month // 12
+    month = month % 12 + 1
+    day = min(base.day, 28)
+    return date(year, month, day)
 
 
 def compute_account_balance(account) -> dict:

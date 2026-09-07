@@ -9,7 +9,7 @@ export const householdApi = {
   async createHousehold(payload: Pick<Household, 'name' | 'base_currency'>) {
     return postJson<Household>('/api/households/', payload)
   },
-  async updateHousehold(id: number, payload: Partial<Pick<Household, 'name' | 'base_currency'>>) {
+  async updateHousehold(id: number, payload: Partial<Pick<Household, 'name' | 'base_currency' | 'risk_free_rate_percent'>>) {
     return patchJson<Household>(`/api/households/${id}/`, payload)
   },
   async deleteHousehold(id: number) { return deleteJson(`/api/households/${id}/`) },

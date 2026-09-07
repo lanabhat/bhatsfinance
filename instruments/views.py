@@ -1,17 +1,39 @@
 from datetime import date, timedelta
+from decimal import Decimal
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from instruments.models import Account, AccountOwnership, AssetCategory, FDDetails, Instrument, InstrumentOwnership
+from instruments.holdings_parser import HoldingsParseError, parse_holdings_workbook
+from instruments.models import (
+    Account,
+    AccountOwnership,
+    AllocationTarget,
+    AssetCategory,
+    BondCouponAck,
+    BondDetails,
+    FDDetails,
+    FundHolding,
+    FundHoldingsSnapshot,
+    Instrument,
+    InstrumentOwnership,
+    MutualFundDetails,
+)
 from instruments.serializers import (
     AccountOwnershipSerializer,
     AccountSerializer,
+    AllocationTargetSerializer,
     AssetCategorySerializer,
+    BondDetailsSerializer,
     FDDetailsSerializer,
+    FundHoldingsSnapshotSerializer,
     InstrumentOwnershipSerializer,
     InstrumentSerializer,
+    MutualFundDetailsSerializer,
 )
 
 
@@ -64,6 +86,19 @@ class BulkDeleteInstrumentsView(APIView):
         return Response({'deleted': count})
 
 
+class BulkUpdateInstrumentCategoryView(APIView):
+    """Assign (or clear) asset_category for N instruments in a single call."""
+
+    def patch(self, request):
+        from rest_framework import status as http_status
+        instrument_ids = request.data.get('instrument_ids')
+        if not instrument_ids:
+            return Response({'detail': 'instrument_ids is required.'}, status=http_status.HTTP_400_BAD_REQUEST)
+        asset_category_id = request.data.get('asset_category')
+        count = Instrument.objects.filter(id__in=instrument_ids).update(asset_category_id=asset_category_id)
+        return Response({'updated': count})
+
+
 class InstrumentOwnershipViewSet(viewsets.ModelViewSet):
     queryset = InstrumentOwnership.objects.select_related('instrument', 'member').all()
     serializer_class = InstrumentOwnershipSerializer
@@ -73,6 +108,124 @@ class FDDetailsViewSet(viewsets.ModelViewSet):
     queryset = FDDetails.objects.select_related('instrument').all()
     serializer_class = FDDetailsSerializer
     filterset_fields = ['instrument']
+
+
+class BondDetailsViewSet(viewsets.ModelViewSet):
+    queryset = BondDetails.objects.select_related('instrument').all()
+    serializer_class = BondDetailsSerializer
+    filterset_fields = ['instrument']
+
+    @action(detail=True, methods=['post'], url_path='mark-coupon-received')
+    def mark_coupon_received(self, request, pk=None):
+        from ledger.models import Transaction
+
+        bond = self.get_object()
+        payload = request.data
+        try:
+            due_date = date.fromisoformat(payload['due_date'])
+        except (KeyError, ValueError):
+            return Response({'detail': 'due_date (YYYY-MM-DD) is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        received_on = date.fromisoformat(payload['received_on']) if payload.get('received_on') else date.today()
+        deduct = bool(payload.get('deduct', True))
+
+        if not deduct:
+            ack, created = BondCouponAck.objects.get_or_create(
+                bond=bond,
+                due_date=due_date,
+                defaults={'acknowledged_on': received_on, 'note': payload.get('note', '')},
+            )
+            return Response(
+                {'ack_id': ack.id, 'cleared_due_date': due_date.isoformat(), 'mode': 'ack', 'created': created},
+                status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            )
+
+        from instruments.services import coupon_amount
+
+        account_id = payload.get('account_id') or bond.instrument.default_account_id
+        if not account_id:
+            return Response({'detail': 'account_id is required when recording a transaction.'}, status=status.HTTP_400_BAD_REQUEST)
+        amount = Decimal(str(payload.get('amount') or coupon_amount(bond)))
+
+        try:
+            tx = Transaction.objects.create(
+                household_id=bond.instrument.household_id,
+                account_id=int(account_id),
+                instrument_id=bond.instrument_id,
+                tx_date=received_on,
+                amount=amount,
+                direction=Transaction.Direction.INFLOW,
+                transaction_type=Transaction.TransactionType.INTEREST,
+                source=Transaction.SourceType.MANUAL,
+                external_reference=f'Bond coupon for {bond.instrument.name} due {due_date}',
+                idempotency_key=f'bond-coupon-{bond.id}-{due_date.isoformat()}',
+                metadata={'bond_details_id': bond.id, 'coupon_due_date': due_date.isoformat()},
+            )
+        except DjangoValidationError as e:
+            return Response({'detail': e.message_dict if hasattr(e, 'message_dict') else str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {'transaction_id': tx.id, 'cleared_due_date': due_date.isoformat(), 'mode': 'transaction'},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MutualFundDetailsViewSet(viewsets.ModelViewSet):
+    queryset = MutualFundDetails.objects.select_related('instrument').all()
+    serializer_class = MutualFundDetailsSerializer
+    filterset_fields = ['instrument']
+
+
+class AllocationTargetViewSet(viewsets.ModelViewSet):
+    queryset = AllocationTarget.objects.select_related('asset_category').all()
+    serializer_class = AllocationTargetSerializer
+    filterset_fields = ['household', 'asset_category']
+
+
+class FundHoldingsSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = FundHoldingsSnapshot.objects.prefetch_related('holdings').all()
+    serializer_class = FundHoldingsSnapshotSerializer
+    filterset_fields = ['instrument']
+
+
+class UploadFundHoldingsView(APIView):
+    """Parse an uploaded AMC monthly portfolio disclosure .xlsx for one instrument
+    and store it as a FundHoldingsSnapshot + child FundHolding rows (replacing any
+    existing snapshot for the same as_of_date)."""
+
+    parser_classes = [MultiPartParser]
+
+    def post(self, request, pk):
+        try:
+            instrument = Instrument.objects.get(pk=pk)
+        except Instrument.DoesNotExist:
+            return Response({'detail': 'Instrument not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        uploaded_file = request.data.get('file')
+        if not uploaded_file:
+            return Response({'detail': 'file is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        as_of_date = request.data.get('as_of_date') or date.today().isoformat()
+        source_url = request.data.get('source_url', '')
+
+        try:
+            holdings = parse_holdings_workbook(uploaded_file.read())
+        except HoldingsParseError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        FundHoldingsSnapshot.objects.filter(instrument=instrument, as_of_date=as_of_date).delete()
+        snapshot = FundHoldingsSnapshot.objects.create(
+            instrument=instrument,
+            as_of_date=as_of_date,
+            source_url=source_url,
+            uploaded_file_name=uploaded_file.name,
+        )
+        FundHolding.objects.bulk_create([
+            FundHolding(snapshot=snapshot, **h) for h in holdings
+        ])
+
+        return Response(FundHoldingsSnapshotSerializer(snapshot).data, status=status.HTTP_201_CREATED)
+
 
 class AccountBalanceView(APIView):
     """Compute current balance / credit card outstanding for a single account."""
@@ -157,6 +310,53 @@ class MaturingFDsView(APIView):
                 'elapsed_days': elapsed_days,
                 'current_value': str(current_value),
                 'maturity_value': str(maturity_value),
+                'owners': owners,
+            })
+
+        return Response({'maturing': rows, 'as_of': today.isoformat(), 'window_days': days})
+
+
+class MaturingBondsView(APIView):
+    """Return bonds with maturity_date within the next `days` window."""
+
+    def get(self, request):
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        days = int(request.query_params.get('days', 180))
+        today = date.today()
+        cutoff = today + timedelta(days=days)
+
+        qs = BondDetails.objects.select_related('instrument').prefetch_related('instrument__ownerships__member').filter(
+            instrument__household_id=int(household_id),
+            instrument__is_active=True,
+            maturity_date__gte=today,
+            maturity_date__lte=cutoff,
+        ).order_by('maturity_date')
+
+        rows = []
+        for bond in qs:
+            days_remaining = max((bond.maturity_date - today).days, 0)
+            total_tenure_days = max((bond.maturity_date - bond.investment_date).days, 1)
+            elapsed_days = total_tenure_days - days_remaining
+            owners = [
+                {'member_id': o.member_id, 'member_name': o.member.full_name, 'allocation_percent': str(o.allocation_percent)}
+                for o in bond.instrument.ownerships.all()
+            ]
+            rows.append({
+                'instrument_id': bond.instrument_id,
+                'instrument_name': bond.instrument.name,
+                'instrument_type': bond.instrument.instrument_type,
+                'issuer_name': bond.issuer_name,
+                'face_value': str(bond.face_value),
+                'quantity': bond.quantity,
+                'coupon_rate': str(bond.coupon_rate),
+                'investment_date': bond.investment_date.isoformat(),
+                'maturity_date': bond.maturity_date.isoformat(),
+                'days_remaining': days_remaining,
+                'total_tenure_days': total_tenure_days,
+                'elapsed_days': elapsed_days,
+                'maturity_value': str(bond.maturity_value) if bond.maturity_value is not None else str(bond.face_value * bond.quantity),
                 'owners': owners,
             })
 

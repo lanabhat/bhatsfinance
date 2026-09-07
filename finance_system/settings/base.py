@@ -33,6 +33,8 @@ INSTALLED_APPS = [
     'upstox_integration',
     'insurance',
     'reports',
+    'fund_data',
+    'ai_insights',
 ]
 
 MIDDLEWARE = [
@@ -99,7 +101,10 @@ AUTHENTICATION_BACKENDS = [
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.environ.get('SOCIAL_AUTH_GOOGLE_OAUTH2_KEY', '')
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.environ.get('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET', '')
-SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = ['email', 'profile']
+# GoogleOAuth2's DEFAULT_SCOPE is already ['openid', 'email', 'profile'] — python-social-auth
+# merges (not replaces) this setting with that default, so setting the same scopes here again
+# produced a duplicated "email profile openid email profile" scope string that Google's
+# consent endpoint rejected with a 401.
 SOCIAL_AUTH_URL_NAMESPACE = 'social'
 
 SOCIAL_AUTH_PIPELINE = (
