@@ -603,7 +603,8 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
         # past, and the user's real savings account balances already reflect
         # that money having left long ago — debiting a real account here would
         # double-count it against the account's current (already-reduced) balance.
-        if principal > 0 and not Transaction.objects.filter(instrument=instrument, household=household).exists():
+        existing_txs = Transaction.objects.filter(instrument=instrument, household=household)
+        if principal > 0 and not existing_txs.exists():
             Transaction.objects.create(
                 household=household,
                 instrument=instrument,
@@ -616,6 +617,38 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
                 currency='INR',
                 source=Transaction.SourceType.CSV,
             )
+        elif is_sweep_deposit and existing_txs.exists():
+            # A Multi Option/sweep deposit's balance moves with the linked
+            # savings account, so each re-import's balance change is a real
+            # transfer in/out of the FD, not a gain or loss — record it as a
+            # deposit/withdrawal against this instrument (never against a real
+            # account: the linked savings account's own balance already
+            # reflects the sweep, so touching it here would double-count).
+            # This keeps net_invested tracking the FD's actual current
+            # balance, so Gain/Loss reflects real interest earned instead of
+            # the swept amount.
+            # Matches insights.services.compute_holdings' net_invested sign
+            # convention: OUTFLOW (money into the instrument) adds, INFLOW
+            # (money out of the instrument) subtracts.
+            net_invested = sum(
+                (tx.amount if tx.direction == Transaction.Direction.OUTFLOW else -tx.amount)
+                for tx in existing_txs
+            )
+            delta = imported_principal - net_invested
+            if delta != 0:
+                Transaction.objects.create(
+                    household=household,
+                    instrument=instrument,
+                    account=None,
+                    member=member,
+                    tx_date=date.today(),
+                    amount=abs(delta),
+                    direction=Transaction.Direction.OUTFLOW if delta > 0 else Transaction.Direction.INFLOW,
+                    transaction_type=Transaction.TransactionType.DEPOSIT if delta > 0 else Transaction.TransactionType.WITHDRAWAL,
+                    currency='INR',
+                    source=Transaction.SourceType.CSV,
+                    external_reference='Sweep transfer (auto-detected from re-import balance change)',
+                )
 
         # Holdings/Net Worth read market_value from the latest ValuationSnapshot,
         # falling back to net_invested (principal) if none exists — without this,
