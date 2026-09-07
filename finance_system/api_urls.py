@@ -24,6 +24,7 @@ from instruments.views import (
     MaturingBondsView,
     MaturingFDsView,
     MutualFundDetailsViewSet,
+    MutualFundHoldingsExportView,
     UploadFundHoldingsView,
 )
 from ledger.views import CashWithdrawalView, TagViewSet, TransactionViewSet
@@ -109,6 +110,7 @@ urlpatterns = [
     # reaching BulkDeleteInstrumentsView.
     path('instruments/bulk-delete/', BulkDeleteInstrumentsView.as_view(), name='instruments-bulk-delete'),
     path('instruments/bulk-update-category/', BulkUpdateInstrumentCategoryView.as_view(), name='instruments-bulk-update-category'),
+    path('instruments/export-mf-holdings/', MutualFundHoldingsExportView.as_view(), name='instruments-export-mf-holdings'),
     path('instruments/<int:pk>/upload-holdings/', UploadFundHoldingsView.as_view(), name='instruments-upload-holdings'),
 ] + router.urls + [
     path('csrf/', CsrfView.as_view(), name='csrf'),

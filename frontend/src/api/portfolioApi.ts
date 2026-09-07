@@ -86,6 +86,11 @@ export const portfolioApi = {
   async updateBondDetails(id: number, payload: Partial<Omit<BondDetails, 'id'>>) {
     return patchJson<BondDetails>(`/api/bond-details/${id}/`, payload)
   },
+  async listMutualFundDetails() {
+    const q = toQueryString({ page_size: 500 })
+    const data = await getJson<ApiListResponse<MutualFundDetails>>(`/api/mf-details/?${q}`)
+    return unwrapList(data)
+  },
   async getMutualFundDetails(instrumentId: number) {
     const q = toQueryString({ instrument: instrumentId })
     const data = await getJson<ApiListResponse<MutualFundDetails>>(`/api/mf-details/?${q}`)

@@ -1,7 +1,11 @@
+import csv
+import re
 from datetime import date, timedelta
 from decimal import Decimal
+from io import StringIO
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
@@ -361,3 +365,63 @@ class MaturingBondsView(APIView):
             })
 
         return Response({'maturing': rows, 'as_of': today.isoformat(), 'window_days': days})
+
+
+_FOLIO_SUFFIX_RE = re.compile(r'\s*\([^()]*\)\s*$')
+
+
+class MutualFundHoldingsExportView(APIView):
+    """CSV export of mutual fund/SIP holdings, one row per folio — lets the
+    user reconcile against an external CAS/broker statement in Excel, since
+    the same fund held under multiple folios otherwise only shows as separate
+    rows in the app's own UI."""
+
+    def get(self, request):
+        from insights.services import compute_holdings
+
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        as_of_str = request.query_params.get('as_of')
+        as_of = date.fromisoformat(as_of_str) if as_of_str else date.today()
+
+        holdings = [
+            h for h in compute_holdings(int(household_id), as_of)
+            if h['instrument_type'] in ('mutual_fund', 'sip')
+        ]
+
+        mf_details = {
+            d.instrument_id: d
+            for d in MutualFundDetails.objects.filter(instrument_id__in=[h['instrument_id'] for h in holdings])
+        }
+
+        columns = [
+            'fund_name', 'amc', 'category', 'sub_category', 'folio_no',
+            'units', 'invested', 'current_value', 'gain', 'gain_percent',
+        ]
+        buf = StringIO()
+        writer = csv.DictWriter(buf, fieldnames=columns)
+        writer.writeheader()
+
+        for h in sorted(holdings, key=lambda h: h['instrument_name']):
+            details = mf_details.get(h['instrument_id'])
+            invested = h['net_invested']
+            current_value = h['market_value']
+            gain = current_value - invested
+            gain_percent = (gain / invested * 100) if invested > 0 else ''
+            writer.writerow({
+                'fund_name': _FOLIO_SUFFIX_RE.sub('', h['instrument_name']),
+                'amc': details.amc if details else '',
+                'category': details.fund_category if details else '',
+                'sub_category': details.fund_sub_category if details else '',
+                'folio_no': details.folio_no if details else '',
+                'units': h['quantity'],
+                'invested': invested,
+                'current_value': current_value,
+                'gain': gain,
+                'gain_percent': f'{gain_percent:.2f}' if gain_percent != '' else '',
+            })
+
+        response = HttpResponse(buf.getvalue(), content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="mutual_fund_holdings.csv"'
+        return response

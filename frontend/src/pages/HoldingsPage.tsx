@@ -15,7 +15,7 @@ import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import { computeGain } from '../lib/fmt'
-import type { Account, AssetCategory, DashboardHolding, Instrument, InstrumentOwnership } from '../types/domain'
+import type { Account, AssetCategory, DashboardHolding, Instrument, InstrumentOwnership, MutualFundDetails } from '../types/domain'
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -231,8 +231,17 @@ type SheetState =
   | { type: 'edit_instrument'; instrument: Instrument }
   | { type: 'category'; item?: AssetCategory }
 
-type HoldingGroupBy = 'type' | 'category' | 'none'
+type HoldingGroupBy = 'fund' | 'fund_category' | 'type' | 'category' | 'none'
 type HoldingSortBy = 'value' | 'gain' | 'gainPct' | 'name' | 'invested'
+
+const MF_TYPES = new Set(['mutual_fund', 'sip'])
+
+// Groww imports append " (folioNo)" to disambiguate the same scheme held
+// under multiple folios — strip it to get a stable per-fund grouping key.
+const FOLIO_SUFFIX_RE = /\s*\([^()]*\)\s*$/
+function baseFundName(instrumentName: string): string {
+  return instrumentName.replace(FOLIO_SUFFIX_RE, '').trim()
+}
 
 const TYPE_LABELS: Record<string, string> = {
   equity: 'Equity', mutual_fund: 'Mutual Fund', fd: 'FD', rd: 'RD', bond: 'Bond',
@@ -265,12 +274,13 @@ export function HoldingsPage() {
   const [holdingsLoading, setHoldingsLoading] = useState(false)
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
+  const [mfDetails, setMfDetails] = useState<MutualFundDetails[]>([])
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
-  const [groupBy, setGroupBy] = useState<HoldingGroupBy>('type')
+  const [groupBy, setGroupBy] = useState<HoldingGroupBy>('fund')
   const [sortBy, setSortBy] = useState<HoldingSortBy>('value')
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
-  const cardExpand = useExpandable<number>()
-  const tableExpand = useExpandable<number>()
+  const cardExpand = useExpandable<number | string>()
+  const tableExpand = useExpandable<number | string>()
 
   const changeViewMode = (mode: ViewMode) => {
     setViewMode(mode)
@@ -279,11 +289,18 @@ export function HoldingsPage() {
 
   const loadInstruments = () => portfolioApi.listInstruments(householdId).then(setInstruments).catch(() => {})
   const loadOwnerships = () => portfolioApi.listInstrumentOwnerships(undefined, 200).then(setOwnerships).catch(() => {})
+  const loadMfDetails = () => portfolioApi.listMutualFundDetails().then(setMfDetails).catch(() => {})
 
-  useEffect(() => { void loadInstruments(); void loadOwnerships() }, [householdId])
+  useEffect(() => { void loadInstruments(); void loadOwnerships(); void loadMfDetails() }, [householdId])
 
   // Resync instruments whenever holdings change (e.g. after an import adds new instruments)
-  useEffect(() => { void loadInstruments() }, [dashboard.holdings])
+  useEffect(() => { void loadInstruments(); void loadMfDetails() }, [dashboard.holdings])
+
+  const mfDetailsByInstrument = useMemo(() => {
+    const m = new Map<number, MutualFundDetails>()
+    for (const d of mfDetails) m.set(d.instrument, d)
+    return m
+  }, [mfDetails])
 
   const ownerMap = useMemo(() => {
     const m = new Map<number, string>()
@@ -489,6 +506,150 @@ export function HoldingsPage() {
       })
     }
 
+    if (groupBy === 'fund') {
+      // Roll up MF/SIP holdings that share the same base fund name (same
+      // scheme, different folio) into one card; everything else is one
+      // holding = one group, same as today.
+      const fundGroups = new Map<string, DashboardHolding[]>()
+      const singles: DashboardHolding[] = []
+      for (const h of activeHoldings) {
+        if (!MF_TYPES.has(h.instrument_type)) { singles.push(h); continue }
+        const key = baseFundName(h.instrument_name)
+        if (!fundGroups.has(key)) fundGroups.set(key, [])
+        fundGroups.get(key)!.push(h)
+      }
+
+      const fundSections = [...fundGroups.entries()].map(([fundName, group]) => {
+        const sorted = [...group].sort(sortFn)
+        const totalInvested = group.reduce((s, h) => s + parseFloat(h.net_invested), 0)
+        const totalValue = group.reduce((s, h) => s + parseFloat(h.market_value), 0)
+        const { gain, gainPct } = computeGain(totalValue, totalInvested, 'mutual_fund')
+        const isSingleFolio = group.length === 1
+        const groupKey = `fund:${fundName}`
+        const isExpanded = cardExpand.isExpanded(groupKey)
+
+        if (isSingleFolio) {
+          // No folio split for this fund — render exactly like a normal holding.
+          return viewMode === 'table' ? renderTableRow(group[0]) : renderRow(group[0])
+        }
+
+        const collapsedCard = (
+          <div className="tap min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-base">📊</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-[var(--text)]">{fundName}</p>
+                <p className="text-[11px] text-[var(--text-muted)]">{group.length} folios</p>
+              </div>
+            </div>
+            <div className="mt-2.5 flex items-end justify-between">
+              <Money value={totalValue} className="text-lg font-bold text-[var(--text)] tabular-nums" />
+              <p className={`text-xs font-medium ${gain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                {totalInvested > 0 ? <>{gain >= 0 ? '+' : ''}<Money value={gain} />{gainPct !== null ? ` (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)` : ''}</> : '—'}
+              </p>
+            </div>
+          </div>
+        )
+
+        if (viewMode === 'table') {
+          return (
+            <Fragment key={groupKey}>
+              <tr className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--surface-2)]" onClick={() => cardExpand.toggle(groupKey)}>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">📊</span>
+                    <span className="truncate text-sm font-medium text-[var(--text)]">{fundName}</span>
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-2)]">Mutual Fund</td>
+                <td className="px-3 py-2 text-xs text-[var(--text-2)]">{group.length} folios</td>
+                <td className="px-3 py-2 text-xs text-[var(--text-2)]"></td>
+                <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-[var(--text-2)]">{totalInvested > 0 ? <Money value={totalInvested} /> : '—'}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold"><Money value={totalValue} /></td>
+                <td className={`whitespace-nowrap px-3 py-2 text-right text-xs font-medium ${gain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  {totalInvested > 0 ? <>{gain >= 0 ? '+' : ''}<Money value={gain} />{gainPct !== null ? ` (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)` : ''}</> : '—'}
+                </td>
+                <td className="px-3 py-2"></td>
+              </tr>
+              {isExpanded && (
+                <tr>
+                  <td colSpan={TABLE_COLS} className="bg-[var(--surface-2)] p-0">
+                    {renderTable(sorted)}
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          )
+        }
+
+        return (
+          <ExpandableGridCard
+            key={groupKey}
+            expanded={isExpanded}
+            onToggle={() => cardExpand.toggle(groupKey)}
+            className={isExpanded ? 'ring-2 ring-primary-400 ring-offset-1 rounded-xl' : ''}
+            collapsed={collapsedCard}
+          >
+            <div className="grid gap-2">{sorted.map(h => renderRow(h))}</div>
+          </ExpandableGridCard>
+        )
+      })
+
+      const singleSorted = [...singles].sort(sortFn)
+
+      if (viewMode === 'table') {
+        const singleRendered = singleSorted.map(h => renderTableRow(h))
+        return (
+          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+            <table className="w-full text-sm">
+              <thead className="bg-[var(--surface-2)]">
+                <tr>
+                  <th className={thCls}>Name</th>
+                  <th className={thCls}>Type</th>
+                  <th className={thCls}>Category</th>
+                  <th className={thCls}>Owner</th>
+                  <th className={`${thCls} text-right`}>Invested</th>
+                  <th className={`${thCls} text-right`}>Value</th>
+                  <th className={`${thCls} text-right`}>Gain</th>
+                  <th className={thCls}></th>
+                </tr>
+              </thead>
+              <tbody>{fundSections}{singleRendered}</tbody>
+            </table>
+          </div>
+        )
+      }
+
+      const singleRendered = singleSorted.map(h => renderRow(h))
+      return <div className="card-grid grid gap-3">{[...fundSections, ...singleRendered]}</div>
+    }
+
+    if (groupBy === 'fund_category') {
+      const groups = new Map<string, DashboardHolding[]>()
+      for (const h of activeHoldings) {
+        let key = TYPE_LABELS[h.instrument_type] ?? h.instrument_type
+        if (MF_TYPES.has(h.instrument_type)) {
+          const details = mfDetailsByInstrument.get(h.instrument_id)
+          key = details?.fund_sub_category || details?.fund_category || 'Uncategorised'
+        }
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key)!.push(h)
+      }
+      return [...groups.entries()].sort((a, b) => {
+        const aVal = a[1].reduce((s, h) => s + parseFloat(h.market_value), 0)
+        const bVal = b[1].reduce((s, h) => s + parseFloat(h.market_value), 0)
+        return bVal - aVal
+      }).map(([label, group]) => {
+        const sorted = [...group].sort(sortFn)
+        const total = group.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
+        return (
+          <CategorySection key={label} name={label} color="#7c3aed" totalValue={total} count={group.length} gridChildren={viewMode === 'card'}>
+            {viewMode === 'table' ? renderTable(sorted) : sorted.map(h => renderRow(h))}
+          </CategorySection>
+        )
+      })
+    }
+
     // groupBy === 'category'
     const catMap = new Map<number | null, DashboardHolding[]>()
     catMap.set(null, [])
@@ -520,7 +681,7 @@ export function HoldingsPage() {
       )
     }
     return sections
-  }, [activeHoldings, categories, instruments, canWrite, groupBy, sortBy, viewMode, householdId, cardExpand, refreshDashboard, loadInstruments])
+  }, [activeHoldings, categories, instruments, mfDetailsByInstrument, canWrite, groupBy, sortBy, viewMode, householdId, cardExpand, tableExpand, refreshDashboard, loadInstruments])
 
   const pillCls = (active: boolean) =>
     `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`
@@ -543,7 +704,7 @@ export function HoldingsPage() {
           {/* Group by */}
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-[var(--text-muted)]">Group:</span>
-            {([['type', 'Type'], ['category', 'Category'], ['none', 'None']] as [HoldingGroupBy, string][]).map(([v, l]) => (
+            {([['fund', 'Fund'], ['fund_category', 'Fund Category'], ['type', 'Type'], ['category', 'Category'], ['none', 'None']] as [HoldingGroupBy, string][]).map(([v, l]) => (
               <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
             ))}
           </div>
@@ -565,6 +726,14 @@ export function HoldingsPage() {
             <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'table' ? 'bg-primary-600 text-white' : ''}`}>Table</span>
             <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'card' ? 'bg-primary-600 text-white' : ''}`}>Card</span>
           </button>
+          <a
+            href={`/api/instruments/export-mf-holdings/?household_id=${householdId}`}
+            download="mutual_fund_holdings.csv"
+            className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+            title="Export mutual fund holdings (one row per folio) as CSV"
+          >
+            Export MF CSV
+          </a>
           <button type="button" onClick={() => setSheet({ type: 'buy' })} disabled={!canWrite}
             className="shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
             + Add Holding
