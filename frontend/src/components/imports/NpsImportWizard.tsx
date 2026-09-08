@@ -4,6 +4,7 @@ import { portfolioApi } from '../../api/portfolioApi'
 import type { NpsConfirmedItem, NpsFilePreview, NpsFileResult } from '../../api/importApi'
 import type { Account } from '../../types/domain'
 import { Button } from '../ui/Button'
+import { useApp } from '../../context/AppContext'
 
 type Props = { householdId: number }
 
@@ -16,6 +17,7 @@ type FileRow = {
 }
 
 export function NpsImportWizard({ householdId }: Props) {
+  const { refreshAll } = useApp()
   const [step, setStep] = useState<Step>('upload')
   const [rows, setRows] = useState<FileRow[]>([])
   const [items, setItems] = useState<NpsConfirmedItem[]>([])
@@ -84,6 +86,7 @@ export function NpsImportWizard({ householdId }: Props) {
       const res = await importApi.applyNpsImport(householdId, items)
       setResults(res)
       setStep('result')
+      void refreshAll()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Import failed')
     } finally {

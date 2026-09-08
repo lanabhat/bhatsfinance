@@ -4,6 +4,7 @@ import { portfolioApi } from '../../api/portfolioApi'
 import type { FDAdviceConfirmedItem, FDAdviceFilePreview, FDAdviceFileResult, FDAdviceMemberPreview } from '../../api/importApi'
 import type { Account } from '../../types/domain'
 import { Button } from '../ui/Button'
+import { useApp } from '../../context/AppContext'
 
 type Props = { householdId: number }
 
@@ -27,6 +28,7 @@ const COMPOUNDING_OPTIONS = [
 ]
 
 export function FDAdviceImportWizard({ householdId }: Props) {
+  const { refreshAll } = useApp()
   const [step, setStep] = useState<Step>('upload')
   const [files, setFiles] = useState<File[]>([])
   const [rows, setRows] = useState<FileRow[]>([])
@@ -164,6 +166,7 @@ export function FDAdviceImportWizard({ householdId }: Props) {
       const res = await importApi.applyFDAdviceImport(householdId, items)
       setResults(res)
       setStep('result')
+      void refreshAll()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Import failed')
     } finally {

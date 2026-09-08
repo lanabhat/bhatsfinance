@@ -11,6 +11,7 @@ import type {
   SbiStatementFilePreview,
 } from '../../api/importApi'
 import { Button } from '../ui/Button'
+import { useApp } from '../../context/AppContext'
 
 type Props = { householdId: number }
 
@@ -42,6 +43,7 @@ const COMPOUNDING_OPTIONS = [
 ]
 
 export function SBIStatementImportWizard({ householdId }: Props) {
+  const { refreshAll } = useApp()
   const [step, setStep] = useState<Step>('upload')
   const [files, setFiles] = useState<File[]>([])
   const [rows, setRows] = useState<FileRow[]>([])
@@ -205,6 +207,7 @@ export function SBIStatementImportWizard({ householdId }: Props) {
       const res = await importApi.applySBIStatementImport(householdId, accountMapping, savingsItems, depositItems)
       setResult(res)
       setStep('result')
+      void refreshAll()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Import failed')
     } finally {

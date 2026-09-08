@@ -37,6 +37,7 @@ type AppContextValue = {
   categories: AssetCategory[]
   refreshOptions: () => void
   refreshCategories: () => Promise<void>
+  refreshAll: () => Promise<void>
   canDelete: (e: DeleteEntity) => boolean
   deleteConfig: Record<DeleteEntity, boolean>
   toggleDelete: (e: DeleteEntity) => void
@@ -61,8 +62,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [categories, setCategories] = useState<AssetCategory[]>([])
   const [error, setError] = useState('')
+  const [optionsRefreshKey, setOptionsRefreshKey] = useState(0)
 
-  const { households, members, accounts, instruments, instrumentsFull } = useOptionLoaders(householdId)
+  const { households, members, accounts, instruments, instrumentsFull } = useOptionLoaders(householdId, optionsRefreshKey)
   const { config: deleteConfig, toggle: toggleDelete, canDelete } = useDeleteConfig()
 
   const refreshDashboard = async () => {
@@ -99,7 +101,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     invalidateOptionCache('members:')
     invalidateOptionCache('accounts:')
     invalidateOptionCache('instruments:')
-    setHouseholdId((prev) => Number(prev))
+    // Bumping householdId to the same value is a no-op in React (Object.is
+    // check), so useOptionLoaders' effects never re-ran despite the cache
+    // being cleared — this counter is a real state change that does.
+    setOptionsRefreshKey((k) => k + 1)
+  }
+
+  // Single entry point for "something changed elsewhere, re-sync everything
+  // this page might be showing" — used by the header's manual refresh button
+  // and by import/instrument-creation flows that don't already call
+  // refreshDashboard/refreshOptions themselves.
+  const refreshAll = async () => {
+    refreshOptions()
+    await Promise.all([refreshDashboard(), refreshCategories()])
   }
 
   useEffect(() => { void refreshDashboard() }, [householdId, asOf])
@@ -112,7 +126,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dashboard, refreshDashboard, dashboardLoading,
       households, members, accounts, instruments, instrumentsFull,
       categories, refreshCategories,
-      refreshOptions,
+      refreshOptions, refreshAll,
       canDelete, deleteConfig, toggleDelete,
       error,
     }}>

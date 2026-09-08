@@ -366,7 +366,7 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
 type StatusFilter = 'pending' | 'approved' | 'rejected' | 'all'
 
 export function GmailStagingPage({ accountOptions }: { accountOptions: OptionItem[] }) {
-  const { householdId } = useApp()
+  const { householdId, refreshAll } = useApp()
   const [items, setItems] = useState<StagedTransaction[]>([])
   const [spendCategories, setSpendCategories] = useState<ExpenseCategory[]>([])
   const [loading, setLoading] = useState(false)
@@ -404,6 +404,7 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
     } else {
       setItems(prev => prev.map(m => m.id === updated.id ? updated : m))
     }
+    void refreshAll()
   }
 
   function handleRejected(id: number) {
@@ -437,6 +438,7 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
       const failed = res.results.filter(r => r.error).length
       setBulkMsg(`Approved ${approved} transaction${approved !== 1 ? 's' : ''}${failed ? `, ${failed} failed` : ''}.`)
       await load()
+      void refreshAll()
     } catch (e: any) {
       setBulkMsg(e?.error ?? 'Bulk approve failed')
     } finally {

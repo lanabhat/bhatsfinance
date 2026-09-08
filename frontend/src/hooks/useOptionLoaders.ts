@@ -22,7 +22,7 @@ async function loadAndCache(key: string, loader: () => Promise<OptionItem[]>) {
 // Separate cache for rich instrument options
 const instrumentFullCache = new Map<string, InstrumentOption[]>()
 
-export function useOptionLoaders(householdId: number) {
+export function useOptionLoaders(householdId: number, refreshKey = 0) {
   const [households, setHouseholds] = useState<OptionItem[]>([])
   const [members, setMembers] = useState<OptionItem[]>([])
   const [accounts, setAccounts] = useState<OptionItem[]>([])
@@ -34,7 +34,8 @@ export function useOptionLoaders(householdId: number) {
       const data = await householdApi.listHouseholds()
       return data.map((x) => ({ id: x.id, label: x.name }))
     }).then(setHouseholds)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey])
 
   useEffect(() => {
     if (!householdId) return
@@ -66,7 +67,8 @@ export function useOptionLoaders(householdId: number) {
         setInstruments(full)
       })
     }
-  }, [householdId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [householdId, refreshKey])
 
   return { households, members, accounts, instruments, instrumentsFull }
 }

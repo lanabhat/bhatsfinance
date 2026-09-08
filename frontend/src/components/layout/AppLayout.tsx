@@ -104,7 +104,8 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
   const menuRef = useRef<HTMLDivElement>(null)
   const householdMenuRef = useRef<HTMLDivElement>(null)
   const { user, logout, selectHousehold, updatePhoto } = useAuth()
-  const { households, householdId, refreshOptions } = useApp()
+  const { households, householdId, refreshOptions, refreshAll, dashboardLoading } = useApp()
+  const [refreshing, setRefreshing] = useState(false)
   const { hidden, toggle: togglePrivacy } = usePrivacy()
   const { theme, setTheme } = useTheme()
   const { t, isSimple } = useTerms()
@@ -248,6 +249,26 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
             <h1 className="font-serif text-base font-semibold tracking-tight text-[var(--text)]">{pageTitle}</h1>
           </div>
           <div className="flex items-center gap-1.5">
+            {/* Manual refresh — re-syncs holdings/accounts/dropdowns after an
+                import or an add made elsewhere, without a full page reload */}
+            <button
+              type="button"
+              onClick={async () => {
+                if (refreshing) return
+                setRefreshing(true)
+                try { await refreshAll() } finally { setRefreshing(false) }
+              }}
+              disabled={refreshing || dashboardLoading}
+              title="Refresh data"
+              className="tap flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)] disabled:opacity-50 md:h-8 md:w-8"
+            >
+              <svg
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+                className={`h-4 w-4 ${refreshing || dashboardLoading ? 'animate-spin' : ''}`}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+            </button>
             {/* Theme toggle */}
             <button
               type="button"

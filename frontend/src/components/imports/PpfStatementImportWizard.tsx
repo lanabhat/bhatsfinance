@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { importApi } from '../../api/importApi'
 import type { PpfConfirmedItem, PpfFilePreview, PpfFileResult } from '../../api/importApi'
 import { Button } from '../ui/Button'
+import { useApp } from '../../context/AppContext'
 
 type Props = { householdId: number }
 
@@ -14,6 +15,7 @@ type FileRow = {
 }
 
 export function PpfStatementImportWizard({ householdId }: Props) {
+  const { refreshAll } = useApp()
   const [step, setStep] = useState<Step>('upload')
   const [rows, setRows] = useState<FileRow[]>([])
   const [items, setItems] = useState<PpfConfirmedItem[]>([])
@@ -83,6 +85,7 @@ export function PpfStatementImportWizard({ householdId }: Props) {
       }
       setResults(res)
       setStep('result')
+      void refreshAll()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Import failed')
     } finally {

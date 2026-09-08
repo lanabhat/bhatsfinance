@@ -15,6 +15,7 @@ import {
   type GmailInstrumentProposal,
 } from '../api/gmailApi'
 import { useAuth } from '../context/AuthContext'
+import { useApp } from '../context/AppContext'
 
 type Props = {
   householdId: number
@@ -893,6 +894,7 @@ function ResetImportHistoryButton({ canWrite, onReset }: { canWrite: boolean; on
 
 export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, memberOptions }: Props) {
   const { canWrite } = useAuth()
+  const { refreshOptions } = useApp()
 
   const [connectedAccounts, setConnectedAccounts] = useState<GmailConnectedAccount[]>([])
   const [clientConfigured, setClientConfigured] = useState(true)
@@ -1082,7 +1084,7 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
   function handleInstrumentCreated(schemeName: string, instrumentId: number) {
     setCreatedInstruments((prev) => ({ ...prev, [schemeName]: instrumentId }))
     setModalProposal(null)
-    // Refresh instrument options is not trivial here â€” just close modal; user can map immediately
+    refreshOptions()
   }
 
   async function handleImport() {

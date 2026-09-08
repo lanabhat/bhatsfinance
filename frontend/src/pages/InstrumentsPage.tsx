@@ -290,7 +290,7 @@ function loadViewMode(): ViewMode {
 
 export function InstrumentsPage() {
   const { canWrite } = useAuth()
-  const { householdId, categories, refreshCategories, members, accounts } = useApp()
+  const { householdId, categories, refreshCategories, refreshAll, members, accounts } = useApp()
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
   const [loading, setLoading] = useState(false)
@@ -383,7 +383,7 @@ export function InstrumentsPage() {
   }, [sortedInstruments, groupBy, ownerMap, categories])
 
   const close = () => setSheet({ type: 'none' })
-  const afterSave = async () => { close(); await load() }
+  const afterSave = async () => { close(); await load(); void refreshAll() }
 
   const toggleInstrumentSelected = (id: number) => {
     setSelectedInstrumentIds((prev) => {
@@ -777,7 +777,7 @@ export function InstrumentsPage() {
       {sheet.type === 'delete' && (
         <Sheet title="Delete Instrument" onClose={close} tall>
           <InstrumentDeleteSheet householdId={householdId} instrument={sheet.instrument}
-            onDeleted={async () => { close(); await load() }} onCancel={close} />
+            onDeleted={async () => { close(); await load(); void refreshAll() }} onCancel={close} />
         </Sheet>
       )}
       {sheet.type === 'category' && (
@@ -789,7 +789,7 @@ export function InstrumentsPage() {
       {sheet.type === 'bulk-delete' && (
         <Sheet title="Bulk Delete Instruments" onClose={close}>
           <BulkDeleteSheet householdId={householdId} instrumentType={sheet.instrumentType} count={sheet.count}
-            onDeleted={async () => { close(); setBulkDeleteType(''); await load() }} onCancel={close} />
+            onDeleted={async () => { close(); setBulkDeleteType(''); await load(); void refreshAll() }} onCancel={close} />
         </Sheet>
       )}
       {showBulkClassify && (

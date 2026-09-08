@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { importApi } from '../api/importApi'
 import { normalizeApiError } from '../hooks/errorUtils'
+import { useApp } from '../context/AppContext'
 import type {
   ImportApplyPayload,
   ImportFieldDef,
@@ -45,6 +46,7 @@ function downloadErrorCsv(errors: ImportRowError[]) {
 }
 
 export function ImportWizard({ householdId, memberOptions, accountOptions, instrumentOptions }: Props) {
+  const { refreshAll } = useApp()
   const [step, setStep] = useState<Step>('upload')
   const [file, setFile] = useState<File | null>(null)
   const [importType, setImportType] = useState('valuations')
@@ -122,6 +124,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
       const res = await importApi.applyImport(payload)
       setResult(res)
       setStep('result')
+      void refreshAll()
     } catch (e) {
       setError(normalizeApiError(e))
     } finally {

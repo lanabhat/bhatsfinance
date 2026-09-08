@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { importApi } from '../../api/importApi'
 import type { GrowwFilePreview, GrowwFileResult, GrowwMemberPreview } from '../../api/importApi'
 import { Button } from '../ui/Button'
+import { useApp } from '../../context/AppContext'
 
 type Props = { householdId: number }
 
@@ -10,6 +11,7 @@ type Assignment = { filename: string; member_id: number | null }
 type Step = 'upload' | 'confirm' | 'result'
 
 export function GrowwImportWizard({ householdId }: Props) {
+  const { refreshAll } = useApp()
   const [step, setStep] = useState<Step>('upload')
   const [files, setFiles] = useState<File[]>([])
   const [previews, setPreviews] = useState<GrowwFilePreview[]>([])
@@ -61,6 +63,7 @@ export function GrowwImportWizard({ householdId }: Props) {
       const res = await importApi.applyGrowwImport(householdId, files, valid)
       setResults(res)
       setStep('result')
+      void refreshAll()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Import failed')
     } finally {

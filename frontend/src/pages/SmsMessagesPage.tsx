@@ -10,6 +10,7 @@ import { Drawer } from '../components/ui/Drawer'
 import { DeleteButton } from '../components/common/DeleteButton'
 import { normalizeApiError } from '../hooks/errorUtils'
 import { SmsApprovalForm } from '../components/sms/SmsApprovalForm'
+import { useApp } from '../context/AppContext'
 
 type Props = {
   householdId: number
@@ -67,6 +68,7 @@ function formatDateTime(value: string) {
 }
 
 export function SmsMessagesPage({ householdId, canDelete, accountOptions, memberOptions, instrumentOptions }: Props) {
+  const { refreshAll } = useApp()
   const [messages, setMessages] = useState<SmsMessage[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -816,6 +818,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
           onApproved={() => {
             goToNextApprovable(approving.id)
             load()
+            void refreshAll()
           }}
           onCancel={() => setApproving(null)}
         />
