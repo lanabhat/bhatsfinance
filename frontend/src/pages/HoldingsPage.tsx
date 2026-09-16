@@ -102,6 +102,7 @@ const SUB_CATEGORY_LABELS: Record<string, string> = {
 type HoldingSortBy = 'value' | 'gain' | 'gainPct' | 'name' | 'invested'
 
 const MF_TYPES = new Set(['mutual_fund', 'sip'])
+const QUANTITY_TRACKED_TYPES = new Set(['equity', 'mutual_fund', 'sip', 'bond'])
 
 type ViewMode = 'table' | 'card'
 const VIEW_MODE_KEY = 'holdings:viewMode'
@@ -217,8 +218,19 @@ export function HoldingsPage() {
   // holdings API — compute_holdings() never filters it out — so it has to
   // be split out here, or it'd sit in the normal list at a near-zero value
   // forever. Shown separately with realized (not unrealized) gain/loss.
-  const openHoldings = useMemo(() => activeHoldings.filter((h) => parseFloat(h.quantity) !== 0), [activeHoldings])
-  const closedHoldings = useMemo(() => activeHoldings.filter((h) => parseFloat(h.quantity) === 0), [activeHoldings])
+  // Only equity/MF/SIP track quantity via BUY/SELL (see _signed_quantity in
+  // insights/services.py) — every other type (FD, EPF, PPF, NPS, insurance,
+  // lending, real estate, gold, ...) is value-based and always nets to a
+  // quantity of 0 even while fully open, so it must never be treated as closed.
+  const isQuantityTracked = (h: DashboardHolding) => QUANTITY_TRACKED_TYPES.has(h.instrument_type)
+  const openHoldings = useMemo(
+    () => activeHoldings.filter((h) => !isQuantityTracked(h) || parseFloat(h.quantity) !== 0),
+    [activeHoldings],
+  )
+  const closedHoldings = useMemo(
+    () => activeHoldings.filter((h) => isQuantityTracked(h) && parseFloat(h.quantity) === 0),
+    [activeHoldings],
+  )
 
   const resolveInstrument = (h: DashboardHolding): Instrument =>
     instruments.find((i) => i.id === h.instrument_id) ?? {
