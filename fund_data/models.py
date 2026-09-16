@@ -4,19 +4,20 @@ from core.models import TimeStampedModel
 
 
 class ExternalFund(TimeStampedModel):
-    """A mutual fund scheme tracked via mfapi.in's NAV history, linked to an MF
-    Instrument the user actually holds. Linking is a deliberate manual step (the
-    user picks the matching scheme from a search) — never automatic fuzzy-matching,
-    since a wrong match would silently poison every downstream risk metric."""
+    """A mutual fund scheme tracked via mfapi.in's NAV history, linked to the
+    specific Investment (one scheme/folio) the user actually holds. Linking is
+    a deliberate manual step (the user picks the matching scheme from a
+    search) — never automatic fuzzy-matching, since a wrong match would
+    silently poison every downstream risk metric."""
 
-    instrument = models.OneToOneField('instruments.Instrument', on_delete=models.CASCADE, related_name='external_fund')
+    investment = models.OneToOneField('instruments.Investment', on_delete=models.CASCADE, related_name='external_fund', null=True, blank=True)
     mfapi_scheme_code = models.CharField(max_length=20, unique=True)
     scheme_name = models.CharField(max_length=255, help_text='As returned by mfapi.in, for display/debugging mismatches.')
     fund_house = models.CharField(max_length=120, blank=True)
     last_synced_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self) -> str:
-        return f'{self.instrument.name} -> mfapi #{self.mfapi_scheme_code}'
+        return f'{self.investment.name} -> mfapi #{self.mfapi_scheme_code}'
 
 
 class ExternalFundNav(TimeStampedModel):

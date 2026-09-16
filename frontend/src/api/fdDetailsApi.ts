@@ -3,7 +3,7 @@ import type { ApiListResponse, BulkSnapshotResult, FDDetails, MaturingFD } from 
 
 export const fdDetailsApi = {
   async list(instrumentId?: number) {
-    const q = toQueryString({ instrument: instrumentId })
+    const q = toQueryString({ instrument: instrumentId, page_size: 500 })
     const data = await getJson<ApiListResponse<FDDetails>>(`/api/fd-details/?${q}`)
     return unwrapList(data)
   },

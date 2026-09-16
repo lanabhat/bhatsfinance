@@ -11,8 +11,10 @@ import { AssetAllocationPage } from './pages/AssetAllocationPage'
 import { DiversificationPage } from './pages/DiversificationPage'
 import { FundPerformancePage } from './pages/FundPerformancePage'
 import { HoldingsPage } from './pages/HoldingsPage'
+import { AddHoldingPage } from './pages/AddHoldingPage'
 import { AccountsPage } from './pages/AccountsPage'
 import { InstrumentsPage } from './pages/InstrumentsPage'
+import { InstrumentDetailPage } from './pages/InstrumentDetailPage'
 import { ExpensePage } from './pages/ExpensePage'
 import { SpendTrendsPage } from './pages/SpendTrendsPage'
 import { HelpPage } from './pages/HelpPage'
@@ -44,9 +46,19 @@ const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'allocat
 const LEGACY_ROUTE_REDIRECTS: Record<string, RouteKey> = { assets: 'instruments' }
 
 function routeFromHash(): RouteKey {
-  const value = window.location.hash.replace('#/', '')
+  const value = window.location.hash.replace('#/', '').split('/')[0]
   if (value in LEGACY_ROUTE_REDIRECTS) return LEGACY_ROUTE_REDIRECTS[value]
   return VALID_ROUTES.has(value as RouteKey) ? (value as RouteKey) : 'home'
+}
+
+// Two sub-routes exist today: the literal 'add' under 'holdings'
+// (#/holdings/add, the full-page "Add Holding" flow) and a numeric
+// instrument id under 'instruments' (#/instruments/<id>, the drill-down
+// page). Not a general sub-routing scheme — each caller interprets the
+// segment itself; extend the same way if another page needs one.
+function subRouteFromHash(): string | null {
+  const parts = window.location.hash.replace('#/', '').split('/')
+  return parts.length > 1 ? parts[1] : null
 }
 
 function setRouteHash(route: RouteKey) {
@@ -57,9 +69,10 @@ function AppInner() {
   const { user } = useAuth()
   const { householdId, households, members, accounts, instruments, instrumentsFull, canDelete, deleteConfig, toggleDelete, refreshOptions, error } = useApp()
   const [route, setRoute] = useState<RouteKey>(() => routeFromHash())
+  const [subRoute, setSubRoute] = useState<string | null>(() => subRouteFromHash())
 
   useEffect(() => {
-    const handler = () => setRoute(routeFromHash())
+    const handler = () => { setRoute(routeFromHash()); setSubRoute(subRouteFromHash()) }
     window.addEventListener('hashchange', handler)
     if (!window.location.hash) setRouteHash('home')
     return () => window.removeEventListener('hashchange', handler)
@@ -78,6 +91,8 @@ function AppInner() {
         </div>
       )
     }
+    if (route === 'holdings' && subRoute === 'add') return <AddHoldingPage onDone={() => navigate('holdings')} />
+    if (route === 'instruments' && subRoute) return <InstrumentDetailPage instrumentId={Number(subRoute)} onDone={() => navigate('instruments')} />
     switch (route) {
       case 'home': return <HomePage onNavigate={navigate} />
       case 'holdings': return <HoldingsPage />
@@ -132,11 +147,18 @@ function AppInner() {
     }
   }
 
+  const breadcrumb = route === 'holdings' && subRoute === 'add'
+    ? { parentLabel: 'Investments', current: 'Add Holding', onBack: () => navigate('holdings') }
+    : route === 'instruments' && subRoute
+      ? { parentLabel: 'Instruments', current: instrumentsFull.find((i) => i.id === Number(subRoute))?.label ?? 'Instrument', onBack: () => navigate('instruments') }
+      : undefined
+
   return (
     <AppLayout
       route={route}
       onRouteChange={navigate}
       householdName={householdId ? (households.find((h) => h.id === householdId)?.label || '') : ''}
+      breadcrumb={breadcrumb}
     >
       {error ? (
         <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</p>

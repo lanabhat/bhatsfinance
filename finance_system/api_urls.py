@@ -21,10 +21,12 @@ from instruments.views import (
     FundHoldingsSnapshotViewSet,
     InstrumentOwnershipViewSet,
     InstrumentViewSet,
+    InvestmentViewSet,
     MaturingBondsView,
     MaturingFDsView,
     MutualFundDetailsViewSet,
     MutualFundHoldingsExportView,
+    MutualFundInvestmentView,
     UploadFundHoldingsView,
 )
 from ledger.views import CashWithdrawalView, TagViewSet, TransactionViewSet
@@ -81,6 +83,7 @@ router.register('accounts', AccountViewSet)
 router.register('account-ownerships', AccountOwnershipViewSet, basename='account-ownership')
 router.register('instruments', InstrumentViewSet)
 router.register('instrument-ownerships', InstrumentOwnershipViewSet)
+router.register('investments', InvestmentViewSet)
 router.register('transactions', TransactionViewSet)
 router.register('tags', TagViewSet, basename='tag')
 router.register('valuations', ValuationSnapshotViewSet)
@@ -111,6 +114,7 @@ urlpatterns = [
     path('instruments/bulk-delete/', BulkDeleteInstrumentsView.as_view(), name='instruments-bulk-delete'),
     path('instruments/bulk-update-category/', BulkUpdateInstrumentCategoryView.as_view(), name='instruments-bulk-update-category'),
     path('instruments/export-mf-holdings/', MutualFundHoldingsExportView.as_view(), name='instruments-export-mf-holdings'),
+    path('instruments/mf-investment/', MutualFundInvestmentView.as_view(), name='instruments-mf-investment'),
     path('instruments/<int:pk>/upload-holdings/', UploadFundHoldingsView.as_view(), name='instruments-upload-holdings'),
 ] + router.urls + [
     path('csrf/', CsrfView.as_view(), name='csrf'),

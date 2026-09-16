@@ -24,12 +24,16 @@ RULE_LABELS = {
 }
 
 
-def _instrument_bucket(instrument) -> str:
+def _holding_bucket(instrument, classification) -> str:
     """equity / debt / other — uses the AI classification (ai_insights.FundClassification)
-    when the instrument has one, since that's a real judgment call rather than a
+    when this holding has one, since that's a real judgment call rather than a
     blunt type guess; falls back to the instrument_type heuristic otherwise. A
-    household with no classified funds behaves exactly as before this existed."""
-    classification = getattr(instrument, 'ai_classification', None)
+    household with no classified funds behaves exactly as before this existed.
+
+    `classification` is the FundClassification for this specific holding —
+    for MF/SIP holdings that's keyed by investment_id (FundClassification.investment),
+    since the shared "Mutual Fund" Instrument shell can't itself be classified;
+    for other holding types it's always None and the instrument_type heuristic applies."""
     if classification is not None:
         return classification.bucket
     if instrument.instrument_type in EQUITY_TYPES:
@@ -75,8 +79,16 @@ def suggest_category_targets(household_id: int, as_of: date, age: int, equity_ba
     holdings = compute_holdings(household_id, as_of)
     instruments_by_id = {
         i.id: i for i in Instrument.objects.filter(id__in=[h['instrument_id'] for h in holdings])
-        .select_related('asset_category', 'ai_classification')
+        .select_related('asset_category')
     }
+    # FundClassification is keyed by investment_id (MF/SIP holdings only —
+    # the shared "Mutual Fund" Instrument shell can't itself be classified,
+    # so this is looked up per-Investment, not per-Instrument).
+    from ai_insights.models import FundClassification
+    investment_ids = [h['investment_id'] for h in holdings if h['investment_id']]
+    classification_by_investment = {
+        c.investment_id: c for c in FundClassification.objects.filter(investment_id__in=investment_ids)
+    } if investment_ids else {}
 
     # value of equity-ish / debt-ish holdings per category
     category_composition: dict[int, dict] = {}
@@ -86,7 +98,8 @@ def suggest_category_targets(household_id: int, as_of: date, age: int, equity_ba
             continue
         cat_id = inst.asset_category_id
         entry = category_composition.setdefault(cat_id, {'equity_value': ZERO, 'debt_value': ZERO, 'other_value': ZERO})
-        bucket = _instrument_bucket(inst)
+        classification = classification_by_investment.get(h['investment_id']) if h['investment_id'] else None
+        bucket = _holding_bucket(inst, classification)
         if bucket == 'equity':
             entry['equity_value'] += h['market_value']
         elif bucket == 'debt':

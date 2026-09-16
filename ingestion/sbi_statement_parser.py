@@ -10,6 +10,12 @@ assuming a fixed offset.
 Deposits_Summary has no investment/value date column — only Maturity Date
 and Tenor — so investment_date is derived as maturity_date minus the parsed
 tenor, mirroring the FD advice importer's shape (see fd_parser.py).
+
+For Recurring Deposits specifically, the sheet has no installment-amount
+column either — only Principal Amount and Tenor — so installment_amount is
+derived as principal / tenure_months (a monthly RD's total principal is its
+per-month installment times the number of months), with tenure_months parsed
+from the same Tenor string used for investment_date above.
 """
 from __future__ import annotations
 
@@ -55,14 +61,14 @@ _TENOR_MONTHS_RE = re.compile(r'(\d+)\s*month', re.IGNORECASE)
 _TENOR_YEARS_RE = re.compile(r'(\d+)\s*year', re.IGNORECASE)
 
 
-def _parse_tenor_to_investment_date(maturity_date: date, tenor: str) -> tuple[str, int | None]:
-    """Returns (investment_date_iso, tenure_days_or_none)."""
+def _parse_tenor_to_investment_date(maturity_date: date, tenor: str) -> tuple[str, int | None, int | None]:
+    """Returns (investment_date_iso, tenure_days_or_none, tenure_months_or_none)."""
     tenor = (tenor or '').strip()
 
     days_match = _TENOR_DAYS_RE.search(tenor)
     if days_match:
         days = int(days_match.group(1))
-        return (maturity_date - timedelta(days=days)).isoformat(), days
+        return (maturity_date - timedelta(days=days)).isoformat(), days, None
 
     months_match = _TENOR_MONTHS_RE.search(tenor)
     if months_match:
@@ -74,7 +80,7 @@ def _parse_tenor_to_investment_date(maturity_date: date, tenor: str) -> tuple[st
             investment_date = maturity_date.replace(year=year, month=month)
         except ValueError:
             investment_date = maturity_date.replace(year=year, month=month, day=1)
-        return investment_date.isoformat(), None
+        return investment_date.isoformat(), None, months
 
     years_match = _TENOR_YEARS_RE.search(tenor)
     if years_match:
@@ -83,9 +89,9 @@ def _parse_tenor_to_investment_date(maturity_date: date, tenor: str) -> tuple[st
             investment_date = maturity_date.replace(year=maturity_date.year - years)
         except ValueError:
             investment_date = maturity_date.replace(year=maturity_date.year - years, day=28)
-        return investment_date.isoformat(), None
+        return investment_date.isoformat(), None, years * 12
 
-    return '', None
+    return '', None, None
 
 
 def parse_savings_accounts_sheet(ws) -> list[dict]:
@@ -141,8 +147,9 @@ def parse_deposits_sheet(ws) -> list[dict]:
 
         investment_date_iso = ''
         tenure_days = None
+        tenure_months = None
         if maturity_date is not None:
-            investment_date_iso, tenure_days = _parse_tenor_to_investment_date(maturity_date, tenor)
+            investment_date_iso, tenure_days, tenure_months = _parse_tenor_to_investment_date(maturity_date, tenor)
             if not investment_date_iso:
                 warnings.append(f'Could not parse tenor {tenor!r} to derive investment date.')
 
@@ -165,12 +172,22 @@ def parse_deposits_sheet(ws) -> list[dict]:
         }
 
         if is_rd:
+            principal_amount = _clean_amount(principal_raw)
+            installment_amount = ''
+            if principal_amount and tenure_months:
+                try:
+                    installment_amount = f'{float(principal_amount) / tenure_months:.2f}'
+                except (TypeError, ZeroDivisionError):
+                    installment_amount = ''
+            if tenure_months is None:
+                warnings.append('Could not derive tenure in months from the Tenor column — installment amount not auto-calculated.')
             item.update(
                 doc_type='rd_statement',
-                installment_amount='',
-                current_balance=_clean_amount(principal_raw),
+                installment_amount=installment_amount,
+                current_balance=principal_amount,
                 installment_count_observed=0,
                 statement_date='',
+                tenure_months=tenure_months,
             )
         else:
             item.update(

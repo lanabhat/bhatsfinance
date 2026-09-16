@@ -471,7 +471,7 @@ class GmailApproveProposalsView(APIView):
           { scheme_name, folio_no, instrument_type, member_id, default_account_id }
         Returns: { instrument: { id, name }, created: bool }
         """
-        from instruments.models import Account, Instrument, InstrumentOwnership
+        from instruments.models import Account, Instrument, InstrumentOwnership, Investment
         from core.models import Member
 
         profile = getattr(request.user, 'profile', None)
@@ -492,13 +492,45 @@ class GmailApproveProposalsView(APIView):
         member_id = p.get('member_id')
         default_account_id = p.get('default_account_id')
 
-        metadata = {}
-        if folio_no:
-            metadata['folio_no'] = folio_no
-
         default_account = None
         if default_account_id:
             default_account = Account.objects.filter(pk=default_account_id, household=household).first()
+
+        member = None
+        if member_id:
+            member = Member.objects.filter(pk=member_id, household=household).first()
+
+        if inst_type in ('mutual_fund', 'sip'):
+            # MF/SIP schemes share one "Mutual Fund" Instrument shell per
+            # household — the actual scheme/folio is an Investment row
+            # underneath it (Milestone 2 of the Investment redesign), not
+            # its own per-scheme Instrument.
+            from instruments.services import get_or_create_mf_shell
+
+            instrument = get_or_create_mf_shell(household)
+            if default_account and not instrument.default_account_id:
+                instrument.default_account = default_account
+                instrument.save(update_fields=['default_account', 'updated_at'])
+
+            investment, was_created = Investment.objects.get_or_create(
+                instrument=instrument,
+                name=scheme_name,
+                folio_no=folio_no,
+                defaults={'member': member},
+            )
+            if member and investment.member_id is None:
+                investment.member = member
+                investment.save(update_fields=['member', 'updated_at'])
+
+            return Response({
+                'instrument': {'id': instrument.id, 'name': instrument.name},
+                'investment': {'id': investment.id, 'name': investment.name, 'folio_no': investment.folio_no},
+                'created': was_created,
+            })
+
+        metadata = {}
+        if folio_no:
+            metadata['folio_no'] = folio_no
 
         instrument, was_created = Instrument.objects.get_or_create(
             household=household,
@@ -521,22 +553,13 @@ class GmailApproveProposalsView(APIView):
         if save_fields:
             instrument.save(update_fields=save_fields + ['updated_at'])
 
-        if inst_type in ('mutual_fund', 'sip') and folio_no:
-            from instruments.models import MutualFundDetails
-            mf_details, _ = MutualFundDetails.objects.get_or_create(instrument=instrument)
-            if not mf_details.folio_no:
-                mf_details.folio_no = folio_no
-                mf_details.save(update_fields=['folio_no', 'updated_at'])
-
         # Create ownership for specified member if not already present
-        if member_id:
-            member = Member.objects.filter(pk=member_id, household=household).first()
-            if member:
-                InstrumentOwnership.objects.get_or_create(
-                    instrument=instrument,
-                    member=member,
-                    defaults={'allocation_percent': 100},
-                )
+        if member:
+            InstrumentOwnership.objects.get_or_create(
+                instrument=instrument,
+                member=member,
+                defaults={'allocation_percent': 100},
+            )
 
         return Response({
             'instrument': {'id': instrument.id, 'name': instrument.name},

@@ -23,8 +23,9 @@ import { useApp } from '../context/AppContext'
 import { fdDetailsApi } from '../api/fdDetailsApi'
 import { bondDetailsApi } from '../api/bondDetailsApi'
 import { insuranceApi } from '../api/insuranceApi'
+import { portfolioApi } from '../api/portfolioApi'
 import { getJson, toQueryString } from '../api/http'
-import type { BondCouponDue, CategoryBreakdownItem, DashboardHolding, InsuranceSummary, MaturingBond, MaturingFD, MemberAccount } from '../types/domain'
+import type { BondCouponDue, CategoryBreakdownItem, DashboardHolding, InsuranceSummary, MaturingBond, MaturingFD, MemberAccount, MutualFundDetails } from '../types/domain'
 
 const TYPE_ICONS: Record<string, string> = {
   mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', bond: '📜', epf: '🛡',
@@ -59,6 +60,7 @@ export function HomePage({ onNavigate }: Props) {
   const MATURING_WINDOW_DAYS = 180
   const [insuranceSummary, setInsuranceSummary] = useState<InsuranceSummary | null>(null)
   const [bondCouponsDue, setBondCouponsDue] = useState<BondCouponDue[]>([])
+  const [mfDetails, setMfDetails] = useState<MutualFundDetails[]>([])
 
   useEffect(() => {
     let active = true
@@ -97,6 +99,20 @@ export function HomePage({ onNavigate }: Props) {
       .catch(() => { if (active) setInsuranceSummary(null) })
     return () => { active = false }
   }, [householdId])
+
+  useEffect(() => {
+    let active = true
+    portfolioApi.listMutualFundDetails()
+      .then((rows) => { if (active) setMfDetails(rows) })
+      .catch(() => { if (active) setMfDetails([]) })
+    return () => { active = false }
+  }, [householdId])
+
+  const mfDetailsByInvestment = useMemo(() => {
+    const m = new Map<number, MutualFundDetails>()
+    for (const d of mfDetails) m.set(d.investment, d)
+    return m
+  }, [mfDetails])
 
   const requestMemberHoldings = (memberId: number) => {
     if (allMemberHoldings[memberId] !== undefined) return
@@ -311,6 +327,7 @@ export function HomePage({ onNavigate }: Props) {
                       memberTotal={parseFloat(m.networth)}
                       householdTotal={parseFloat(dashboard.networth)}
                       categories={categories}
+                      mfDetailsByInvestment={mfDetailsByInvestment}
                     />
                   )}
                 </ExpandableGridCard>

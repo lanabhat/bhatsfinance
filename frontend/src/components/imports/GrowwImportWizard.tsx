@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
 import { importApi } from '../../api/importApi'
-import type { GrowwFilePreview, GrowwFileResult, GrowwMemberPreview } from '../../api/importApi'
+import type { GrowwExistingHolding, GrowwFilePreview, GrowwFileResult, GrowwMemberPreview } from '../../api/importApi'
 import { Button } from '../ui/Button'
+import { Sheet } from '../ui/Sheet'
+import { SellForm } from '../holdings/SellForm'
 import { useApp } from '../../context/AppContext'
 
 type Props = { householdId: number }
@@ -9,6 +11,35 @@ type Props = { householdId: number }
 type Assignment = { filename: string; member_id: number | null }
 
 type Step = 'upload' | 'confirm' | 'result'
+
+// MF and SIP share one instrument-type "family" for matching purposes (both
+// live under the shared MF shell in existing_holdings_by_member), distinct
+// from equity — a stock must never be treated as satisfying an MF holding
+// with the same name, or vice versa.
+const typeFamily = (t: string) => (t === 'mutual_fund' || t === 'sip' ? 'mutual_fund' : t)
+
+/**
+ * Holdings the assigned member already has that this file's rows don't
+ * mention — likely sold. Matches within the same instrument type only, so a
+ * stock and an MF sharing a name never cross-satisfy each other.
+ *
+ * Only considers a holding "missing" for a type that this file actually
+ * covers — a stocks-only Groww/Upstox export has zero MF rows by design (MFs
+ * are a separate file), so it must never flag the member's real MF holdings
+ * as "sold" just because this particular upload doesn't mention them. Scope
+ * the check to whichever type-family(ies) parsed_names actually contains.
+ */
+function missingHoldings(preview: GrowwFilePreview, memberId: number | null): GrowwExistingHolding[] {
+  if (memberId === null) return []
+  const existing = preview.existing_holdings_by_member?.[memberId] ?? []
+  const parsedNames = preview.parsed_names ?? []
+  const coveredFamilies = new Set(parsedNames.map((p) => typeFamily(p.instrument_type)))
+  const parsedKeys = new Set(parsedNames.map((p) => `${typeFamily(p.instrument_type)}:${p.name.trim().toLowerCase()}`))
+  return existing.filter((h) =>
+    coveredFamilies.has(typeFamily(h.instrument_type)) &&
+    !parsedKeys.has(`${typeFamily(h.instrument_type)}:${h.name.trim().toLowerCase()}`),
+  )
+}
 
 export function GrowwImportWizard({ householdId }: Props) {
   const { refreshAll } = useApp()
@@ -20,6 +51,8 @@ export function GrowwImportWizard({ householdId }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const [sellTarget, setSellTarget] = useState<GrowwExistingHolding | null>(null)
+  const [resolvedHoldingKeys, setResolvedHoldingKeys] = useState<Set<string>>(new Set())
 
   const allMembers: GrowwMemberPreview[] =
     previews.find(p => p.members && p.members.length > 0)?.members ?? []
@@ -201,6 +234,46 @@ export function GrowwImportWizard({ householdId }: Props) {
             </tbody>
           </table>
         </div>
+        {previews.filter(p => !p.error).map(p => {
+          const asn = assignments.find(a => a.filename === p.filename)
+          const missing = missingHoldings(p, asn?.member_id ?? null).filter(
+            (h) => !resolvedHoldingKeys.has(`${h.investment_id ?? h.instrument_id}`)
+          )
+          if (missing.length === 0) return null
+          const memberName = allMembers.find(m => m.id === asn?.member_id)?.name
+          return (
+            <div key={`missing-${p.filename}`} className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-900/15">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                Not in this file{memberName ? ` (${memberName})` : ''} — sold or missing?
+              </p>
+              <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                These holdings were on file for this member but don't appear in {p.filename}. If sold, record it to capture the realized gain/loss.
+              </p>
+              <div className="mt-2 grid gap-1.5">
+                {missing.map((h) => (
+                  <div key={h.investment_id ?? h.instrument_id} className="flex items-center justify-between gap-2 rounded-lg bg-[var(--surface)] px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-medium text-[var(--text)]">
+                        {h.name}
+                        <span className="ml-1.5 rounded bg-[var(--surface-2)] px-1 py-0.5 text-[9px] font-semibold uppercase text-[var(--text-muted)]">
+                          {typeFamily(h.instrument_type) === 'mutual_fund' ? 'MF' : 'Stock'}
+                        </span>
+                      </p>
+                      <p className="text-[10px] text-[var(--text-muted)]">{h.quantity} units held</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSellTarget(h)}
+                      className="shrink-0 rounded-lg border border-rose-300 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-900/20"
+                    >
+                      Sell
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
         {error && <p className="text-sm text-red-500">{error}</p>}
         <div className="flex gap-2">
           <Button onClick={handleImport} loading={loading}>
@@ -208,6 +281,22 @@ export function GrowwImportWizard({ householdId }: Props) {
           </Button>
           <Button variant="secondary" onClick={reset}>Cancel</Button>
         </div>
+        {sellTarget && (
+          <Sheet title="Record Sell" onClose={() => setSellTarget(null)}>
+            <SellForm
+              householdId={householdId}
+              instrumentId={sellTarget.instrument_id}
+              investmentId={sellTarget.investment_id ?? undefined}
+              holdingName={sellTarget.name}
+              currentQuantity={sellTarget.quantity}
+              onSave={() => {
+                setResolvedHoldingKeys(prev => new Set(prev).add(`${sellTarget.investment_id ?? sellTarget.instrument_id}`))
+                setSellTarget(null)
+              }}
+              onCancel={() => setSellTarget(null)}
+            />
+          </Sheet>
+        )}
       </div>
     )
   }

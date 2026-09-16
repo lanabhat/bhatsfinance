@@ -1,6 +1,85 @@
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
+# Sensible default Instrument.sub_category per instrument_type — used by
+# import flows to auto-populate the field on creation. Never overwrites an
+# existing (e.g. user-set) value; see default_sub_category() below.
+_DEFAULT_SUB_CATEGORY_BY_TYPE = {
+    'fd': 'debt',
+    'rd': 'debt',
+    'bond': 'debt',
+    'equity': 'equity',
+    'epf': 'retirement',
+    'ppf': 'retirement',
+    'nps': 'retirement',
+    'gold': 'gold',
+    'real_estate': 'real_asset',
+    'cash': 'liquid',
+}
+
+_MF_CATEGORY_TO_SUB_CATEGORY = {
+    'equity': 'equity',
+    'debt': 'debt',
+    'hybrid': 'hybrid',
+    'liquid': 'liquid',
+}
+
+
+def default_sub_category(instrument_type: str, fund_category: str | None = None) -> str:
+    """Best-guess Instrument.sub_category for a newly-created instrument.
+    Returns '' (blank/unclassified) rather than guessing wrong — e.g. for
+    mutual funds/SIPs with no fund_category yet, or types with no natural
+    debt/equity/liquid/retirement mapping (vehicle, insurance, other, etc.)."""
+    if instrument_type in ('mutual_fund', 'sip'):
+        if fund_category:
+            return _MF_CATEGORY_TO_SUB_CATEGORY.get(fund_category.strip().lower(), '')
+        return ''
+    return _DEFAULT_SUB_CATEGORY_BY_TYPE.get(instrument_type, '')
+
+
+MF_SHELL_NAME = 'Mutual Fund'
+
+
+def get_or_create_mf_shell(household):
+    """Get (or create) the household's single shared "Mutual Fund" Instrument
+    shell — every MF/SIP scheme/folio lives underneath it as an Investment
+    row (see instruments.models.Investment), matching the shape the Milestone
+    2 data migration (instruments/migrations/0015_migrate_mf_to_investment.py)
+    put every existing household into. Callers that create new MF/SIP
+    holdings (imports, Gmail-parsed proposals, etc.) should get-or-create an
+    Investment under this shell rather than a new per-scheme Instrument."""
+    from instruments.models import Instrument
+
+    shell, _ = Instrument.objects.get_or_create(
+        household=household, name=MF_SHELL_NAME,
+        defaults={'instrument_type': Instrument.InstrumentType.MUTUAL_FUND, 'sub_category': ''},
+    )
+    return shell
+
+
+EQUITY_SHELL_NAME = 'Equity'
+
+
+def get_or_create_equity_shell(household):
+    """Get (or create) the household's single shared "Equity" Instrument
+    shell — every distinct stock a household holds lives underneath it as an
+    Investment row (one per member, even for the same stock name), mirroring
+    get_or_create_mf_shell() above. Without this, two members independently
+    holding a same-named stock (e.g. both own HDFC Bank via separate Groww
+    accounts) would collide on Instrument's (household, name) uniqueness and
+    get silently merged into one shared holding with a split ownership
+    percentage — the bug this shell exists to prevent going forward (see
+    instruments/migrations/0017_split_shared_equity_instruments.py for the
+    one-time fix to instruments already merged this way)."""
+    from instruments.models import Instrument
+
+    shell, _ = Instrument.objects.get_or_create(
+        household=household, name=EQUITY_SHELL_NAME,
+        defaults={'instrument_type': Instrument.InstrumentType.EQUITY, 'sub_category': Instrument.SubCategory.EQUITY},
+    )
+    return shell
+
+
 _COUPON_PERIODS_PER_YEAR = {
     'monthly': 12,
     'quarterly': 4,

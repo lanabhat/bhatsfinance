@@ -58,6 +58,16 @@ class Transaction(TimeStampedModel):
         blank=True,
         related_name='transactions',
     )
+    investment = models.ForeignKey(
+        'instruments.Investment',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transactions',
+        help_text='Which specific holding under `instrument` this buy is for — set only for '
+                  'equity/mutual-fund instruments where `instrument` is a shared type-level shell. '
+                  'Null for FD/bond/other types, where `instrument` alone identifies the holding.',
+    )
     tx_date = models.DateField()
     amount = models.DecimalField(max_digits=18, decimal_places=2)
     quantity = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
@@ -71,6 +81,14 @@ class Transaction(TimeStampedModel):
     external_reference = models.CharField(max_length=120, blank=True)
     idempotency_key = models.CharField(max_length=120, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+    realized_gain = models.DecimalField(
+        max_digits=18, decimal_places=2, null=True, blank=True,
+        help_text='Profit/loss locked in by this sale, computed server-side at creation time as '
+                  'sale proceeds minus (average cost per unit × quantity sold) using this '
+                  'holding\'s net_invested/quantity just before this transaction. Set only for '
+                  'transaction_type=sell; never client-supplied, so it can\'t drift from the real '
+                  'holding state. Average-cost basis, not FIFO/LIFO lot tracking.',
+    )
 
     class Classification(models.TextChoices):
         SPEND = 'spend', 'Spend'

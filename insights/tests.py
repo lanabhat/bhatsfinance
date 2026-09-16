@@ -1,13 +1,24 @@
 from datetime import date
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
+from rest_framework.test import APIClient
 
-from core.models import Household, Member
-from instruments.models import Account, AllocationTarget, AssetCategory, Instrument, MutualFundDetails
+from core.models import Household, Member, UserProfile
+from instruments.models import Account, AllocationTarget, AssetCategory, Instrument, Investment, MutualFundDetails
+from instruments.services import get_or_create_mf_shell
 from ledger.models import Transaction
 from valuations.models import ValuationSnapshot
-from insights.services import compute_cagr, compute_fund_performance, compute_holdings, compute_rebalancing, compute_xirr
+from insights.services import compute_cagr, compute_fund_performance, compute_holdings, compute_rebalancing, compute_xirr, holding_display_name
+
+
+def _approved_client(household):
+    user = get_user_model().objects.create_user(username='tester', password='x')
+    UserProfile.objects.create(user=user, household=household, role='admin', status='approved')
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client
 
 
 class InsightsServiceTests(TestCase):
@@ -234,7 +245,15 @@ class InsightsServiceTests(TestCase):
 
 
 class FundPerformanceServiceTests(TestCase):
+    """Funds are Investments under the household's shared "Mutual Fund"
+    Instrument shell (Milestone 2 of the Investment redesign) — each Investment's
+    XIRR/CAGR is isolated via investment_id in compute_xirr()/compute_cagr(),
+    since the shell instrument_id alone can no longer distinguish funds."""
+
     def setUp(self):
+        from instruments.models import Investment
+        from instruments.services import get_or_create_mf_shell
+
         self.household = Household.objects.create(name='Iyer Family')
         self.member = Member.objects.create(household=self.household, full_name='Deepa Iyer')
         self.account = Account.objects.create(
@@ -243,19 +262,20 @@ class FundPerformanceServiceTests(TestCase):
             account_type=Account.AccountType.BROKER,
             primary_member=self.member,
         )
+        self.shell = get_or_create_mf_shell(self.household)
+        self.shell.default_account = self.account
+        self.shell.save(update_fields=['default_account'])
 
     def _make_fund(self, name, fund_sub_category):
-        instrument = Instrument.objects.create(
-            household=self.household,
-            default_account=self.account,
-            name=name,
-            instrument_type=Instrument.InstrumentType.MUTUAL_FUND,
-        )
-        MutualFundDetails.objects.create(instrument=instrument, fund_category='Equity', fund_sub_category=fund_sub_category)
+        from instruments.models import Investment
+
+        investment = Investment.objects.create(instrument=self.shell, name=name)
+        MutualFundDetails.objects.create(investment=investment, fund_category='Equity', fund_sub_category=fund_sub_category)
         Transaction.objects.create(
             household=self.household,
             account=self.account,
-            instrument=instrument,
+            instrument=self.shell,
+            investment=investment,
             tx_date=date(2024, 1, 10),
             amount=Decimal('50000.00'),
             quantity=Decimal('500.000000'),
@@ -264,19 +284,21 @@ class FundPerformanceServiceTests(TestCase):
         )
         ValuationSnapshot.objects.create(
             household=self.household,
-            instrument=instrument,
+            instrument=self.shell,
+            investment=investment,
             valuation_date=date(2024, 1, 10),
             unit_price=Decimal('100.000000'),
             source=ValuationSnapshot.SourceType.MANUAL,
         )
         ValuationSnapshot.objects.create(
             household=self.household,
-            instrument=instrument,
+            instrument=self.shell,
+            investment=investment,
             valuation_date=date(2025, 1, 10),
             unit_price=Decimal('112.000000'),
             source=ValuationSnapshot.SourceType.MANUAL,
         )
-        return instrument
+        return investment
 
     def test_fund_performance_includes_allocation_xirr_and_cagr(self):
         fund_a = self._make_fund('Demo Large Cap', 'Large Cap')
@@ -284,7 +306,7 @@ class FundPerformanceServiceTests(TestCase):
 
         rows = compute_fund_performance(self.household.id, date(2025, 1, 10))
         self.assertEqual(len(rows), 2)
-        row_a = next(r for r in rows if r['instrument_id'] == fund_a.id)
+        row_a = next(r for r in rows if r['investment_id'] == fund_a.id)
         self.assertEqual(row_a['fund_sub_category'], 'Large Cap')
         self.assertIsNotNone(row_a['xirr'])
         self.assertIsNotNone(row_a['cagr']['1Y'])
@@ -308,6 +330,92 @@ class FundPerformanceServiceTests(TestCase):
     def test_fund_performance_empty_household_returns_empty_list(self):
         rows = compute_fund_performance(self.household.id, date(2025, 1, 10))
         self.assertEqual(rows, [])
+
+
+class HoldingsViewDisplayNameTests(TestCase):
+    def setUp(self):
+        self.household = Household.objects.create(name='Iyer Family')
+        self.client = _approved_client(self.household)
+        self.shell = get_or_create_mf_shell(self.household)
+        self.investment = Investment.objects.create(instrument=self.shell, name='Flexi Cap Fund', folio_no='12345')
+        Transaction.objects.create(
+            household=self.household, instrument=self.shell, investment=self.investment,
+            tx_date=date(2025, 1, 10), amount=Decimal('1000.00'), quantity=Decimal('10.000000'),
+            direction=Transaction.Direction.OUTFLOW, transaction_type=Transaction.TransactionType.BUY,
+        )
+        self.fd_instrument = Instrument.objects.create(
+            household=self.household, name='HDFC Bank FD', instrument_type=Instrument.InstrumentType.FD,
+        )
+        Transaction.objects.create(
+            household=self.household, instrument=self.fd_instrument,
+            tx_date=date(2025, 1, 10), amount=Decimal('5000.00'),
+            direction=Transaction.Direction.OUTFLOW, transaction_type=Transaction.TransactionType.BUY,
+        )
+
+    def test_investment_backed_holding_shows_real_fund_name(self):
+        response = self.client.get(f'/api/holdings?household_id={self.household.id}&as_of=2025-06-01')
+        self.assertEqual(response.status_code, 200)
+        holdings = {h['investment_id'] or h['instrument_id']: h for h in response.data['holdings']}
+        mf_holding = holdings[self.investment.id]
+        self.assertEqual(mf_holding['instrument_name'], 'Mutual Fund')
+        self.assertEqual(mf_holding['investment_name'], 'Flexi Cap Fund')
+        self.assertEqual(mf_holding['display_name'], 'Flexi Cap Fund')
+        self.assertEqual(mf_holding['investment_id'], self.investment.id)
+
+    def test_non_investment_holding_falls_back_to_instrument_name(self):
+        response = self.client.get(f'/api/holdings?household_id={self.household.id}&as_of=2025-06-01')
+        fd_holding = next(h for h in response.data['holdings'] if h['instrument_id'] == self.fd_instrument.id)
+        self.assertIsNone(fd_holding['investment_id'])
+        self.assertEqual(fd_holding['display_name'], 'HDFC Bank FD')
+
+    def test_holding_display_name_helper(self):
+        self.assertEqual(holding_display_name({'investment_name': 'Real Fund', 'instrument_name': 'Mutual Fund'}), 'Real Fund')
+        self.assertEqual(holding_display_name({'investment_name': None, 'instrument_name': 'HDFC Bank FD'}), 'HDFC Bank FD')
+
+
+class HoldingsRealizedGainTotalTests(TestCase):
+    def setUp(self):
+        self.household = Household.objects.create(name='Iyer Family')
+        self.client = _approved_client(self.household)
+        self.shell = get_or_create_mf_shell(self.household)
+        self.investment = Investment.objects.create(instrument=self.shell, name='Flexi Cap Fund', folio_no='12345')
+        # Buy 100 units @ 100/unit = 10000 invested.
+        Transaction.objects.create(
+            household=self.household, instrument=self.shell, investment=self.investment,
+            tx_date=date(2025, 1, 1), amount=Decimal('10000.00'), quantity=Decimal('100.000000'),
+            direction=Transaction.Direction.OUTFLOW, transaction_type=Transaction.TransactionType.BUY,
+        )
+
+    def _holding(self, response):
+        return next(h for h in response.data['holdings'] if h['investment_id'] == self.investment.id)
+
+    def test_never_sold_holding_has_zero_realized_gain(self):
+        response = self.client.get(f'/api/holdings?household_id={self.household.id}&as_of=2025-06-01')
+        self.assertEqual(Decimal(self._holding(response)['realized_gain_total']), Decimal('0.00'))
+
+    def test_partial_sell_realized_gain_appears_while_still_holding(self):
+        # Sell 40 units @ 150/unit -> realized_gain = 6000 - 4000 = 2000.
+        self.client.post('/api/transactions/', {
+            'household': self.household.id, 'instrument': self.shell.id, 'investment': self.investment.id,
+            'tx_date': '2025-02-01', 'amount': '6000.00', 'quantity': '40.000000',
+            'direction': 'inflow', 'transaction_type': 'sell',
+        }, format='json')
+        response = self.client.get(f'/api/holdings?household_id={self.household.id}&as_of=2025-06-01')
+        holding = self._holding(response)
+        self.assertEqual(Decimal(holding['realized_gain_total']), Decimal('2000.00'))
+        self.assertEqual(Decimal(holding['quantity']), Decimal('60.000000'))
+
+    def test_fully_exited_position_still_returned_with_realized_gain(self):
+        # Sell all 100 units @ 80/unit -> realized_gain = 8000 - 10000 = -2000 (a loss).
+        self.client.post('/api/transactions/', {
+            'household': self.household.id, 'instrument': self.shell.id, 'investment': self.investment.id,
+            'tx_date': '2025-02-01', 'amount': '8000.00', 'quantity': '100.000000',
+            'direction': 'inflow', 'transaction_type': 'sell',
+        }, format='json')
+        response = self.client.get(f'/api/holdings?household_id={self.household.id}&as_of=2025-06-01')
+        holding = self._holding(response)
+        self.assertEqual(Decimal(holding['quantity']), Decimal('0.000000'))
+        self.assertEqual(Decimal(holding['realized_gain_total']), Decimal('-2000.00'))
 
 
 class RebalancingServiceTests(TestCase):
@@ -406,25 +514,34 @@ class RebalancingServiceTests(TestCase):
 
 
 class OverlapServiceTests(TestCase):
+    """Fund A/B are Investments under the household's shared "Mutual Fund"
+    Instrument shell (Milestone 2 of the Investment redesign) — matching how
+    real MF/SIP holdings are shaped post-migration, rather than each fund
+    getting its own Instrument."""
+
     def setUp(self):
+        from instruments.models import Investment
+        from instruments.services import get_or_create_mf_shell
+
         self.household = Household.objects.create(name='Nair Family')
         self.member = Member.objects.create(household=self.household, full_name='Anil Nair')
         self.account = Account.objects.create(
             household=self.household, name='Groww', account_type=Account.AccountType.BROKER, primary_member=self.member,
         )
-        self.fund_a = Instrument.objects.create(household=self.household, name='Fund A', instrument_type=Instrument.InstrumentType.MUTUAL_FUND)
-        self.fund_b = Instrument.objects.create(household=self.household, name='Fund B', instrument_type=Instrument.InstrumentType.MUTUAL_FUND)
+        self.shell = get_or_create_mf_shell(self.household)
+        self.fund_a = Investment.objects.create(instrument=self.shell, name='Fund A')
+        self.fund_b = Investment.objects.create(instrument=self.shell, name='Fund B')
 
-        for inst in (self.fund_a, self.fund_b):
+        for inv in (self.fund_a, self.fund_b):
             Transaction.objects.create(
-                household=self.household, account=self.account, instrument=inst,
+                household=self.household, account=self.account, instrument=self.shell, investment=inv,
                 tx_date=date(2026, 1, 1), amount=Decimal('50000.00'), quantity=Decimal('500.000000'),
                 direction=Transaction.Direction.OUTFLOW, transaction_type=Transaction.TransactionType.BUY,
             )
 
-    def _upload_holdings(self, instrument, holdings):
+    def _upload_holdings(self, investment, holdings):
         from instruments.models import FundHolding, FundHoldingsSnapshot
-        snapshot = FundHoldingsSnapshot.objects.create(instrument=instrument, as_of_date=date(2026, 7, 31))
+        snapshot = FundHoldingsSnapshot.objects.create(investment=investment, as_of_date=date(2026, 7, 31))
         FundHolding.objects.bulk_create([
             FundHolding(snapshot=snapshot, isin=isin, instrument_name=name, weight_percent=Decimal(str(weight)))
             for isin, name, weight in holdings
@@ -433,7 +550,7 @@ class OverlapServiceTests(TestCase):
 
     def test_overlap_returns_none_without_uploaded_holdings(self):
         from insights.overlap import compute_fund_overlap
-        result = compute_fund_overlap(self.fund_a.id, self.fund_b.id)
+        result = compute_fund_overlap(('investment', self.fund_a.id), ('investment', self.fund_b.id))
         self.assertIsNone(result)
 
     def test_overlap_percent_is_sum_of_min_weights(self):
@@ -444,7 +561,7 @@ class OverlapServiceTests(TestCase):
         self._upload_holdings(self.fund_b, [
             ('ISIN1', 'Stock 1', 6), ('ISIN2', 'Stock 2', 5), ('ISIN4', 'Stock 4', 12),
         ])
-        result = compute_fund_overlap(self.fund_a.id, self.fund_b.id)
+        result = compute_fund_overlap(('investment', self.fund_a.id), ('investment', self.fund_b.id))
         # shared: ISIN1 min(10,6)=6, ISIN2 min(5,5)=5 -> 11
         self.assertEqual(result['overlap_percent'], '11.00')
         self.assertEqual(len(result['shared_holdings']), 2)
@@ -453,7 +570,7 @@ class OverlapServiceTests(TestCase):
         from insights.overlap import compute_fund_overlap
         self._upload_holdings(self.fund_a, [('ISIN1', 'Stock 1', 10)])
         self._upload_holdings(self.fund_b, [('ISIN9', 'Stock 9', 10)])
-        result = compute_fund_overlap(self.fund_a.id, self.fund_b.id)
+        result = compute_fund_overlap(('investment', self.fund_a.id), ('investment', self.fund_b.id))
         self.assertEqual(result['overlap_percent'], '0.00')
         self.assertEqual(result['shared_holdings'], [])
 
@@ -462,8 +579,8 @@ class OverlapServiceTests(TestCase):
         self._upload_holdings(self.fund_a, [('ISIN1', 'Stock 1', 10)])
         # fund_b has no uploaded holdings
         result = compute_portfolio_diversification(self.household.id, date(2026, 2, 1))
-        self.assertIn(self.fund_a.id, result['covered_instrument_ids'])
-        self.assertIn(self.fund_b.id, result['uncovered_instrument_ids'])
+        self.assertIn(self.fund_a.id, result['covered_investment_ids'])
+        self.assertIn(self.fund_b.id, result['uncovered_investment_ids'])
         self.assertEqual(result['pairs'], [])  # need 2 covered funds to form a pair
 
 

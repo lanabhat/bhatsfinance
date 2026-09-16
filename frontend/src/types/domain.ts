@@ -225,6 +225,7 @@ export type Instrument = {
     | 'insurance'
     | 'lending'
     | 'other'
+  sub_category: '' | 'debt' | 'equity' | 'liquid' | 'retirement' | 'hybrid' | 'gold' | 'real_asset' | 'other'
   symbol: string
   metadata: Record<string, unknown>
   is_active: boolean
@@ -238,12 +239,29 @@ export type InstrumentOwnership = {
   allocation_percent: string
 }
 
+/** One specific holding under a shared type-level Instrument shell — e.g. one
+ * mutual fund scheme/folio under the household's single "Mutual Fund"
+ * Instrument. See instruments/models.py's Investment docstring. */
+export type Investment = {
+  id: number
+  instrument: number
+  member: number | null
+  name: string
+  symbol: string
+  isin: string
+  folio_no: string
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
 export type Transaction = {
   id: number
   household: number
   member: number | null
   account: number | null
   instrument: number | null
+  investment: number | null
   tx_date: string
   amount: string
   quantity: string | null
@@ -277,6 +295,9 @@ export type Transaction = {
   for_members: number[]
   tags: number[]
   notes: string
+  /** Profit/loss locked in by this sale — server-computed (average cost
+   * basis), set only on transaction_type='sell'. Never client-settable. */
+  realized_gain: string | null
   created_at?: string
   updated_at?: string
 }
@@ -360,9 +381,21 @@ export type DashboardHolding = {
   instrument_name: string
   instrument_type: string
   asset_category: number | null
+  /** Set only for holdings backed by a specific Investment under a shared
+   * shell Instrument (currently: mutual_fund/sip) — null for holdings where
+   * the Instrument itself is the whole holding (FD/bond/equity/etc.). */
+  investment_id: number | null
+  investment_name: string | null
+  /** investment_name if set, else instrument_name — always the right name to render. */
+  display_name: string
   quantity: string
   market_value: string
   net_invested: string
+  /** Sum of realized_gain across every sell transaction for this holding —
+   * '0.00' if it's never been sold from. A fully-exited position (quantity
+   * == "0.000000" with prior activity) is still included in the holdings
+   * list, not filtered out. */
+  realized_gain_total: string
 }
 
 export type MemberAccount = {
@@ -439,6 +472,8 @@ export type DashboardPayload = {
 export type FDDetails = {
   id: number
   instrument: number
+  funding_transaction: number | null
+  account_number: string
   principal: string
   annual_rate: string
   investment_date: string
@@ -450,6 +485,7 @@ export type FDDetails = {
 export type BondDetails = {
   id: number
   instrument: number
+  funding_transaction: number | null
   issuer_name: string
   bond_type: 'government' | 'corporate' | 'tax_free' | 'sgb' | 'ncd' | 'other'
   isin: string
@@ -467,6 +503,7 @@ export type BondDetails = {
 }
 
 export type MaturingBond = {
+  bond_id: number
   instrument_id: number
   instrument_name: string
   instrument_type: string
@@ -495,11 +532,10 @@ export type BondCouponDue = {
 
 export type MutualFundDetails = {
   id: number
-  instrument: number
+  investment: number
   amc: string
   fund_category: string
   fund_sub_category: string
-  folio_no: string
   expense_ratio: string | null
 }
 
@@ -537,9 +573,11 @@ export type MaturingFDOwner = {
 }
 
 export type MaturingFD = {
+  fd_id: number
   instrument_id: number
   instrument_name: string
   instrument_type: string
+  account_number: string
   principal: string
   annual_rate: string
   investment_date: string

@@ -42,14 +42,14 @@ _SUB_CATEGORY_MATCH_ORDER = [
 ]
 
 
-def match_benchmark_for_fund(instrument) -> 'BenchmarkFund | None':
-    """Map an Instrument's MutualFundDetails.fund_sub_category to the BenchmarkFund
+def match_benchmark_for_fund(investment) -> 'BenchmarkFund | None':
+    """Map an Investment's MutualFundDetails.fund_sub_category to the BenchmarkFund
     row that most accurately tracks its market-cap segment. Returns None (never a
     fallback guess) when the sub-category doesn't map to any seeded benchmark —
     e.g. debt/liquid/hybrid funds, which have no clean index-fund equivalent."""
     from fund_data.models import BenchmarkFund
 
-    details = getattr(instrument, 'mf_details', None)
+    details = getattr(investment, 'mf_details', None)
     sub_category = (details.fund_sub_category if details else '') or ''
     sub_category_lower = sub_category.lower()
 
@@ -81,12 +81,12 @@ def _covariance(a: list[float], b: list[float]) -> float:
     return sum((x - ma) * (y - mb) for x, y in zip(a, b)) / len(a)
 
 
-def compute_fund_risk_metrics(instrument_id: int, household_id: int, window_days: int = 365) -> dict:
+def compute_fund_risk_metrics(investment_id: int, household_id: int, window_days: int = 365) -> dict:
     from core.models import Household
     from fund_data.models import BenchmarkFund, ExternalFund, ExternalFundNav, BenchmarkFundNav
 
     try:
-        external_fund = ExternalFund.objects.get(instrument_id=instrument_id)
+        external_fund = ExternalFund.objects.get(investment_id=investment_id)
     except ExternalFund.DoesNotExist:
         return {'available': False, 'reason': 'Not linked to a NAV data source yet.'}
 
@@ -94,7 +94,7 @@ def compute_fund_risk_metrics(instrument_id: int, household_id: int, window_days
     # Nifty Midcap 150, etc.); fall back to Nifty 50 for funds with no category
     # match (or no MutualFundDetails at all) so this stays backward-compatible
     # with the original single-benchmark Sharpe/beta/alpha feature.
-    benchmark = match_benchmark_for_fund(external_fund.instrument) or BenchmarkFund.objects.filter(category_match='large_cap').first() or BenchmarkFund.objects.first()
+    benchmark = match_benchmark_for_fund(external_fund.investment) or BenchmarkFund.objects.filter(category_match='large_cap').first() or BenchmarkFund.objects.first()
     if benchmark is None:
         return {'available': False, 'reason': 'No benchmark fund configured.'}
 
@@ -185,7 +185,7 @@ def _nav_cagr(nav_qs, as_of: date, period_months: int) -> float | None:
         return None
 
 
-def compute_benchmark_comparison(instrument_id: int, as_of: date | None = None) -> dict:
+def compute_benchmark_comparison(investment_id: int, as_of: date | None = None) -> dict:
     """Fund CAGR vs its category-matched benchmark's own CAGR, over 1Y/3Y/5Y,
     plus the gap and an underperforming flag (3Y gap > UNDERPERFORMANCE_THRESHOLD_PERCENT).
 
@@ -197,11 +197,11 @@ def compute_benchmark_comparison(instrument_id: int, as_of: date | None = None) 
     as_of = as_of or date.today()
 
     try:
-        external_fund = ExternalFund.objects.get(instrument_id=instrument_id)
+        external_fund = ExternalFund.objects.get(investment_id=investment_id)
     except ExternalFund.DoesNotExist:
         return {'available': False, 'reason': 'Not linked to a NAV data source yet.'}
 
-    benchmark = match_benchmark_for_fund(external_fund.instrument)
+    benchmark = match_benchmark_for_fund(external_fund.investment)
     if benchmark is None:
         return {'available': False, 'reason': 'No matching benchmark available for this fund\'s category.'}
 

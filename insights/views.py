@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 from insights.allocation_templates import calculate_age, suggest_category_targets
 from insights.overlap import compute_portfolio_diversification
-from insights.services import compute_allocation, compute_cashflow, compute_category_breakdown, compute_fund_performance, compute_holdings, compute_holdings_history, compute_household_accounts, compute_member_accounts, compute_members_networth, compute_networth, compute_rebalancing, compute_spend_analytics, compute_xirr
+from insights.services import compute_allocation, compute_cashflow, compute_category_breakdown, compute_fund_performance, compute_holdings, compute_holdings_history, compute_household_accounts, compute_member_accounts, compute_members_networth, compute_networth, compute_rebalancing, compute_spend_analytics, compute_xirr, holding_display_name
 
 
 def _get_member_id(request):
@@ -23,6 +23,8 @@ class HoldingsView(APIView):
         as_of = date.fromisoformat(request.query_params['as_of']) if request.query_params.get('as_of') else date.today()
         member_id = _get_member_id(request)
         holdings = compute_holdings(int(household_id), as_of, member_id)
+        for h in holdings:
+            h['display_name'] = holding_display_name(h)
         accounts = compute_member_accounts(int(household_id), as_of, member_id) if member_id else []
         return Response({'as_of': as_of, 'holdings': holdings, 'accounts': accounts})
 
@@ -53,7 +55,12 @@ class XIRRView(APIView):
             return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
         as_of = date.fromisoformat(request.query_params['as_of']) if request.query_params.get('as_of') else date.today()
         instrument_id = request.query_params.get('instrument_id')
-        xirr = compute_xirr(int(household_id), as_of, int(instrument_id) if instrument_id else None)
+        investment_id = request.query_params.get('investment_id')
+        xirr = compute_xirr(
+            int(household_id), as_of,
+            int(instrument_id) if instrument_id else None,
+            int(investment_id) if investment_id else None,
+        )
         return Response({'as_of': as_of, 'xirr': xirr})
 
 class CashFlowView(APIView):

@@ -8,10 +8,13 @@ import { useTerms } from '../../context/TermsContext'
 import { InvestmentsIcon, AccountsIcon, ExpensesIcon } from '../icons'
 import { AvatarUpload } from '../common/AvatarUpload'
 
+type Breadcrumb = { parentLabel: string; current: string; onBack: () => void }
+
 type Props = {
   route: string
   onRouteChange: (route: string) => void
   householdName?: string
+  breadcrumb?: Breadcrumb
   children: ReactNode
 }
 
@@ -94,7 +97,7 @@ const PAGE_TITLES: Record<string, string> = {
 
 const SIDEBAR_PREF_KEY = 'sidebar:expanded'
 
-export function AppLayout({ route, onRouteChange, householdName, children }: Props) {
+export function AppLayout({ route, onRouteChange, householdName, breadcrumb, children }: Props) {
   const [moreOpen, setMoreOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [householdMenuOpen, setHouseholdMenuOpen] = useState(false)
@@ -244,9 +247,27 @@ export function AppLayout({ route, onRouteChange, householdName, children }: Pro
       <div className={`relative z-10 transition-[margin] duration-200 ease-out ${mainOffset}`}>
         {/* Header */}
         <header className="sticky top-0 z-20 flex h-14 min-w-0 items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-4 pt-safe md:px-6 md:pt-0">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-600 text-xs font-bold text-white md:hidden">W</span>
-            <h1 className="font-serif text-base font-semibold tracking-tight text-[var(--text)]">{pageTitle}</h1>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-600 text-xs font-bold text-white md:hidden">W</span>
+            {breadcrumb ? (
+              <div className="flex min-w-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={breadcrumb.onBack}
+                  title={`Back to ${breadcrumb.parentLabel}`}
+                  className="tap -ml-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+                >
+                  {CHEVRON_LEFT}
+                </button>
+                <h1 className="font-serif min-w-0 truncate text-base font-semibold tracking-tight text-[var(--text)]">
+                  <button type="button" onClick={breadcrumb.onBack} className="text-[var(--text-muted)] hover:text-[var(--text)]">{breadcrumb.parentLabel}</button>
+                  <span className="text-[var(--text-muted)]"> / </span>
+                  {breadcrumb.current}
+                </h1>
+              </div>
+            ) : (
+              <h1 className="font-serif text-base font-semibold tracking-tight text-[var(--text)]">{pageTitle}</h1>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             {/* Manual refresh — re-syncs holdings/accounts/dropdowns after an

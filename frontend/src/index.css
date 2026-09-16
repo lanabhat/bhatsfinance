@@ -61,6 +61,8 @@
   --text-faint:  #ab9f8b;
   --positive:    #2f7d4f;
   --negative:    #b23b2e;
+  --databar-positive: color-mix(in srgb, var(--positive) 22%, transparent);
+  --databar-negative: color-mix(in srgb, var(--negative) 22%, transparent);
   --primary:     #b4521f;
   --primary-light: #f1e3d3;
 
@@ -108,6 +110,8 @@
   --text-faint:  #756b5a;
   --positive:    #74c08c;
   --negative:    #e88c7c;
+  --databar-positive: color-mix(in srgb, var(--positive) 22%, transparent);
+  --databar-negative: color-mix(in srgb, var(--negative) 22%, transparent);
   --primary:     #e3925a;
   --primary-light: #33281d;
 

@@ -194,6 +194,29 @@ class GrowwPreviewView(APIView):
 
         member_list = [{'id': m.id, 'name': m.full_name, 'relation': m.relation_type} for m in members]
 
+        # Currently-held equity/MF positions per member, so the confirm step
+        # can show "not in this file — sold or missing?" for anything the
+        # household holds that this upload doesn't mention (mirrors SBI's
+        # existing_deposits). Scoped to equity/mutual_fund/sip only — other
+        # instrument types aren't something a Groww/Upstox file would ever
+        # cover, so they'd never show up here regardless.
+        from datetime import date as _date
+        from insights.services import compute_holdings
+        existing_holdings_by_member: dict[int, list[dict]] = {}
+        for m in members:
+            rows = compute_holdings(household.id, as_of=_date.today(), member_id=m.id)
+            existing_holdings_by_member[m.id] = [
+                {
+                    'instrument_id': r['instrument_id'],
+                    'investment_id': r['investment_id'],
+                    'name': r['investment_name'] or r['instrument_name'],
+                    'instrument_type': r['instrument_type'],
+                    'quantity': str(r['quantity']),
+                }
+                for r in rows
+                if r['instrument_type'] in ('equity', 'mutual_fund', 'sip') and r['quantity'] != 0
+            ]
+
         results = []
         for f in files:
             try:
@@ -212,12 +235,23 @@ class GrowwPreviewView(APIView):
                     'mf_count': len(parsed.get('mutual_funds', [])),
                     'holdings_count': 0,
                 }
+                # Tagged with instrument_type so a stock and an MF that
+                # happen to share a name (e.g. AMC-named stock vs. a fund
+                # from the same AMC) never cross-match against each other on
+                # the confirm step's "not in this file" diff — equity and
+                # mutual_fund/sip are matched within their own type only.
+                parsed_names = (
+                    [{'name': s['name'].strip().lower(), 'instrument_type': 'equity'} for s in parsed.get('stocks', []) if s.get('name')]
+                    + [{'name': m['scheme_name'].strip().lower(), 'instrument_type': 'mutual_fund'} for m in parsed.get('mutual_funds', []) if m.get('scheme_name')]
+                )
             else:
                 summary = {
                     'stocks_count': 0,
                     'mf_count': 0,
                     'holdings_count': len(parsed.get('holdings', [])),
                 }
+                # Upstox exports equity holdings only.
+                parsed_names = [{'name': h['name'].strip().lower(), 'instrument_type': 'equity'} for h in parsed.get('holdings', []) if h.get('name')]
 
             results.append({
                 'filename': f.name,
@@ -232,6 +266,8 @@ class GrowwPreviewView(APIView):
                     'confidence': confidence,
                 } if matched_member else None,
                 'members': [{'id': m.id, 'name': m.full_name} for m in members],
+                'existing_holdings_by_member': existing_holdings_by_member,
+                'parsed_names': parsed_names,
             })
 
         return Response(results)
@@ -521,10 +557,27 @@ class SBIStatementPreviewView(APIView):
         members = household.members.filter(is_active=True)
         member_list = [{'id': m.id, 'name': m.full_name, 'relation': m.relation_type} for m in members]
 
-        from instruments.models import Account
+        from instruments.models import Account, FDDetails, Instrument
         existing_accounts = [
-            {'id': a.id, 'name': a.name, 'institution_name': a.institution_name}
+            {'id': a.id, 'name': a.name, 'institution_name': a.institution_name, 'primary_member_id': a.primary_member_id}
             for a in Account.objects.filter(household=household, account_type='bank')
+        ]
+
+        # Existing FD/RD deposits, keyed by account_number — lets the confirm
+        # step pre-fill owner/compounding for a re-imported deposit instead of
+        # asking again, and lets it show "not in this statement" for deposits
+        # the household has on file that this upload doesn't mention.
+        existing_deposits = [
+            {
+                'account_number': fd.account_number,
+                'instrument_id': fd.instrument_id,
+                'instrument_name': fd.instrument.name,
+                'compounding': fd.compounding,
+                'member_id': fd.instrument.ownerships.values_list('member_id', flat=True).first(),
+                'is_active': fd.instrument.is_active,
+                'doc_type': 'fd_advice' if fd.instrument.instrument_type == Instrument.InstrumentType.FD else 'rd_statement',
+            }
+            for fd in FDDetails.objects.filter(instrument__household=household, account_number__gt='').select_related('instrument').prefetch_related('instrument__ownerships')
         ]
 
         saved_passwords = list(
@@ -614,6 +667,7 @@ class SBIStatementPreviewView(APIView):
                 'account_numbers': distinct_account_numbers,
                 'members': member_list,
                 'existing_accounts': existing_accounts,
+                'existing_deposits': existing_deposits,
             })
 
         return Response(results)
@@ -627,7 +681,10 @@ class SBIStatementApplyView(APIView):
     for an existing account, or {name, member_id} to create one}),
     savings_accounts (confirmed rows), deposits (confirmed fd_advice/
     rd_statement rows, each carrying account_number to resolve via
-    account_mapping and member_id for ownership).
+    account_mapping and member_id for ownership), and optionally
+    deactivate_instrument_ids (Instrument ids the user confirmed are
+    closed/matured and absent from this statement — flips is_active=False,
+    nothing else).
     """
 
     def post(self, request):
@@ -747,7 +804,21 @@ class SBIStatementApplyView(APIView):
             except Exception as e:
                 deposit_results.append({'account_number': account_number, 'error': str(e)})
 
-        return Response({'savings_accounts': savings_results, 'deposits': deposit_results}, status=201)
+        # Deposits the user confirmed are closed/matured (present in the DB,
+        # absent from this statement) — explicit opt-in per instrument, never
+        # inferred automatically. Reuses the existing manual is_active toggle
+        # rather than adding a new status field.
+        deactivate_ids = request.data.get('deactivate_instrument_ids') or []
+        deactivated_count = 0
+        if deactivate_ids:
+            from instruments.models import Instrument
+            deactivated_count = Instrument.objects.filter(household=household, id__in=deactivate_ids).update(is_active=False)
+
+        return Response({
+            'savings_accounts': savings_results,
+            'deposits': deposit_results,
+            'deactivated_count': deactivated_count,
+        }, status=201)
 
 
 class NpsPreviewView(APIView):

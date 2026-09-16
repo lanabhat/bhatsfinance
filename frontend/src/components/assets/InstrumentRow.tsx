@@ -1,25 +1,30 @@
 import { Money } from '../common/Money'
+import { formatMaturity } from '../../lib/fmt'
+import { TYPE_ICONS } from '../../lib/instrumentTypes'
 import type { AssetCategory, DashboardHolding, Instrument } from '../../types/domain'
+
+export type MaturityInfo = { date: string; rate: string }
 
 type Props = {
   instrument: Instrument
   holding?: DashboardHolding
   category?: AssetCategory
+  /** One instrument can hold several FD/Bond deposits — sorted nearest-maturity-first. */
+  maturities?: MaturityInfo[]
+  /** Number of Investment rows (funds/folios) under this instrument — 0 for
+   * every type except the shared MF/SIP shell, by design (one row = one
+   * holding elsewhere). Shown whenever provided, including 0. */
+  childCount?: number
   onClick?: () => void
   onBuy?: () => void
   onUpdateValue?: () => void
 }
 
-const TYPE_ICONS: Record<string, string> = {
-  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', bond: '📜', epf: '🛡',
-  ppf: '🛡', nps: '🛡', gold: '🪙', real_estate: '🏠', sip: '🔄',
-  insurance: '☂️', cash: '💵', other: '💼', vehicle: '🚗', liability: '⚠️',
-}
 
-
-export function InstrumentRow({ instrument, holding, category, onClick, onBuy, onUpdateValue }: Props) {
+export function InstrumentRow({ instrument, holding, category, maturities, childCount, onClick, onBuy, onUpdateValue }: Props) {
   const borderColor = category?.color ?? '#94a3b8'
   const hasActions = onBuy || onUpdateValue
+  const nearest = maturities?.[0]
 
   return (
     <div
@@ -31,8 +36,12 @@ export function InstrumentRow({ instrument, holding, category, onClick, onBuy, o
           {TYPE_ICONS[instrument.instrument_type] ?? '💼'}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium text-[var(--text)]">{instrument.name}</p>
-          <p className="text-[11px] text-[var(--text-muted)] capitalize">{instrument.instrument_type.replace(/_/g, ' ')}</p>
+          <p className="truncate text-[13px] font-medium text-[var(--text)]">{holding?.display_name ?? instrument.name}</p>
+          <p className="truncate text-[11px] text-[var(--text-muted)]">
+            <span className="capitalize">{instrument.instrument_type.replace(/_/g, ' ')}</span>
+            {typeof childCount === 'number' && <> · {childCount} investment{childCount === 1 ? '' : 's'}</>}
+            {nearest && <> · {nearest.rate}% · {formatMaturity(nearest.date)}{maturities && maturities.length > 1 ? ` (+${maturities.length - 1} more)` : ''}</>}
+          </p>
         </div>
         {holding && (
           <div className="max-w-[52%] shrink-0 text-right">

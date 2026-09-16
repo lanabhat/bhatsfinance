@@ -27,3 +27,6 @@ Account statement files/
 
 # Dev server PID files / logs (scripts/dev-server.ps1)
 .dev-server/
+
+# Local DB snapshots / migration exports — not fixtures, not canonical
+backup/

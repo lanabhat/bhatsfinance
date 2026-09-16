@@ -28,6 +28,15 @@ class ValuationSnapshot(TimeStampedModel):
         blank=True,
         related_name='valuation_snapshots',
     )
+    investment = models.ForeignKey(
+        'instruments.Investment',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='valuation_snapshots',
+        help_text='Which specific holding under `instrument` this snapshot values — set only for '
+                  'equity/mutual-fund instruments where `instrument` is a shared type-level shell.',
+    )
     unit_price = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
     market_value = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
     balance = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal('0.00'))
@@ -39,6 +48,7 @@ class ValuationSnapshot(TimeStampedModel):
             models.Index(fields=['household', 'valuation_date']),
             models.Index(fields=['instrument', 'valuation_date']),
             models.Index(fields=['account', 'valuation_date']),
+            models.Index(fields=['investment', 'valuation_date']),
         ]
         ordering = ['-valuation_date', '-id']
 
@@ -47,6 +57,8 @@ class ValuationSnapshot(TimeStampedModel):
             raise ValidationError('Either instrument or account must be set.')
         if self.instrument_id and self.account_id:
             raise ValidationError('Set only one of instrument or account.')
+        if self.investment_id and not self.instrument_id:
+            raise ValidationError('investment requires instrument to also be set.')
 
     def __str__(self) -> str:
         return f'{self.household_id} {self.valuation_date}'

@@ -104,7 +104,7 @@ export function MaturingBondsCard({ items, windowDays }: Props) {
                   const isJoint = bond.owners && bond.owners.length > 1
                   const otherOwners = isJoint ? bond.owners.filter(o => o.member_name !== group.label).map(o => o.member_name) : []
                   return (
-                    <div key={bond.instrument_id} className={`px-4 py-3 ${isLast ? '' : 'border-b border-teal-100'}`}>
+                    <div key={bond.bond_id} className={`px-4 py-3 ${isLast ? '' : 'border-b border-teal-100'}`}>
                       <div className="flex items-center gap-3">
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface)] text-base">📜</span>
                         <div className="min-w-0 flex-1">

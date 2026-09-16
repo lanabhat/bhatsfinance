@@ -2,6 +2,13 @@ import { getJson as httpGet, postJson as httpPost } from './http'
 import type { ImportApplyPayload, ImportPreviewResult, ImportResult, ImportSchema } from '../types/domain'
 
 export type GrowwMemberPreview = { id: number; name: string; relation?: string }
+export type GrowwExistingHolding = {
+  instrument_id: number
+  investment_id: number | null
+  name: string
+  instrument_type: string
+  quantity: string
+}
 export type GrowwFilePreview = {
   filename: string
   source?: 'groww' | 'upstox'
@@ -12,6 +19,10 @@ export type GrowwFilePreview = {
   holdings_count?: number
   matched_member: { id: number; name: string; relation?: string; confidence: number } | null
   members: GrowwMemberPreview[]
+  /** Currently-held equity/MF positions per household member (member id -> holdings), for detecting positions missing from this file. */
+  existing_holdings_by_member?: Record<number, GrowwExistingHolding[]>
+  /** Lowercased stock/scheme names parsed from this file, tagged by type so equity and mutual_fund/sip never cross-match when diffing against existing_holdings_by_member. */
+  parsed_names?: { name: string; instrument_type: string }[]
   error?: string
 }
 export type GrowwFileResult = {
@@ -302,9 +313,25 @@ export type SbiDepositPreview = {
   current_balance?: string
   installment_count_observed?: number
   statement_date?: string
+  // auto-derived from the Tenor column (principal / tenure_months) — still editable
+  tenure_months?: number | null
 }
 
-export type SbiExistingAccount = { id: number; name: string; institution_name: string }
+export type SbiExistingAccount = { id: number; name: string; institution_name: string; primary_member_id: number | null }
+
+/** An FD/RD the household already has on file, keyed by account_number —
+ * used to pre-fill owner/compounding for a matching re-imported deposit
+ * instead of asking again, and to detect deposits present in the DB but
+ * absent from a newly uploaded statement ("not in this statement"). */
+export type SbiExistingDeposit = {
+  account_number: string
+  instrument_id: number
+  instrument_name: string
+  compounding: 'simple' | 'monthly' | 'quarterly' | 'half_yearly' | 'annually'
+  member_id: number | null
+  is_active: boolean
+  doc_type: 'fd_advice' | 'rd_statement'
+}
 
 export type SbiStatementFilePreview = {
   filename: string
@@ -313,6 +340,7 @@ export type SbiStatementFilePreview = {
   account_numbers: string[]
   members: SbiMemberPreview[]
   existing_accounts: SbiExistingAccount[]
+  existing_deposits: SbiExistingDeposit[]
   error?: string
   error_code?: 'bad_password' | string
 }
@@ -356,6 +384,7 @@ export type SbiDepositResult = {
 export type SbiStatementApplyResult = {
   savings_accounts: SbiSavingsAccountResult[]
   deposits: SbiDepositResult[]
+  deactivated_count?: number
 }
 
 const BASE = '/api'
@@ -503,11 +532,13 @@ export const importApi = {
     accountMapping: Record<string, SbiAccountMappingEntry>,
     savingsAccounts: SbiConfirmedSavingsAccount[],
     deposits: SbiConfirmedDeposit[],
+    deactivateInstrumentIds?: number[],
   ): Promise<SbiStatementApplyResult> =>
     httpPost(`${BASE}/imports/sbi-statement-apply`, {
       household_id: householdId,
       account_mapping: accountMapping,
       savings_accounts: savingsAccounts,
       deposits,
+      deactivate_instrument_ids: deactivateInstrumentIds,
     }),
 }

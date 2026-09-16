@@ -25,6 +25,7 @@ from instruments.models import (
     FundHoldingsSnapshot,
     Instrument,
     InstrumentOwnership,
+    Investment,
     MutualFundDetails,
 )
 from instruments.serializers import (
@@ -37,6 +38,7 @@ from instruments.serializers import (
     FundHoldingsSnapshotSerializer,
     InstrumentOwnershipSerializer,
     InstrumentSerializer,
+    InvestmentSerializer,
     MutualFundDetailsSerializer,
 )
 
@@ -108,6 +110,77 @@ class InstrumentOwnershipViewSet(viewsets.ModelViewSet):
     serializer_class = InstrumentOwnershipSerializer
     filterset_fields = ['instrument', 'member']
 
+
+class InvestmentViewSet(viewsets.ModelViewSet):
+    queryset = Investment.objects.select_related('instrument', 'member').all()
+    serializer_class = InvestmentSerializer
+    filterset_fields = ['instrument', 'member', 'is_active']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        household_id = self.request.query_params.get('household')
+        if household_id:
+            qs = qs.filter(instrument__household_id=household_id)
+        return qs
+
+
+class MutualFundInvestmentView(APIView):
+    """Get-or-create the household's shared shell Instrument (Mutual Fund by
+    default, or Equity when instrument_type='equity' is passed), then
+    get-or-create an Investment under it for the given holding name — the
+    single round-trip a "record a buy / add a new holding" flow needs
+    instead of separately looking up the shell and then creating/matching an
+    Investment by hand.
+
+    Equity has no natural folio to disambiguate two members holding the same
+    stock name, so for instrument_type='equity' the lookup is scoped by
+    member instead of folio_no (matching how the Groww/Upstox importer
+    creates equity Investments — see ingestion/universal_importer.py and
+    instruments/services.py's get_or_create_equity_shell)."""
+
+    def post(self, request):
+        from core.models import Household
+        from instruments.services import get_or_create_equity_shell, get_or_create_mf_shell
+
+        household_id = request.data.get('household')
+        name = (request.data.get('name') or '').strip()
+        folio_no = (request.data.get('folio_no') or '').strip()
+        instrument_type = request.data.get('instrument_type') or 'mutual_fund'
+        if not household_id or not name:
+            return Response({'detail': 'household and name are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        household = Household.objects.filter(pk=household_id).first()
+        if not household:
+            return Response({'detail': 'household not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        member_id = request.data.get('member') or None
+
+        if instrument_type == 'equity':
+            shell = get_or_create_equity_shell(household)
+            investment, created = Investment.objects.get_or_create(
+                instrument=shell,
+                name=name,
+                member_id=member_id,
+                defaults={'symbol': request.data.get('symbol', ''), 'isin': request.data.get('isin', '')},
+            )
+        else:
+            shell = get_or_create_mf_shell(household)
+            investment, created = Investment.objects.get_or_create(
+                instrument=shell,
+                name=name,
+                folio_no=folio_no,
+                defaults={
+                    'member_id': member_id,
+                    'symbol': request.data.get('symbol', ''),
+                    'isin': request.data.get('isin', ''),
+                },
+            )
+        return Response(
+            InvestmentSerializer(investment).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
 class FDDetailsViewSet(viewsets.ModelViewSet):
     queryset = FDDetails.objects.select_related('instrument').all()
     serializer_class = FDDetailsSerializer
@@ -175,9 +248,9 @@ class BondDetailsViewSet(viewsets.ModelViewSet):
 
 
 class MutualFundDetailsViewSet(viewsets.ModelViewSet):
-    queryset = MutualFundDetails.objects.select_related('instrument').all()
+    queryset = MutualFundDetails.objects.select_related('investment').all()
     serializer_class = MutualFundDetailsSerializer
-    filterset_fields = ['instrument']
+    filterset_fields = ['investment']
 
 
 class AllocationTargetViewSet(viewsets.ModelViewSet):
@@ -189,21 +262,25 @@ class AllocationTargetViewSet(viewsets.ModelViewSet):
 class FundHoldingsSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = FundHoldingsSnapshot.objects.prefetch_related('holdings').all()
     serializer_class = FundHoldingsSnapshotSerializer
-    filterset_fields = ['instrument']
+    filterset_fields = ['investment']
 
 
 class UploadFundHoldingsView(APIView):
-    """Parse an uploaded AMC monthly portfolio disclosure .xlsx for one instrument
-    and store it as a FundHoldingsSnapshot + child FundHolding rows (replacing any
-    existing snapshot for the same as_of_date)."""
+    """Parse an uploaded AMC monthly portfolio disclosure .xlsx for one fund/folio
+    (Investment) and store it as a FundHoldingsSnapshot + child FundHolding rows
+    (replacing any existing snapshot for the same as_of_date).
+
+    `pk` is an Investment id — FundHoldingsSnapshot is keyed to the specific
+    fund/folio (Investment), not the shared "Mutual Fund"/"Equity" Instrument
+    shell, since the shell can't distinguish whose portfolio disclosure this is."""
 
     parser_classes = [MultiPartParser]
 
     def post(self, request, pk):
         try:
-            instrument = Instrument.objects.get(pk=pk)
-        except Instrument.DoesNotExist:
-            return Response({'detail': 'Instrument not found.'}, status=status.HTTP_404_NOT_FOUND)
+            investment = Investment.objects.get(pk=pk)
+        except Investment.DoesNotExist:
+            return Response({'detail': 'Investment not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         uploaded_file = request.data.get('file')
         if not uploaded_file:
@@ -217,9 +294,9 @@ class UploadFundHoldingsView(APIView):
         except HoldingsParseError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        FundHoldingsSnapshot.objects.filter(instrument=instrument, as_of_date=as_of_date).delete()
+        FundHoldingsSnapshot.objects.filter(investment=investment, as_of_date=as_of_date).delete()
         snapshot = FundHoldingsSnapshot.objects.create(
-            instrument=instrument,
+            investment=investment,
             as_of_date=as_of_date,
             source_url=source_url,
             uploaded_file_name=uploaded_file.name,
@@ -302,9 +379,11 @@ class MaturingFDsView(APIView):
                 for o in fd.instrument.ownerships.all()
             ]
             rows.append({
+                'fd_id': fd.id,
                 'instrument_id': fd.instrument_id,
                 'instrument_name': fd.instrument.name,
                 'instrument_type': fd.instrument.instrument_type,
+                'account_number': fd.account_number,
                 'principal': str(fd.principal),
                 'annual_rate': str(fd.annual_rate),
                 'investment_date': fd.investment_date.isoformat(),
@@ -348,6 +427,7 @@ class MaturingBondsView(APIView):
                 for o in bond.instrument.ownerships.all()
             ]
             rows.append({
+                'bond_id': bond.id,
                 'instrument_id': bond.instrument_id,
                 'instrument_name': bond.instrument.name,
                 'instrument_type': bond.instrument.instrument_type,
@@ -377,7 +457,7 @@ class MutualFundHoldingsExportView(APIView):
     rows in the app's own UI."""
 
     def get(self, request):
-        from insights.services import compute_holdings
+        from insights.services import compute_holdings, holding_display_name
 
         household_id = request.query_params.get('household_id')
         if not household_id:
@@ -390,9 +470,13 @@ class MutualFundHoldingsExportView(APIView):
             if h['instrument_type'] in ('mutual_fund', 'sip')
         ]
 
+        investment_ids = [h['investment_id'] for h in holdings if h['investment_id']]
+        investments_by_id = {
+            inv.id: inv for inv in Investment.objects.filter(id__in=investment_ids)
+        }
         mf_details = {
-            d.instrument_id: d
-            for d in MutualFundDetails.objects.filter(instrument_id__in=[h['instrument_id'] for h in holdings])
+            d.investment_id: d
+            for d in MutualFundDetails.objects.filter(investment_id__in=investment_ids)
         }
 
         columns = [
@@ -403,18 +487,21 @@ class MutualFundHoldingsExportView(APIView):
         writer = csv.DictWriter(buf, fieldnames=columns)
         writer.writeheader()
 
-        for h in sorted(holdings, key=lambda h: h['instrument_name']):
-            details = mf_details.get(h['instrument_id'])
+        for h in sorted(holdings, key=holding_display_name):
+            investment_id = h['investment_id']
+            details = mf_details.get(investment_id)
+            investment = investments_by_id.get(investment_id)
+            fund_name = holding_display_name(h)
             invested = h['net_invested']
             current_value = h['market_value']
             gain = current_value - invested
             gain_percent = (gain / invested * 100) if invested > 0 else ''
             writer.writerow({
-                'fund_name': _FOLIO_SUFFIX_RE.sub('', h['instrument_name']),
+                'fund_name': _FOLIO_SUFFIX_RE.sub('', fund_name),
                 'amc': details.amc if details else '',
                 'category': details.fund_category if details else '',
                 'sub_category': details.fund_sub_category if details else '',
-                'folio_no': details.folio_no if details else '',
+                'folio_no': investment.folio_no if investment else '',
                 'units': h['quantity'],
                 'invested': invested,
                 'current_value': current_value,

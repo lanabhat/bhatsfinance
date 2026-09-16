@@ -23,11 +23,11 @@ class _ClassificationResult(BaseModel):
     reasoning: str = Field(description='One short paragraph explaining the classification')
 
 
-def _build_classification_prompt(instrument) -> str:
-    mf_details = getattr(instrument, 'mf_details', None)
-    latest_snapshot = instrument.holdings_snapshots.order_by('-as_of_date').first()
+def _build_classification_prompt(investment) -> str:
+    mf_details = getattr(investment, 'mf_details', None)
+    latest_snapshot = investment.holdings_snapshots.order_by('-as_of_date').first()
 
-    facts = [f'Fund name: {instrument.name}']
+    facts = [f'Fund name: {investment.name}']
     if mf_details:
         if mf_details.amc:
             facts.append(f'AMC: {mf_details.amc}')
@@ -51,10 +51,10 @@ def _build_classification_prompt(instrument) -> str:
     )
 
 
-def _call_classification(client, instrument) -> _ClassificationResult:
+def _call_classification(client, investment) -> _ClassificationResult:
     response = client.models.generate_content(
         model=CLASSIFY_MODEL,
-        contents=_build_classification_prompt(instrument),
+        contents=_build_classification_prompt(investment),
         config=types.GenerateContentConfig(
             response_mime_type='application/json',
             response_schema=_ClassificationResult,
@@ -63,17 +63,18 @@ def _call_classification(client, instrument) -> _ClassificationResult:
     return response.parsed
 
 
-def classify_fund(instrument) -> FundClassification:
-    """Classify one MF instrument into an equity/debt/hybrid bucket and a
+def classify_fund(investment) -> FundClassification:
+    """Classify one MF/SIP fund (an Investment under the household's shared
+    "Mutual Fund" Instrument shell) into an equity/debt/hybrid bucket and a
     60-40-rule category (growth vs stability), using its name/category/holdings.
     Writes straight to FundClassification — used by the single-fund "Classify
     with AI" card, which has no review step of its own.
     """
     client = get_client()
-    result = _call_classification(client, instrument)
+    result = _call_classification(client, investment)
 
     classification, _ = FundClassification.objects.update_or_create(
-        instrument=instrument,
+        investment=investment,
         defaults={
             'bucket': result.bucket,
             'rule_60_40_category': result.rule_60_40_category,
@@ -85,40 +86,40 @@ def classify_fund(instrument) -> FundClassification:
 
 
 def classify_all_funds(household_id: int) -> list[dict]:
-    """Classify every mutual_fund/sip instrument in the household in one pass.
+    """Classify every mutual_fund/sip Investment in the household in one pass.
 
     Deliberately does NOT write to FundClassification — returns proposals for
     the frontend to review (approve/edit/reject) via apply_classifications()
     below. Calling this alone has no effect on stored data.
     """
-    from instruments.models import Instrument
+    from instruments.models import Instrument, Investment
 
-    instruments = list(
-        Instrument.objects.filter(
-            household_id=household_id,
-            instrument_type__in=[Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP],
+    investments = list(
+        Investment.objects.filter(
+            instrument__household_id=household_id,
+            instrument__instrument_type__in=[Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP],
         ).select_related('mf_details', 'ai_classification')
     )
-    if not instruments:
+    if not investments:
         return []
 
     client = get_client()
     proposals = []
-    for instrument in instruments:
+    for investment in investments:
         try:
-            result = _call_classification(client, instrument)
+            result = _call_classification(client, investment)
         except Exception as exc:
             proposals.append({
-                'instrument_id': instrument.id,
-                'instrument_name': instrument.name,
+                'investment_id': investment.id,
+                'instrument_name': investment.name,
                 'error': str(exc),
             })
             continue
 
-        existing = getattr(instrument, 'ai_classification', None)
+        existing = getattr(investment, 'ai_classification', None)
         proposals.append({
-            'instrument_id': instrument.id,
-            'instrument_name': instrument.name,
+            'investment_id': investment.id,
+            'instrument_name': investment.name,
             'current_bucket': existing.bucket if existing else None,
             'current_rule_60_40_category': existing.rule_60_40_category if existing else None,
             'bucket': result.bucket,
@@ -130,24 +131,24 @@ def classify_all_funds(household_id: int) -> list[dict]:
 
 def apply_classifications(classifications: list[dict]) -> int:
     """Persist only the approved rows from a classify_all_funds() review pass.
-    Each entry: {instrument_id, bucket, rule_60_40_category, reasoning, approved}.
+    Each entry: {investment_id, bucket, rule_60_40_category, reasoning, approved}.
     Rejected/unapproved rows are skipped entirely — never written, never deleted
     if a prior classification already existed (a rejected re-classification just
     leaves the existing FundClassification, if any, untouched).
     """
-    from instruments.models import Instrument
+    from instruments.models import Investment
 
     applied = 0
     for row in classifications:
         if not row.get('approved'):
             continue
         try:
-            instrument = Instrument.objects.get(pk=row['instrument_id'])
-        except Instrument.DoesNotExist:
+            investment = Investment.objects.get(pk=row['investment_id'])
+        except Investment.DoesNotExist:
             continue
 
         FundClassification.objects.update_or_create(
-            instrument=instrument,
+            investment=investment,
             defaults={
                 'bucket': row['bucket'],
                 'rule_60_40_category': row['rule_60_40_category'],
@@ -159,33 +160,33 @@ def apply_classifications(classifications: list[dict]) -> int:
     return applied
 
 
-def compare_fund_returns(instrument, household_id: int, as_of: date) -> FundReturnsComparison:
+def compare_fund_returns(investment, household_id: int, as_of: date) -> FundReturnsComparison:
     """Compare one fund's XIRR against other funds in the same household that
     share its fund_category, in plain English. All XIRR figures come from
     compute_xirr() — Gemini only narrates them."""
-    from instruments.models import Instrument
+    from instruments.models import Instrument, Investment
     from insights.services import compute_xirr
 
-    mf_details = getattr(instrument, 'mf_details', None)
+    mf_details = getattr(investment, 'mf_details', None)
     category = mf_details.fund_category if mf_details else ''
 
-    peer_query = Instrument.objects.filter(
-        household_id=household_id,
-        instrument_type__in=[Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP],
-    ).exclude(pk=instrument.pk).select_related('mf_details')
+    peer_query = Investment.objects.filter(
+        instrument__household_id=household_id,
+        instrument__instrument_type__in=[Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP],
+    ).exclude(pk=investment.pk).select_related('mf_details')
     if category:
         peer_query = peer_query.filter(mf_details__fund_category=category)
 
-    this_xirr = compute_xirr(household_id, as_of, instrument.id)
+    this_xirr = compute_xirr(household_id, as_of, investment_id=investment.id)
     peers = []
     for peer in peer_query[:10]:
-        peer_xirr = compute_xirr(household_id, as_of, peer.id)
+        peer_xirr = compute_xirr(household_id, as_of, investment_id=peer.id)
         if peer_xirr is not None:
             peers.append({'name': peer.name, 'xirr_percent': round(peer_xirr, 2)})
 
     input_snapshot = {
         'as_of': as_of.isoformat(),
-        'fund': {'name': instrument.name, 'fund_category': category, 'xirr_percent': round(this_xirr, 2) if this_xirr is not None else None},
+        'fund': {'name': investment.name, 'fund_category': category, 'xirr_percent': round(this_xirr, 2) if this_xirr is not None else None},
         'expense_ratio': str(mf_details.expense_ratio) if mf_details and mf_details.expense_ratio is not None else None,
         'peers': peers,
     }
@@ -204,7 +205,7 @@ def compare_fund_returns(instrument, household_id: int, as_of: date) -> FundRetu
     summary = response.text or ''
 
     comparison, _ = FundReturnsComparison.objects.update_or_create(
-        instrument=instrument,
+        investment=investment,
         defaults={'summary': summary, 'input_snapshot': input_snapshot, 'model_used': EXPLAIN_MODEL},
     )
     return comparison

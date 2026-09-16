@@ -11,25 +11,29 @@ from ai_insights.services import apply_classifications, classify_all_funds, clas
 
 
 class ClassifyFundView(APIView):
-    """POST only — never called automatically. Classifies one MF instrument via
-    the Gemini API and stores/updates the cached FundClassification row."""
+    """POST only — never called automatically. Classifies one MF/SIP fund
+    (an Investment under the household's shared "Mutual Fund" Instrument
+    shell) via the Gemini API and stores/updates the cached FundClassification
+    row. The `instrument_id` URL kwarg is kept as-is for backward
+    compatibility with existing callers, but it identifies an Investment
+    (fund/folio), not the shared shell Instrument."""
 
     def get(self, request, instrument_id):
         try:
-            classification = FundClassification.objects.get(instrument_id=instrument_id)
+            classification = FundClassification.objects.get(investment_id=instrument_id)
         except FundClassification.DoesNotExist:
             return Response({'detail': 'Not yet classified.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(FundClassificationSerializer(classification).data)
 
     def post(self, request, instrument_id):
-        from instruments.models import Instrument
+        from instruments.models import Investment
         try:
-            instrument = Instrument.objects.select_related('mf_details').get(pk=instrument_id)
-        except Instrument.DoesNotExist:
-            return Response({'detail': 'Instrument not found.'}, status=status.HTTP_404_NOT_FOUND)
+            investment = Investment.objects.select_related('mf_details').get(pk=instrument_id)
+        except Investment.DoesNotExist:
+            return Response({'detail': 'Investment not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            classification = classify_fund(instrument)
+            classification = classify_fund(investment)
         except GeminiNotConfigured as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
@@ -69,28 +73,32 @@ class ApplyClassificationsView(APIView):
 
 
 class CompareFundReturnsView(APIView):
+    """The `instrument_id` URL kwarg is kept as-is for backward compatibility
+    with existing callers, but it identifies an Investment (fund/folio), not
+    the shared "Mutual Fund" Instrument shell."""
+
     def get(self, request, instrument_id):
         try:
-            comparison = FundReturnsComparison.objects.get(instrument_id=instrument_id)
+            comparison = FundReturnsComparison.objects.get(investment_id=instrument_id)
         except FundReturnsComparison.DoesNotExist:
             return Response({'detail': 'No comparison generated yet.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(FundReturnsComparisonSerializer(comparison).data)
 
     def post(self, request, instrument_id):
-        from instruments.models import Instrument
+        from instruments.models import Investment
 
         household_id = request.data.get('household_id')
         if not household_id:
             return Response({'detail': 'household_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            instrument = Instrument.objects.select_related('mf_details').get(pk=instrument_id)
-        except Instrument.DoesNotExist:
-            return Response({'detail': 'Instrument not found.'}, status=status.HTTP_404_NOT_FOUND)
+            investment = Investment.objects.select_related('mf_details').get(pk=instrument_id)
+        except Investment.DoesNotExist:
+            return Response({'detail': 'Investment not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         as_of = date.fromisoformat(request.data['as_of']) if request.data.get('as_of') else date.today()
 
         try:
-            comparison = compare_fund_returns(instrument, int(household_id), as_of)
+            comparison = compare_fund_returns(investment, int(household_id), as_of)
         except GeminiNotConfigured as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 

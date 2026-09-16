@@ -7,6 +7,8 @@ import { DateField, MoneyInput, PercentageInput, SelectField, TextAreaField, Tex
 import { useAuth } from '../context/AuthContext'
 import { normalizeApiError } from '../hooks/errorUtils'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
+import { DataTable } from '../components/ui/DataTable'
+import type { DataTableColumn } from '../components/ui/DataTable'
 import type { InsurancePolicy, OptionItem, VehicleClaim } from '../types/domain'
 
 const POLICY_TYPE_OPTIONS: OptionItem[] = [
@@ -491,7 +493,9 @@ export function InsurancePage({ householdId, memberOptions, accountOptions, inst
 
 // ── Policy Table ─────────────────────────────────────────────────────────────
 
-const thCls = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] whitespace-nowrap'
+function maturityDaysOf(p: InsurancePolicy): number | null {
+  return p.maturity_date ? Math.ceil((new Date(p.maturity_date).getTime() - Date.now()) / 86_400_000) : null
+}
 
 function PolicyTable({
   policies, canWrite, canDelete, onEdit, onDelete,
@@ -502,80 +506,87 @@ function PolicyTable({
   onEdit: (p: InsurancePolicy) => void
   onDelete: (id: number) => Promise<void>
 }) {
+  const columns: DataTableColumn<InsurancePolicy>[] = [
+    {
+      key: 'policy', label: 'Policy', sortable: true, searchable: true,
+      sortValue: (p) => p.policy_name, searchValue: (p) => `${p.policy_name} ${p.policy_number}`,
+      render: (p) => (
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
+            {POLICY_TYPE_ICONS[p.policy_type]}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-[var(--text)]">{p.policy_name}</p>
+            {p.policy_number && <p className="truncate font-mono text-[10px] text-[var(--text-faint)]">{p.policy_number}</p>}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'insurer', label: 'Insurer', sortable: true, searchable: true,
+      sortValue: (p) => p.insurer_name || '', searchValue: (p) => p.insurer_name || '',
+      render: (p) => p.insurer_name || '—',
+    },
+    {
+      key: 'insured', label: 'Insured',
+      render: (p) => (p.is_family_floater && p.covered_member_names.length > 0 ? p.covered_member_names.join(', ') : p.member_name || '—'),
+    },
+    {
+      key: 'sum_insured', label: 'Sum Insured', align: 'right', sortable: true,
+      sortValue: (p) => parseFloat(p.sum_insured || '0') || 0,
+      dataBar: { value: (p) => parseFloat(p.sum_insured || '0') || null },
+      render: (p) => p.sum_insured ? `₹${parseFloat(p.sum_insured).toLocaleString('en-IN')}` : '—',
+    },
+    {
+      key: 'premium', label: 'Premium', align: 'right', sortable: true,
+      sortValue: (p) => parseFloat(p.premium_amount || '0') || 0,
+      render: (p) => p.is_employer_paid ? 'Employer' : p.premium_amount ? `₹${parseFloat(p.premium_amount).toLocaleString('en-IN')} / ${FREQ_LABEL[p.premium_frequency]}` : '—',
+    },
+    {
+      key: 'maturity', label: 'Maturity', sortable: true,
+      sortValue: (p) => maturityDaysOf(p) ?? Infinity,
+      render: (p) => {
+        const days = maturityDaysOf(p)
+        return days !== null ? (
+          <span className={days < 0 ? 'text-red-600' : days < 60 ? 'text-amber-600' : 'text-[var(--text-2)]'}>
+            {days < 0 ? `Matured ${Math.abs(days)}d ago` : `${days}d`}
+          </span>
+        ) : <span className="text-[var(--text-faint)]">—</span>
+      },
+    },
+    {
+      key: 'status', label: 'Status',
+      render: (p) => (
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${p.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
+          {p.is_active ? 'Active' : 'Inactive'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions', label: '', align: 'right',
+      render: (p) => (
+        <div className="flex items-center justify-end gap-1">
+          {canWrite && (
+            <button type="button" onClick={() => onEdit(p)}
+              className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]">
+              Edit
+            </button>
+          )}
+          <DeleteButton disabled={!canDelete} onDelete={() => onDelete(p.id)} />
+        </div>
+      ),
+    },
+  ]
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-      <table className="w-full text-sm">
-        <thead className="bg-[var(--surface-2)]">
-          <tr>
-            <th className={thCls}>Policy</th>
-            <th className={thCls}>Insurer</th>
-            <th className={thCls}>Insured</th>
-            <th className={`${thCls} text-right`}>Sum Insured</th>
-            <th className={`${thCls} text-right`}>Premium</th>
-            <th className={thCls}>Maturity</th>
-            <th className={thCls}>Status</th>
-            <th className={thCls}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {policies.map((p) => {
-            const maturityDays = p.maturity_date
-              ? Math.ceil((new Date(p.maturity_date).getTime() - Date.now()) / 86_400_000)
-              : null
-            return (
-              <tr key={p.id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]">
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
-                      {POLICY_TYPE_ICONS[p.policy_type]}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-[var(--text)]">{p.policy_name}</p>
-                      {p.policy_number && <p className="truncate font-mono text-[10px] text-[var(--text-faint)]">{p.policy_number}</p>}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-xs text-[var(--text-2)]">{p.insurer_name || '—'}</td>
-                <td className="px-3 py-2 text-xs text-[var(--text-2)]">
-                  {p.is_family_floater && p.covered_member_names.length > 0
-                    ? p.covered_member_names.join(', ')
-                    : p.member_name || '—'}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-[var(--text-2)]">
-                  {p.sum_insured ? `₹${parseFloat(p.sum_insured).toLocaleString('en-IN')}` : '—'}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-[var(--text-2)]">
-                  {p.is_employer_paid ? 'Employer' : p.premium_amount ? `₹${parseFloat(p.premium_amount).toLocaleString('en-IN')} / ${FREQ_LABEL[p.premium_frequency]}` : '—'}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 text-xs">
-                  {maturityDays !== null ? (
-                    <span className={maturityDays < 0 ? 'text-red-600' : maturityDays < 60 ? 'text-amber-600' : 'text-[var(--text-2)]'}>
-                      {maturityDays < 0 ? `Matured ${Math.abs(maturityDays)}d ago` : `${maturityDays}d`}
-                    </span>
-                  ) : <span className="text-[var(--text-faint)]">—</span>}
-                </td>
-                <td className="px-3 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${p.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
-                    {p.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    {canWrite && (
-                      <button type="button" onClick={() => onEdit(p)}
-                        className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)]">
-                        Edit
-                      </button>
-                    )}
-                    <DeleteButton disabled={!canDelete} onDelete={() => onDelete(p.id)} />
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      rows={policies}
+      rowKey={(p) => p.id}
+      defaultSortCol="policy"
+      defaultSortDir="asc"
+      searchPlaceholder="Search policies…"
+    />
   )
 }
 

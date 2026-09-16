@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Money } from '../common/Money'
 import { typeColor } from '../../lib/assetColors'
-import type { AssetCategory, DashboardHolding, MemberAccount } from '../../types/domain'
+import type { AssetCategory, DashboardHolding, MemberAccount, MutualFundDetails } from '../../types/domain'
 
 type Props = {
   memberName: string
@@ -10,6 +10,11 @@ type Props = {
   memberTotal: number      // member's total net worth
   householdTotal: number   // full household net worth
   categories: AssetCategory[]
+  /** investment_id -> MutualFundDetails, used to split mutual fund holdings
+   * into sub-category buckets (midcap/smallcap/debt/corp bonds/etc.) instead
+   * of lumping every fund under one "Mutual Fund" bucket. Optional — when
+   * omitted, MF holdings fall back to the plain asset-category grouping. */
+  mfDetailsByInvestment?: Map<number, MutualFundDetails>
 }
 
 type Bucket = {
@@ -28,7 +33,17 @@ const TYPE_ICON: Record<string, string> = {
   savings: '🏦',
 }
 
-export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTotal, householdTotal, categories }: Props) {
+// Deterministic shade of the base mutual_fund blue per sub-category name, so
+// "Large Cap", "Mid Cap", "Debt", "Corporate Bond" etc. read as distinct but
+// related colors rather than all sharing one flat blue.
+const MF_SUBCATEGORY_SHADES = ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#1e40af', '#0ea5e9']
+function mfShade(label: string): string {
+  let hash = 0
+  for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) >>> 0
+  return MF_SUBCATEGORY_SHADES[hash % MF_SUBCATEGORY_SHADES.length]
+}
+
+export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTotal, householdTotal, categories, mfDetailsByInvestment }: Props) {
   const categoryMap = useMemo(() => {
     const m = new Map<number, AssetCategory>()
     categories.forEach((c) => m.set(c.id, c))
@@ -44,12 +59,22 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
       return map.get(key)!
     }
 
-    // Holdings → grouped by asset category, falling back to instrument_type
+    // Holdings → mutual funds split into their own sub-category bucket
+    // (midcap/smallcap/debt/corp bonds/etc. — see MutualFundDetails); every
+    // other holding groups by asset category, falling back to instrument_type.
     for (const h of holdings) {
       const mv = parseFloat(h.market_value)
       if (!mv) continue
       let key: string, label: string, color: string, icon: string
-      if (h.asset_category && categoryMap.has(h.asset_category)) {
+      const isMf = h.instrument_type === 'mutual_fund' || h.instrument_type === 'sip'
+      const mfDetails = isMf && h.investment_id ? mfDetailsByInvestment?.get(h.investment_id) : undefined
+      if (isMf) {
+        const subLabel = mfDetails?.fund_sub_category || mfDetails?.fund_category || 'Uncategorised'
+        key = `mf_${subLabel.toLowerCase()}`
+        label = subLabel
+        color = mfShade(subLabel)
+        icon = '📊'
+      } else if (h.asset_category && categoryMap.has(h.asset_category)) {
         const cat = categoryMap.get(h.asset_category)!
         key = `cat_${cat.id}`
         label = cat.name
@@ -63,7 +88,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
       }
       const bucket = getOrCreate(key, label, color, icon)
       bucket.value += mv
-      bucket.items.push({ name: h.instrument_name, value: mv })
+      bucket.items.push({ name: h.display_name, value: mv })
     }
 
     // Accounts → group all positive balances under 'Savings & Cash'
@@ -88,7 +113,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
     }
 
     return Array.from(map.values()).sort((a, b) => b.value - a.value)
-  }, [holdings, accounts, categoryMap])
+  }, [holdings, accounts, categoryMap, mfDetailsByInvestment])
 
   const positiveTotal = useMemo(() => buckets.reduce((s, b) => s + Math.max(b.value, 0), 0), [buckets])
 

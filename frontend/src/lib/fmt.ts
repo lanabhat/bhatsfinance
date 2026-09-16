@@ -30,3 +30,28 @@ export function computeGain(marketValue: number, netInvested: number, instrument
   const gainPct = netInvested > 0 ? (gain / netInvested) * 100 : null
   return { gain, gainPct }
 }
+
+/** Format an ISO date (YYYY-MM-DD) as "15 Mar 2027". */
+export function fmtDate(iso: string): string {
+  const d = new Date(iso + 'T00:00:00')
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/** Days from today until an ISO maturity date (negative if already past). */
+export function daysUntil(iso: string): number {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const target = new Date(iso + 'T00:00:00')
+  return Math.round((target.getTime() - today.getTime()) / 86400000)
+}
+
+/** "Matures today" / "12 days left" / "~4 months left" / "Matured 15 Mar 2027". */
+export function formatMaturity(iso: string): string {
+  const days = daysUntil(iso)
+  if (days < 0) return `Matured ${fmtDate(iso)}`
+  if (days === 0) return 'Matures today'
+  if (days === 1) return '1 day left'
+  if (days < 30) return `${days} days left`
+  const months = Math.round(days / 30)
+  return months === 1 ? '~1 month left' : `~${months} months left`
+}

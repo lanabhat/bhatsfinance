@@ -23,6 +23,8 @@ const COMPOUNDING_OPTIONS: OptionItem[] = [
 
 const emptyFD = (instrumentId = 0): Omit<FDDetails, 'id'> => ({
   instrument: instrumentId,
+  funding_transaction: null,
+  account_number: '',
   principal: '',
   annual_rate: '',
   investment_date: new Date().toISOString().slice(0, 10),
@@ -94,6 +96,7 @@ export function PortfolioPage({ householdId, memberOptions, accountOptions, inst
     asset_category: null,
     name: '',
     instrument_type: 'equity',
+    sub_category: '',
     symbol: '',
     metadata: {},
     is_active: true,
@@ -204,7 +207,7 @@ export function PortfolioPage({ householdId, memberOptions, accountOptions, inst
       }
       setInstrumentEditId(0)
       setFdEditId(0)
-      setInstrumentForm({ household: householdId, default_account: null, asset_category: null, name: '', instrument_type: 'equity', symbol: '', metadata: {}, is_active: true, include_in_rebalancing: true })
+      setInstrumentForm({ household: householdId, default_account: null, asset_category: null, name: '', instrument_type: 'equity', sub_category: '', symbol: '', metadata: {}, is_active: true, include_in_rebalancing: true })
       setMetadataText('{}')
       setFdForm(emptyFD())
       await refreshOptions()
@@ -375,7 +378,7 @@ export function PortfolioPage({ householdId, memberOptions, accountOptions, inst
             )}
             <FormActions onSubmit={saveInstrument} onReset={() => {
               setInstrumentEditId(0); setFdEditId(0)
-              setInstrumentForm({ household: householdId, default_account: null, asset_category: null, name: '', instrument_type: 'equity', symbol: '', metadata: {}, is_active: true, include_in_rebalancing: true })
+              setInstrumentForm({ household: householdId, default_account: null, asset_category: null, name: '', instrument_type: 'equity', sub_category: '', symbol: '', metadata: {}, is_active: true, include_in_rebalancing: true })
               setMetadataText('{}'); setFdForm(emptyFD())
             }} />
           </BaseForm>

@@ -9,6 +9,8 @@ import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { normalizeApiError } from '../hooks/errorUtils'
+import { DataTable } from '../components/ui/DataTable'
+import type { DataTableColumn } from '../components/ui/DataTable'
 import { useAuth } from '../context/AuthContext'
 import type { BulkSnapshotResult, OptionItem, ValuationSnapshot } from '../types/domain'
 
@@ -42,7 +44,6 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
   const [items, setItems] = useState<ValuationSnapshot[]>([])
   const [loading, setLoading] = useState(false)
   const [groupFilter, setGroupFilter] = useState<GroupFilter>('all')
-  const [search, setSearch] = useState('')
 
   // Drawer state
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -126,13 +127,61 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
   const filtered = items.filter((x) => {
     if (groupFilter === 'account' && !x.account) return false
     if (groupFilter === 'instrument' && !x.instrument) return false
-    if (search) {
-      const q = search.toLowerCase()
-      const label = x.account ? accountLabel(x.account) : instrumentLabel(x.instrument)
-      if (!label.toLowerCase().includes(q) && !x.valuation_date.includes(q) && !x.notes.toLowerCase().includes(q)) return false
-    }
     return true
   })
+
+  const columns: DataTableColumn<ValuationSnapshot>[] = [
+    {
+      key: 'date', label: 'Date', sortable: true, searchable: true,
+      sortValue: (x) => x.valuation_date, searchValue: (x) => x.valuation_date,
+      render: (x) => <span className="tabular-nums">{x.valuation_date}</span>,
+    },
+    {
+      key: 'label', label: 'Account / Instrument', searchable: true,
+      searchValue: (x) => `${x.account ? accountLabel(x.account) : instrumentLabel(x.instrument)} ${x.notes}`,
+      render: (x) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium text-[var(--text)]">{x.account ? accountLabel(x.account) : instrumentLabel(x.instrument)}</span>
+          {x.notes && <span className="text-[11px] text-[var(--text-muted)] truncate max-w-[18rem] block">{x.notes}</span>}
+        </div>
+      ),
+    },
+    {
+      key: 'market_value', label: 'Market Value', align: 'right', sortable: true,
+      sortValue: (x) => parseFloat(x.market_value || '0') || 0,
+      dataBar: { value: (x) => x.market_value ? parseFloat(x.market_value) || null : null },
+      render: (x) => x.market_value ? <Money value={x.market_value} /> : '—',
+    },
+    {
+      key: 'balance', label: 'Balance', align: 'right', sortable: true,
+      sortValue: (x) => parseFloat(x.balance || '0') || 0,
+      render: (x) => x.balance ? <Money value={x.balance} /> : '—',
+    },
+    {
+      key: 'unit_price', label: 'Unit Price', align: 'right',
+      render: (x) => x.unit_price ? <Money value={x.unit_price} /> : '—',
+    },
+    {
+      key: 'source', label: 'Source',
+      render: (x) => <Badge label={x.source} color={x.source === 'manual' ? 'slate' : x.source === 'api' ? 'blue' : 'green'} />,
+    },
+    {
+      key: 'actions', label: '', align: 'right',
+      render: (x) => (
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            disabled={!canWrite}
+            onClick={() => openEdit(x)}
+            className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40"
+          >
+            Edit
+          </button>
+          <DeleteButton disabled={!canDelete('valuation')} onDelete={async () => { await valuationApi.deleteValuation(x.id); await loadData() }} />
+        </div>
+      ),
+    },
+  ]
 
   return (
     <div className="grid gap-4">
@@ -153,13 +202,6 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
               </button>
             ))}
           </div>
-          <input
-            type="search"
-            placeholder="Search…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="rounded-lg border border-[var(--border-2)] bg-[var(--surface)] text-[var(--text)] px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => setSnapshotOpen((v) => !v)}>
@@ -246,67 +288,19 @@ export function ValuationPage({ householdId, accountOptions, instrumentOptions, 
       )}
 
       {/* List */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-        {loading ? (
-          <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
-        ) : filtered.length === 0 ? (
-          <p className="py-10 text-center text-sm text-[var(--text-muted)]">No valuations found.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--surface-2)] text-left">
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Date</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Account / Instrument</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] text-right">Market Value</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] text-right">Balance</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] text-right">Unit Price</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Source</th>
-                <th className="px-4 py-2.5"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((x) => (
-                <tr key={x.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)] transition-colors">
-                  <td className="px-4 py-3 text-[var(--text-2)] tabular-nums">{x.valuation_date}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-medium text-[var(--text)]">
-                        {x.account ? accountLabel(x.account) : instrumentLabel(x.instrument)}
-                      </span>
-                      {x.notes && <span className="text-[11px] text-[var(--text-muted)] truncate max-w-[18rem]">{x.notes}</span>}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[var(--text-2)]">
-                    {x.market_value ? <Money value={x.market_value} /> : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[var(--text-2)]">
-                    {x.balance ? <Money value={x.balance} /> : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[var(--text-muted)] text-xs">
-                    {x.unit_price ? <Money value={x.unit_price} /> : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge label={x.source} color={x.source === 'manual' ? 'slate' : x.source === 'api' ? 'blue' : 'green'} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        disabled={!canWrite}
-                        onClick={() => openEdit(x)}
-                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40"
-                      >
-                        Edit
-                      </button>
-                      <DeleteButton disabled={!canDelete('valuation')} onDelete={async () => { await valuationApi.deleteValuation(x.id); await loadData() }} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {loading ? (
+        <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          rowKey={(x) => x.id}
+          defaultSortCol="date"
+          defaultSortDir="desc"
+          searchPlaceholder="Search…"
+          emptyState="No valuations found."
+        />
+      )}
 
       {/* Add / Edit drawer */}
       <Drawer

@@ -29,7 +29,7 @@ class TransactionFilter(django_filters.FilterSet):
 
     class Meta:
         model = Transaction
-        fields = ['household', 'account', 'instrument', 'member', 'source', 'transaction_type', 'classification', 'spend_category']
+        fields = ['household', 'account', 'instrument', 'investment', 'member', 'source', 'transaction_type', 'classification', 'spend_category']
 
     def filter_tags(self, queryset, name, value):
         ids = [v.strip() for v in value.split(',') if v.strip()]

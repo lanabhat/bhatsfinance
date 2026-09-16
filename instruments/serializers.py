@@ -11,6 +11,7 @@ from instruments.models import (
     FundHoldingsSnapshot,
     Instrument,
     InstrumentOwnership,
+    Investment,
     MutualFundDetails,
 )
 
@@ -65,6 +66,7 @@ class InstrumentSerializer(serializers.ModelSerializer):
             'default_account',
             'name',
             'instrument_type',
+            'sub_category',
             'symbol',
             'metadata',
             'is_active',
@@ -74,36 +76,6 @@ class InstrumentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
-    def get_unique_together_validators(self):
-        # DRF auto-generates a UniqueTogetherValidator from the
-        # unique_fd_account_number_per_household constraint with a generic
-        # "fields must make a unique set" message; validate() below runs the
-        # same check with a message that names the clashing instrument and
-        # explains what to do instead, so drop the auto one to avoid a
-        # confusing duplicate/conflicting error on the same submission.
-        return [
-            v for v in super().get_unique_together_validators()
-            if getattr(v, 'fields', None) != ('household', 'symbol')
-        ]
-
-    def validate(self, attrs):
-        instrument_type = attrs.get('instrument_type', getattr(self.instance, 'instrument_type', None))
-        symbol = attrs.get('symbol', getattr(self.instance, 'symbol', ''))
-        household = attrs.get('household', getattr(self.instance, 'household', None))
-
-        if instrument_type == Instrument.InstrumentType.FD and symbol and household:
-            qs = Instrument.objects.filter(household=household, instrument_type=Instrument.InstrumentType.FD, symbol=symbol)
-            if self.instance:
-                qs = qs.exclude(pk=self.instance.pk)
-            existing = qs.first()
-            if existing:
-                raise serializers.ValidationError({
-                    'symbol': f'An FD with account number "{symbol}" already exists ("{existing.name}"). '
-                              f'Add the new owner to that FD instead of creating a duplicate.',
-                })
-
-        return attrs
-
 
 class FDDetailsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -111,6 +83,8 @@ class FDDetailsSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'instrument',
+            'funding_transaction',
+            'account_number',
             'principal',
             'annual_rate',
             'investment_date',
@@ -122,6 +96,24 @@ class FDDetailsSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def validate(self, attrs):
+        account_number = attrs.get('account_number', getattr(self.instance, 'account_number', ''))
+        instrument = attrs.get('instrument', getattr(self.instance, 'instrument', None))
+
+        if account_number and instrument:
+            qs = FDDetails.objects.filter(instrument__household=instrument.household, account_number=account_number)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            existing = qs.select_related('instrument').first()
+            if existing:
+                raise serializers.ValidationError({
+                    'account_number': f'An FD with account number "{account_number}" already exists under '
+                                       f'"{existing.instrument.name}". Add the new owner to that deposit instead '
+                                       f'of creating a duplicate.',
+                })
+
+        return attrs
+
 
 class BondDetailsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -129,6 +121,7 @@ class BondDetailsSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'instrument',
+            'funding_transaction',
             'issuer_name',
             'bond_type',
             'isin',
@@ -156,16 +149,25 @@ class InstrumentOwnershipSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
+class InvestmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Investment
+        fields = [
+            'id', 'instrument', 'member', 'name', 'symbol', 'isin', 'folio_no',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
 class MutualFundDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = MutualFundDetails
         fields = [
             'id',
-            'instrument',
+            'investment',
             'amc',
             'fund_category',
             'fund_sub_category',
-            'folio_no',
             'expense_ratio',
             'created_at',
             'updated_at',
@@ -194,7 +196,7 @@ class FundHoldingsSnapshotSerializer(serializers.ModelSerializer):
     class Meta:
         model = FundHoldingsSnapshot
         fields = [
-            'id', 'instrument', 'as_of_date', 'source_url', 'uploaded_file_name',
+            'id', 'investment', 'as_of_date', 'source_url', 'uploaded_file_name',
             'holding_count', 'holdings', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'holding_count', 'holdings', 'created_at', 'updated_at']

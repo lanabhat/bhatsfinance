@@ -3,9 +3,9 @@ import type { ApiListResponse, DashboardAccount, DashboardPayload, Transaction, 
 
 type TransactionCreatePayload = Omit<
   Transaction,
-  'id' | 'source' | 'classification' | 'affects_balance' | 'spend_category' | 'description' | 'for_members' | 'tags' | 'notes'
+  'id' | 'source' | 'investment' | 'classification' | 'affects_balance' | 'spend_category' | 'description' | 'for_members' | 'tags' | 'notes' | 'realized_gain'
 > &
-  Partial<Pick<Transaction, 'classification' | 'affects_balance' | 'spend_category' | 'description' | 'for_members' | 'tags' | 'notes'>>
+  Partial<Pick<Transaction, 'investment' | 'classification' | 'affects_balance' | 'spend_category' | 'description' | 'for_members' | 'tags' | 'notes'>>
 
 export type TransactionListParams = {
   householdId: number
@@ -15,6 +15,7 @@ export type TransactionListParams = {
   account?: number
   member?: number
   instrument?: number
+  investment?: number
   transactionType?: string
   classification?: string
   spendCategory?: string
@@ -47,6 +48,7 @@ export const ledgerApi = {
       account: params.account,
       member: params.member,
       instrument: params.instrument,
+      investment: params.investment,
       transaction_type: params.transactionType,
       classification: params.classification,
       spend_category: params.spendCategory,
@@ -64,6 +66,11 @@ export const ledgerApi = {
   },
   async listTransactionsForInstrument(householdId: number, instrumentId: number) {
     const q = toQueryString({ household: householdId, instrument: instrumentId })
+    const data = await getJson<ApiListResponse<Transaction>>(`/api/transactions/?${q}`)
+    return unwrapList(data)
+  },
+  async listTransactionsForInvestment(householdId: number, investmentId: number) {
+    const q = toQueryString({ household: householdId, investment: investmentId })
     const data = await getJson<ApiListResponse<Transaction>>(`/api/transactions/?${q}`)
     return unwrapList(data)
   },

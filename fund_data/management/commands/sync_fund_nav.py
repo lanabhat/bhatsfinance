@@ -12,7 +12,7 @@ class Command(BaseCommand):
         for fund in ExternalFund.objects.all():
             self._sync_one(
                 scheme_code=fund.mfapi_scheme_code,
-                label=f'{fund.instrument.name} ({fund.scheme_name})',
+                label=f'{fund.investment.name} ({fund.scheme_name})',
                 existing_dates_qs=ExternalFundNav.objects.filter(fund=fund).values_list('nav_date', flat=True),
                 nav_model=ExternalFundNav,
                 fk_field='fund',

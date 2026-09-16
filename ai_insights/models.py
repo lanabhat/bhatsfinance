@@ -16,7 +16,7 @@ class FundClassification(TimeStampedModel):
         GROWTH = 'growth', 'Growth (60%)'
         STABILITY = 'stability', 'Stability (40%)'
 
-    instrument = models.OneToOneField('instruments.Instrument', on_delete=models.CASCADE, related_name='ai_classification')
+    investment = models.OneToOneField('instruments.Investment', on_delete=models.CASCADE, related_name='ai_classification', null=True, blank=True)
     bucket = models.CharField(max_length=20, choices=Bucket.choices)
     rule_60_40_category = models.CharField(max_length=20, choices=Rule6040Category.choices)
     reasoning = models.TextField(blank=True)
@@ -24,21 +24,21 @@ class FundClassification(TimeStampedModel):
     generated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
-        return f'{self.instrument.name} -> {self.bucket}/{self.rule_60_40_category}'
+        return f'{self.investment.name} -> {self.bucket}/{self.rule_60_40_category}'
 
 
 class FundReturnsComparison(TimeStampedModel):
     """Cached plain-English comparison of one fund's returns against similar funds
     in the same household, generated via the Gemini API on manual refresh only."""
 
-    instrument = models.OneToOneField('instruments.Instrument', on_delete=models.CASCADE, related_name='ai_returns_comparison')
+    investment = models.OneToOneField('instruments.Investment', on_delete=models.CASCADE, related_name='ai_returns_comparison', null=True, blank=True)
     summary = models.TextField()
     input_snapshot = models.JSONField(help_text='The exact XIRR/expense-ratio figures sent to Gemini, for auditability.')
     model_used = models.CharField(max_length=60)
     generated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
-        return f'Returns comparison for {self.instrument.name}'
+        return f'Returns comparison for {self.investment.name}'
 
 
 class RebalancingExplanation(TimeStampedModel):

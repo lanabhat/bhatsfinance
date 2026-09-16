@@ -207,7 +207,7 @@ def _import_valuations(household, row, mapping, defaults):
         instrument, _ = Instrument.objects.get_or_create(
             household=household,
             name=instrument_name,
-            defaults={'instrument_type': inst_type},
+            defaults={'instrument_type': inst_type, 'sub_category': _sub_category_default(inst_type)},
         )
         # optionally link owner
         member_name = r('member_name').strip()
@@ -488,14 +488,24 @@ def _get_asset_category(household, name: str):
         return None
 
 
+def _sub_category_default(instrument_type: str, fund_category: str | None = None) -> str:
+    from instruments.services import default_sub_category
+    return default_sub_category(instrument_type, fund_category)
+
+
 def apply_fd_advice_import(household, member, item: dict) -> dict:
     """
     Create/update an Instrument(type='fd') + FDDetails + InstrumentOwnership
     from a user-confirmed FD advice import item.
 
-    Idempotent: get_or_create on the Instrument name, update_or_create on
-    FDDetails (keyed on the OneToOne instrument), so re-importing a
-    corrected/re-issued advice updates rather than errors.
+    Idempotent: get_or_create on the Instrument name. FDDetails is keyed on
+    (instrument, account_number) when an account number is known, else on
+    (instrument, investment_date) — so re-importing the same deposit updates
+    it in place, while a genuinely different deposit under the same
+    instrument name (e.g. a second FD at the same bank) correctly creates a
+    second FDDetails row instead of overwriting the first. One Instrument
+    can hold several FDDetails rows this way (several real-world deposits
+    grouped under one bank relationship).
     """
     from instruments.models import FDDetails, Instrument, InstrumentOwnership
     from ledger.models import Transaction
@@ -520,13 +530,14 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
     fd_category = _get_asset_category(household, 'Fixed Deposit')
 
     if account_number:
-        clash = Instrument.objects.filter(
-            household=household, instrument_type=Instrument.InstrumentType.FD, symbol=account_number,
-        ).exclude(name=instrument_name).first()
+        clash = FDDetails.objects.filter(
+            instrument__household=household, account_number=account_number,
+        ).exclude(instrument__name=instrument_name).first()
         if clash:
             raise ValueError(
-                f'FD account number {account_number} is already recorded as "{clash.name}" — '
-                f'add the new owner to that FD instead of importing it again under a different name.'
+                f'FD account number {account_number} is already recorded under '
+                f'"{clash.instrument.name}" — add the new owner to that FD instead of '
+                f'importing it again under a different name.'
             )
 
     with db_transaction.atomic():
@@ -535,6 +546,7 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
             name=instrument_name,
             defaults={
                 'instrument_type': Instrument.InstrumentType.FD,
+                'sub_category': _sub_category_default('fd'),
                 'symbol': account_number,
                 'asset_category': fd_category,
             },
@@ -566,7 +578,20 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
         investment_date = _to_date(item['investment_date'])
         imported_principal = _to_decimal(item['principal'])
 
-        existing_fd_details = FDDetails.objects.filter(instrument=instrument).first()
+        # Identify which specific deposit this import row is re-stating: by
+        # account number when known (the reliable per-deposit key), else by
+        # investment_date (a sweep/MOD deposit re-import always restates the
+        # same opening leg; a genuinely new deposit has a different date).
+        # This — not the instrument alone — is what lets one instrument hold
+        # several FDDetails rows without a later re-import of deposit A
+        # silently overwriting deposit B.
+        fd_lookup = {'instrument': instrument}
+        if account_number:
+            fd_lookup['account_number'] = account_number
+        else:
+            fd_lookup['investment_date'] = investment_date
+
+        existing_fd_details = FDDetails.objects.filter(**fd_lookup).first()
         if is_sweep_deposit and existing_fd_details is not None:
             # Don't let a re-import's point-in-time sweep balance clobber the
             # original opening principal — that's what anchors the one-time
@@ -577,8 +602,9 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
 
         maturity_value_raw = item.get('maturity_value')
         fd_details, fd_created = FDDetails.objects.update_or_create(
-            instrument=instrument,
+            **fd_lookup,
             defaults={
+                'account_number': account_number,
                 'principal': principal,
                 'annual_rate': _to_decimal(item['annual_rate']),
                 'investment_date': investment_date,
@@ -598,14 +624,16 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
         # Holdings are derived from Transaction history, so the deposit that
         # funded this FD must be recorded — mirrors the manual "Add FD" flow's
         # gap being filled the same way Groww/Upstox imports create an
-        # initial buy transaction. Only create it once per instrument.
+        # initial buy transaction. Only create it once per FD deposit (not
+        # once per instrument — an instrument can hold several deposits, each
+        # needing its own funding transaction).
         # account is intentionally left unset: these FDs were opened in the
         # past, and the user's real savings account balances already reflect
         # that money having left long ago — debiting a real account here would
         # double-count it against the account's current (already-reduced) balance.
         existing_txs = Transaction.objects.filter(instrument=instrument, household=household)
-        if principal > 0 and not existing_txs.exists():
-            Transaction.objects.create(
+        if principal > 0 and fd_details.funding_transaction_id is None:
+            funding_tx = Transaction.objects.create(
                 household=household,
                 instrument=instrument,
                 account=None,
@@ -617,6 +645,8 @@ def apply_fd_advice_import(household, member, item: dict) -> dict:
                 currency='INR',
                 source=Transaction.SourceType.CSV,
             )
+            fd_details.funding_transaction = funding_tx
+            fd_details.save(update_fields=['funding_transaction'])
         elif is_sweep_deposit and existing_txs.exists():
             # A Multi Option/sweep deposit's balance moves with the linked
             # savings account, so each re-import's balance change is a real
@@ -723,6 +753,7 @@ def apply_rd_statement_import(household, member, item: dict, account) -> dict:
             name=instrument_name,
             defaults={
                 'instrument_type': Instrument.InstrumentType.RD,
+                'sub_category': _sub_category_default('rd'),
                 'symbol': account_number,
                 'asset_category': rd_category,
             },
@@ -736,9 +767,16 @@ def apply_rd_statement_import(household, member, item: dict, account) -> dict:
             instrument.metadata = {**instrument.metadata, **extra_metadata}
             instrument.save(update_fields=['metadata'])
 
+        rd_lookup = {'instrument': instrument}
+        if account_number:
+            rd_lookup['account_number'] = account_number
+        else:
+            rd_lookup['investment_date'] = investment_date
+
         FDDetails.objects.update_or_create(
-            instrument=instrument,
+            **rd_lookup,
             defaults={
+                'account_number': account_number,
                 'principal': principal_display,
                 'annual_rate': annual_rate,
                 'investment_date': investment_date,
@@ -866,6 +904,7 @@ def apply_nps_statement_import(household, member, item: dict, account=None, affe
             name=instrument_name,
             defaults={
                 'instrument_type': Instrument.InstrumentType.NPS,
+                'sub_category': _sub_category_default('nps'),
                 'symbol': item.get('pran', ''),
                 'asset_category': nps_category,
             },
@@ -1028,6 +1067,7 @@ def apply_epf_passbook_import(household, member, item: dict) -> dict:
         name='EPF',
         defaults={
             'instrument_type': Instrument.InstrumentType.EPF,
+            'sub_category': _sub_category_default('epf'),
             'symbol': item.get('uan', ''),
             'asset_category': epf_category,
         },
@@ -1182,6 +1222,7 @@ def apply_ppf_statement_import(household, member, item: dict, estimated_prior_pr
         name='PPF',
         defaults={
             'instrument_type': Instrument.InstrumentType.PPF,
+            'sub_category': _sub_category_default('ppf'),
             'symbol': item.get('account_no', ''),
             'asset_category': ppf_category,
         },
@@ -1332,11 +1373,12 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
     Import a parsed Groww Excel file (output of groww_parser.parse_groww_excel)
     for a specific household member.
 
-    Creates Instruments, InstrumentOwnerships, ValuationSnapshots, and initial
-    buy Transactions (only if no transaction exists yet for that instrument).
+    Creates per-member Investments (equity and mutual fund/SIP alike, each
+    under its own shared shell Instrument), ValuationSnapshots, and initial
+    buy Transactions (only if no transaction exists yet for that Investment).
     All operations are idempotent — safe to re-run with the same file.
     """
-    from instruments.models import Instrument, InstrumentOwnership
+    from instruments.models import Investment
     from valuations.models import ValuationSnapshot
     from ledger.models import Transaction
 
@@ -1353,6 +1395,28 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
     mf_category = _get_asset_category(household, 'Mutual Fund')
 
     # ── Stocks ────────────────────────────────────────────────────────────────
+    # Every distinct stock the household holds is an Investment under one
+    # shared "Equity" Instrument shell (mirrors the Mutual Fund shell below) —
+    # keyed per member, not just per stock name, so two members independently
+    # holding a same-named stock (two separate Groww accounts) never collide
+    # into one shared holding the way a plain per-name Instrument would (see
+    # get_or_create_equity_shell()'s docstring and migration 0017 for the fix
+    # to instruments that were already merged this way before this change).
+    from instruments.services import get_or_create_equity_shell
+
+    equity_shell = None
+    if parsed.get('stocks'):
+        equity_shell = get_or_create_equity_shell(household)
+        update_fields = []
+        if not equity_shell.default_account_id:
+            equity_shell.default_account = groww_account
+            update_fields.append('default_account')
+        if not equity_shell.asset_category_id and stocks_category:
+            equity_shell.asset_category = stocks_category
+            update_fields.append('asset_category')
+        if update_fields:
+            equity_shell.save(update_fields=update_fields)
+
     for i, stock in enumerate(parsed.get('stocks', []), start=1):
         try:
             with db_transaction.atomic():
@@ -1360,29 +1424,18 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                 if not name:
                     continue
 
-                instrument, created = Instrument.objects.get_or_create(
-                    household=household,
+                instrument = equity_shell
+                investment, inv_created = Investment.objects.get_or_create(
+                    instrument=instrument,
                     name=name,
-                    defaults={
-                        'instrument_type': 'equity',
-                        'symbol': stock.get('isin', ''),
-                        'default_account': groww_account,
-                        'asset_category': stocks_category,
-                    },
+                    member=member,
+                    defaults={'symbol': stock.get('isin', '')},
                 )
-                if created:
+                if inv_created:
                     stocks_created += 1
-                else:
-                    # Update missing fields on existing instruments
-                    update_fields = []
-                    if not instrument.default_account:
-                        instrument.default_account = groww_account
-                        update_fields.append('default_account')
-                    if not instrument.asset_category and stocks_category:
-                        instrument.asset_category = stocks_category
-                        update_fields.append('asset_category')
-                    if update_fields:
-                        instrument.save(update_fields=update_fields)
+                elif not investment.symbol and stock.get('isin'):
+                    investment.symbol = stock['isin']
+                    investment.save(update_fields=['symbol'])
 
                 qty = _to_decimal(stock.get('quantity') or '0').quantize(Decimal('0.0001'))
                 closing_price = _money(stock.get('closing_price') or '0')
@@ -1390,12 +1443,13 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                 avg_price = _money(stock.get('avg_buy_price') or '0')
                 buy_value = _money(stock.get('buy_value') or '0')
 
-                # Create buy tx for this member if they don't already have one
-                if member and not Transaction.objects.filter(instrument=instrument, household=household, member=member, transaction_type='buy').exists():
+                # Create initial buy transaction only if none exists yet for this Investment
+                if not Transaction.objects.filter(investment=investment, household=household).exists():
                     if qty > 0 and buy_value:
                         Transaction.objects.create(
                             household=household,
                             instrument=instrument,
+                            investment=investment,
                             account=groww_account,
                             member=member,
                             tx_date=valuation_date,
@@ -1408,46 +1462,15 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                             source='csv',
                         )
 
-                # Recalculate allocation_percent for all owners based on their quantities
-                # Total quantity = sum of each member's buy transactions
-                all_buy_txs = Transaction.objects.filter(instrument=instrument, household=household, transaction_type='buy', direction='outflow')
-                total_qty = sum((_to_decimal(str(t.quantity or 0)) for t in all_buy_txs), Decimal('0'))
-
-                if total_qty > 0:
-                    for tx in all_buy_txs:
-                        tx_qty = _to_decimal(str(tx.quantity or 0))
-                        alloc = (tx_qty / total_qty * 100).quantize(Decimal('0.01'))
-                        if tx.member_id:
-                            InstrumentOwnership.objects.update_or_create(
-                                instrument=instrument,
-                                member_id=tx.member_id,
-                                defaults={'allocation_percent': alloc},
-                            )
-                else:
-                    InstrumentOwnership.objects.get_or_create(
-                        instrument=instrument,
-                        member=member,
-                        defaults={'allocation_percent': Decimal('100')},
-                    )
-
-                # Valuation = sum of all members' closing values for this instrument
-                all_buy_txs_fresh = Transaction.objects.filter(instrument=instrument, household=household, transaction_type='buy', direction='outflow')
-                total_closing_value = Decimal('0')
-                for tx in all_buy_txs_fresh:
-                    tx_qty = _to_decimal(str(tx.quantity or 0))
-                    if total_qty > 0 and closing_price:
-                        total_closing_value += tx_qty * closing_price
-                if not total_closing_value and closing_value:
-                    total_closing_value = closing_value
-
                 _, snap_created = ValuationSnapshot.objects.update_or_create(
                     household=household,
                     instrument=instrument,
+                    investment=investment,
                     account=None,
                     valuation_date=valuation_date,
                     defaults={
                         'unit_price': closing_price,
-                        'market_value': total_closing_value or closing_value,
+                        'market_value': closing_value,
                         'source': 'csv',
                     },
                 )
@@ -1458,6 +1481,26 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
             errors.append({'section': 'stocks', 'row': i, 'name': stock.get('name', ''), 'reason': str(e)})
 
     # ── Mutual Funds ──────────────────────────────────────────────────────────
+    # MF/SIP schemes share one "Mutual Fund" Instrument shell per household
+    # (Milestone 2 of the Investment redesign) — the actual scheme/folio is
+    # an Investment row underneath it, not its own per-scheme Instrument.
+    # get_or_create the shell once per import run rather than per row.
+    from instruments.models import Investment, MutualFundDetails
+    from instruments.services import get_or_create_mf_shell
+
+    mf_shell = None
+    if parsed.get('mutual_funds'):
+        mf_shell = get_or_create_mf_shell(household)
+        update_fields = []
+        if not mf_shell.default_account_id:
+            mf_shell.default_account = groww_account
+            update_fields.append('default_account')
+        if not mf_shell.asset_category_id and mf_category:
+            mf_shell.asset_category = mf_category
+            update_fields.append('asset_category')
+        if update_fields:
+            mf_shell.save(update_fields=update_fields)
+
     for i, mf in enumerate(parsed.get('mutual_funds', []), start=1):
         try:
             with db_transaction.atomic():
@@ -1465,54 +1508,37 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                 if not base_name:
                     continue
 
-                # Use folio number as the disambiguator — each folio is a separate holding
-                # even if the scheme name is identical (same person, two folios; or two people).
+                # Folio number is the disambiguator — each folio is a separate
+                # Investment even if the scheme name is identical (same person,
+                # two folios; or two people). Matches the identity logic the
+                # 0015 data migration used (clean name + folio_no), so a
+                # re-import of a fund that predates this importer's fix lines
+                # up with the Investment the migration already created.
                 folio_no = mf.get('folio_no', '').strip()
-                name = f'{base_name} ({folio_no})' if folio_no else base_name
 
-                instrument, created = Instrument.objects.get_or_create(
-                    household=household,
-                    name=name,
+                instrument = mf_shell
+                investment, inv_created = Investment.objects.get_or_create(
+                    instrument=instrument,
+                    name=base_name,
+                    folio_no=folio_no,
                     defaults={
-                        'instrument_type': 'mutual_fund',
+                        'member': member,
                         'symbol': folio_no,
-                        'default_account': groww_account,
-                        'asset_category': mf_category,
-                        'metadata': {
-                            'amc': mf.get('amc', ''),
-                            'category': mf.get('category', ''),
-                            'sub_category': mf.get('sub_category', ''),
-                        },
                     },
                 )
-                if created:
+                if inv_created:
                     mf_created += 1
-                else:
-                    update_fields = []
-                    if not instrument.default_account:
-                        instrument.default_account = groww_account
-                        update_fields.append('default_account')
-                    if not instrument.asset_category and mf_category:
-                        instrument.asset_category = mf_category
-                        update_fields.append('asset_category')
-                    if update_fields:
-                        instrument.save(update_fields=update_fields)
+                elif member and investment.member_id is None:
+                    investment.member = member
+                    investment.save(update_fields=['member'])
 
-                from instruments.models import MutualFundDetails
                 MutualFundDetails.objects.update_or_create(
-                    instrument=instrument,
+                    investment=investment,
                     defaults={
                         'amc': mf.get('amc', ''),
                         'fund_category': mf.get('category', ''),
                         'fund_sub_category': mf.get('sub_category', ''),
-                        'folio_no': folio_no,
                     },
-                )
-
-                InstrumentOwnership.objects.get_or_create(
-                    instrument=instrument,
-                    member=member,
-                    defaults={'allocation_percent': Decimal('100')},
                 )
 
                 current_value = _money(mf.get('current_value') or '0')
@@ -1520,6 +1546,7 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                 _, snap_created = ValuationSnapshot.objects.update_or_create(
                     household=household,
                     instrument=instrument,
+                    investment=investment,
                     account=None,
                     valuation_date=valuation_date,
                     defaults={
@@ -1530,8 +1557,8 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                 if snap_created:
                     valuations_created += 1
 
-                # Create initial buy transaction only if none exists yet
-                if not Transaction.objects.filter(instrument=instrument, household=household).exists():
+                # Create initial buy transaction only if none exists yet for this Investment
+                if not Transaction.objects.filter(investment=investment, household=household).exists():
                     units = _to_decimal(mf.get('units') or '0').quantize(Decimal('0.0001'))
                     invested = _money(mf.get('invested_value') or '0')
                     if invested:
@@ -1539,6 +1566,7 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                         Transaction.objects.create(
                             household=household,
                             instrument=instrument,
+                            investment=investment,
                             account=groww_account,
                             member=member,
                             tx_date=valuation_date,
@@ -1564,10 +1592,11 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
 def apply_upstox_import(household, member, parsed: dict) -> dict:
     """
     Import a parsed Upstox holdings Excel file for a specific household member.
-    Creates Instruments (equity), InstrumentOwnerships, ValuationSnapshots,
-    and initial buy Transactions if none exist.
+    Creates per-member equity Investments under the shared "Equity" shell
+    Instrument, ValuationSnapshots, and initial buy Transactions if none exist.
     """
-    from instruments.models import Instrument, InstrumentOwnership
+    from instruments.models import Investment
+    from instruments.services import get_or_create_equity_shell
     from valuations.models import ValuationSnapshot
     from ledger.models import Transaction
 
@@ -1579,6 +1608,22 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
     account_name = f'Upstox ({member_label})' if member_label else 'Upstox'
     upstox_account = _get_or_create_broker_account(household, account_name)
     stocks_category = _get_asset_category(household, 'Stocks')
+
+    # Same shared "Equity" shell + per-member Investment pattern as
+    # apply_groww_import's stocks section above — see get_or_create_equity_shell()'s
+    # docstring for why a plain per-name Instrument isn't safe across members.
+    equity_shell = None
+    if parsed.get('holdings'):
+        equity_shell = get_or_create_equity_shell(household)
+        update_fields = []
+        if not equity_shell.default_account_id:
+            equity_shell.default_account = upstox_account
+            update_fields.append('default_account')
+        if not equity_shell.asset_category_id and stocks_category:
+            equity_shell.asset_category = stocks_category
+            update_fields.append('asset_category')
+        if update_fields:
+            equity_shell.save(update_fields=update_fields)
 
     for i, h in enumerate(parsed.get('holdings', []), start=1):
         try:
@@ -1592,34 +1637,24 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                 rate = _money(h.get('rate') or '0')
                 valuation = _money(h.get('valuation') or '0')
 
-                instrument, inst_created = Instrument.objects.get_or_create(
-                    household=household,
+                instrument = equity_shell
+                investment, inv_created = Investment.objects.get_or_create(
+                    instrument=instrument,
                     name=name,
-                    defaults={
-                        'instrument_type': 'equity',
-                        'symbol': h.get('isin', ''),
-                        'default_account': upstox_account,
-                        'asset_category': stocks_category,
-                    },
+                    member=member,
+                    defaults={'symbol': h.get('isin', '')},
                 )
+                if not inv_created and not investment.symbol and h.get('isin'):
+                    investment.symbol = h['isin']
+                    investment.save(update_fields=['symbol'])
 
-                if not inst_created:
-                    update_fields = []
-                    if not instrument.default_account:
-                        instrument.default_account = upstox_account
-                        update_fields.append('default_account')
-                    if not instrument.asset_category and stocks_category:
-                        instrument.asset_category = stocks_category
-                        update_fields.append('asset_category')
-                    if update_fields:
-                        instrument.save(update_fields=update_fields)
-
-                # Create buy tx for this member if they don't already have one
-                if member and not Transaction.objects.filter(instrument=instrument, household=household, member=member, transaction_type='buy').exists():
+                # Create initial buy transaction only if none exists yet for this Investment
+                if not Transaction.objects.filter(investment=investment, household=household).exists():
                     if quantity > 0 and valuation > 0:
                         Transaction.objects.create(
                             household=household,
                             instrument=instrument,
+                            investment=investment,
                             account=upstox_account,
                             member=member,
                             tx_date=vd,
@@ -1632,44 +1667,20 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                             source='csv',
                         )
 
-                # Recalculate allocation_percent for all owners based on their quantities
-                all_buy_txs = Transaction.objects.filter(instrument=instrument, household=household, transaction_type='buy', direction='outflow')
-                total_qty = sum((_to_decimal(str(t.quantity or 0)) for t in all_buy_txs), Decimal('0'))
-
-                if total_qty > 0:
-                    for tx in all_buy_txs:
-                        tx_qty = _to_decimal(str(tx.quantity or 0))
-                        alloc = (tx_qty / total_qty * 100).quantize(Decimal('0.01'))
-                        if tx.member_id:
-                            InstrumentOwnership.objects.update_or_create(
-                                instrument=instrument,
-                                member_id=tx.member_id,
-                                defaults={'allocation_percent': alloc},
-                            )
-                elif member:
-                    InstrumentOwnership.objects.get_or_create(
-                        instrument=instrument,
-                        member=member,
-                        defaults={'allocation_percent': Decimal('100')},
-                    )
-
-                # Valuation = total quantity across all members × unit price
-                total_qty_fresh = sum((_to_decimal(str(t.quantity or 0)) for t in all_buy_txs), Decimal('0'))
-                total_value = total_qty_fresh * rate if rate and total_qty_fresh else valuation
-
                 ValuationSnapshot.objects.update_or_create(
                     household=household,
                     instrument=instrument,
+                    investment=investment,
                     account=None,
                     valuation_date=vd,
                     defaults={
                         'unit_price': rate,
-                        'market_value': total_value,
+                        'market_value': valuation,
                         'source': 'csv',
                     },
                 )
 
-                if inst_created:
+                if inv_created:
                     created += 1
                 else:
                     updated += 1

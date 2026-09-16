@@ -11,9 +11,9 @@ from fund_data.services import compute_benchmark_comparison, compute_fund_risk_m
 
 
 class ExternalFundViewSet(viewsets.ModelViewSet):
-    queryset = ExternalFund.objects.select_related('instrument').all()
+    queryset = ExternalFund.objects.select_related('investment').all()
     serializer_class = ExternalFundSerializer
-    filterset_fields = ['instrument']
+    filterset_fields = ['investment']
 
 
 class FundSearchView(APIView):
@@ -32,8 +32,15 @@ class FundSearchView(APIView):
 
 
 class FundComparisonView(APIView):
+    """One row per MF/SIP fund (an Investment under the household's shared
+    "Mutual Fund" Instrument shell) or equity holding (still its own
+    Instrument). risk_metrics/benchmark_comparison/XIRR are computed per
+    Investment for MF/SIP, per Instrument for equity — matching how
+    ExternalFund/FundClassification and compute_xirr() are keyed post the
+    Investment redesign."""
+
     def get(self, request):
-        from instruments.models import Instrument, MutualFundDetails
+        from instruments.models import Instrument, Investment
 
         household_id = request.query_params.get('household_id')
         if not household_id:
@@ -43,38 +50,59 @@ class FundComparisonView(APIView):
         from insights.overlap import compute_portfolio_diversification
         from insights.services import compute_xirr
 
-        instruments = Instrument.objects.filter(
-            household_id=household_id,
-            instrument_type__in=[Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP, Instrument.InstrumentType.EQUITY],
+        investments = Investment.objects.filter(
+            instrument__household_id=household_id,
+            instrument__instrument_type__in=[Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP],
         ).select_related('mf_details', 'external_fund')
+        equities = Instrument.objects.filter(
+            household_id=household_id, instrument_type=Instrument.InstrumentType.EQUITY,
+        )
 
         diversification = compute_portfolio_diversification(int(household_id), as_of)
-        overlap_by_instrument: dict[int, list] = {}
+        overlap_by_holding: dict[tuple[str, int], list] = {}
         for pair in diversification['pairs']:
-            overlap_by_instrument.setdefault(pair['instrument_a_id'], []).append(float(pair['overlap_percent']))
-            overlap_by_instrument.setdefault(pair['instrument_b_id'], []).append(float(pair['overlap_percent']))
+            a_key = ('investment', pair['investment_a_id']) if pair['investment_a_id'] else ('instrument', pair['instrument_a_id'])
+            b_key = ('investment', pair['investment_b_id']) if pair['investment_b_id'] else ('instrument', pair['instrument_b_id'])
+            overlap_by_holding.setdefault(a_key, []).append(float(pair['overlap_percent']))
+            overlap_by_holding.setdefault(b_key, []).append(float(pair['overlap_percent']))
 
         rows = []
-        for inst in instruments:
-            mf_details = getattr(inst, 'mf_details', None)
+        for inv in investments:
+            mf_details = getattr(inv, 'mf_details', None)
             risk_metrics = None
             benchmark_comparison = None
-            if hasattr(inst, 'external_fund'):
-                risk_metrics = compute_fund_risk_metrics(inst.id, int(household_id))
-                benchmark_comparison = compute_benchmark_comparison(inst.id, as_of)
+            if hasattr(inv, 'external_fund'):
+                risk_metrics = compute_fund_risk_metrics(inv.id, int(household_id))
+                benchmark_comparison = compute_benchmark_comparison(inv.id, as_of)
 
-            max_overlap = max(overlap_by_instrument.get(inst.id, [0]), default=0)
+            max_overlap = max(overlap_by_holding.get(('investment', inv.id), [0]), default=0)
 
             rows.append({
-                'instrument_id': inst.id,
-                'instrument_name': inst.name,
+                'instrument_id': inv.instrument_id,
+                'investment_id': inv.id,
+                'instrument_name': inv.name,
                 'fund_category': mf_details.fund_category if mf_details else '',
                 'expense_ratio': str(mf_details.expense_ratio) if mf_details and mf_details.expense_ratio is not None else None,
-                'xirr_percent': compute_xirr(int(household_id), as_of, inst.id),
+                'xirr_percent': compute_xirr(int(household_id), as_of, investment_id=inv.id),
                 'max_overlap_percent': max_overlap,
-                'linked_to_nav_source': hasattr(inst, 'external_fund'),
+                'linked_to_nav_source': hasattr(inv, 'external_fund'),
                 'risk_metrics': risk_metrics,
                 'benchmark_comparison': benchmark_comparison,
+            })
+
+        for inst in equities:
+            max_overlap = max(overlap_by_holding.get(('instrument', inst.id), [0]), default=0)
+            rows.append({
+                'instrument_id': inst.id,
+                'investment_id': None,
+                'instrument_name': inst.name,
+                'fund_category': '',
+                'expense_ratio': None,
+                'xirr_percent': compute_xirr(int(household_id), as_of, instrument_id=inst.id),
+                'max_overlap_percent': max_overlap,
+                'linked_to_nav_source': False,
+                'risk_metrics': None,
+                'benchmark_comparison': None,
             })
 
         return Response({'as_of': as_of, 'rows': rows})

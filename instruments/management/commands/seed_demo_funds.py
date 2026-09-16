@@ -16,7 +16,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction as db_transaction
 
 from core.models import Household
-from instruments.models import Account, AssetCategory, Instrument, MutualFundDetails
+from instruments.models import Account, AssetCategory, Instrument, Investment, MutualFundDetails
+from instruments.services import get_or_create_mf_shell
 from ledger.models import Transaction
 from valuations.models import ValuationSnapshot
 
@@ -62,25 +63,31 @@ class Command(BaseCommand):
             household=household, name='Demo Debt', defaults={'color': '#10b981', 'sort_order': 901},
         )
 
+        instrument = get_or_create_mf_shell(household)
+        if not instrument.default_account_id:
+            instrument.default_account = account
+            instrument.save(update_fields=['default_account'])
+        # Category is set per-Investment's asset allocation intent, but
+        # Instrument itself only carries one asset_category — leave the
+        # shell's asset_category alone if already set (e.g. equity, from an
+        # earlier run) rather than fighting per-fund debt/equity categories.
+        if not instrument.asset_category_id:
+            instrument.asset_category = equity_cat
+            instrument.save(update_fields=['asset_category'])
+
         created_count = 0
         with db_transaction.atomic():
             for name_suffix, amc, fund_category, fund_sub_category, expense_ratio, annual_growth in DEMO_FUNDS[:count]:
                 name = f'Demo {name_suffix}'
-                category = debt_cat if fund_category == 'Debt' else equity_cat
 
-                instrument, created = Instrument.objects.get_or_create(
-                    household=household, name=name,
-                    defaults={
-                        'instrument_type': Instrument.InstrumentType.MUTUAL_FUND,
-                        'asset_category': category,
-                        'default_account': account,
-                    },
+                investment, created = Investment.objects.get_or_create(
+                    instrument=instrument, name=name, folio_no='',
                 )
                 if not created:
                     continue  # already seeded — idempotent, don't duplicate transactions/valuations either
 
                 MutualFundDetails.objects.get_or_create(
-                    instrument=instrument,
+                    investment=investment,
                     defaults={
                         'amc': amc, 'fund_category': fund_category,
                         'fund_sub_category': fund_sub_category, 'expense_ratio': expense_ratio,
@@ -101,11 +108,11 @@ class Command(BaseCommand):
                     qty = (amount / nav_at_purchase).quantize(Decimal('0.000001'))
                     total_qty += qty
                     Transaction.objects.create(
-                        household=household, account=account, instrument=instrument,
+                        household=household, account=account, instrument=instrument, investment=investment,
                         tx_date=tx_date, amount=amount, quantity=qty, price_per_unit=nav_at_purchase,
                         direction=Transaction.Direction.OUTFLOW, transaction_type=Transaction.TransactionType.BUY,
                         source=Transaction.SourceType.MANUAL,
-                        idempotency_key=f'demo-seed-{instrument.id}-{offset_days}',
+                        idempotency_key=f'demo-seed-{investment.id}-{offset_days}',
                     )
 
                 # Monthly NAV snapshots for the same window, so compute_holdings_history()
@@ -118,7 +125,7 @@ class Command(BaseCommand):
                     days_from_epoch = (today - snap_date).days
                     nav_then = (Decimal('100.0000') * Decimal(str(daily_growth)) ** (4 * 365 - days_from_epoch)).quantize(Decimal('0.0001'))
                     ValuationSnapshot.objects.get_or_create(
-                        household=household, instrument=instrument, valuation_date=snap_date,
+                        household=household, instrument=instrument, investment=investment, valuation_date=snap_date,
                         defaults={'unit_price': nav_then, 'source': ValuationSnapshot.SourceType.MANUAL},
                     )
 

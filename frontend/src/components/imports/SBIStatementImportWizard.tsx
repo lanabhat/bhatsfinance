@@ -4,10 +4,10 @@ import type {
   SbiAccountMappingEntry,
   SbiConfirmedDeposit,
   SbiConfirmedSavingsAccount,
-  SbiDepositResult,
   SbiExistingAccount,
+  SbiExistingDeposit,
   SbiMemberPreview,
-  SbiSavingsAccountResult,
+  SbiStatementApplyResult,
   SbiStatementFilePreview,
 } from '../../api/importApi'
 import { Button } from '../ui/Button'
@@ -50,16 +50,27 @@ export function SBIStatementImportWizard({ householdId }: Props) {
   const [mappingRows, setMappingRows] = useState<AccountMappingRow[]>([])
   const [savingsItems, setSavingsItems] = useState<SbiConfirmedSavingsAccount[]>([])
   const [depositItems, setDepositItems] = useState<SbiConfirmedDeposit[]>([])
-  const [result, setResult] = useState<{ savings_accounts: SbiSavingsAccountResult[]; deposits: SbiDepositResult[] } | null>(null)
+  const [result, setResult] = useState<SbiStatementApplyResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [bulkSavingsMemberId, setBulkSavingsMemberId] = useState('')
+  const [bulkFdCompounding, setBulkFdCompounding] = useState('')
   const [bulkFdMemberId, setBulkFdMemberId] = useState('')
+  const [bulkRdCompounding, setBulkRdCompounding] = useState('')
+  const [bulkRdMemberId, setBulkRdMemberId] = useState('')
+  // Instrument ids for existing FDs/RDs the user confirmed are closed/matured
+  // (present in the DB, absent from this statement) — opt-in, nothing
+  // happens to them unless explicitly marked here.
+  const [deactivateIds, setDeactivateIds] = useState<Set<number>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
   const allMembers: SbiMemberPreview[] =
     rows.find(r => r.preview?.members && r.preview.members.length > 0)?.preview?.members ?? []
   const existingAccounts: SbiExistingAccount[] =
     rows.find(r => r.preview?.existing_accounts && r.preview.existing_accounts.length > 0)?.preview?.existing_accounts ?? []
+  const existingDeposits: SbiExistingDeposit[] =
+    rows.find(r => r.preview?.existing_deposits && r.preview.existing_deposits.length > 0)?.preview?.existing_deposits ?? []
+  const existingDepositsByAccountNumber = new Map(existingDeposits.map(d => [d.account_number, d]))
 
   const handleFiles = async (selected: File[]) => {
     if (selected.length === 0) return
@@ -161,20 +172,39 @@ export function SBIStatementImportWizard({ householdId }: Props) {
     setError('')
 
     const unlocked = rows.filter(r => r.status === 'unlocked' && r.preview)
+    // For an account mapped to an existing Account, that account's real
+    // owner (primary_member_id) is the source of truth — the Map Accounts
+    // step's Owner field is create-only (see map-accounts step), so this is
+    // the only place an existing account's owner comes from.
     const memberFor = (accountNumber: string): number | null => {
       const mapping = mappingRows.find(m => m.accountNumber === accountNumber)
-      return mapping?.memberId ?? null
+      if (!mapping) return null
+      if (mapping.mode === 'existing') {
+        return existingAccounts.find(a => a.id === mapping.accountId)?.primary_member_id ?? null
+      }
+      return mapping.memberId
     }
 
     setSavingsItems(unlocked.flatMap(r => r.preview!.savings_accounts.map(a => ({
       ...a,
       member_id: memberFor(a.account_number),
     }))))
-    setDepositItems(unlocked.flatMap(r => r.preview!.deposits.map(d => ({
-      ...d,
-      member_id: memberFor(d.account_number),
-      tenure_months: undefined,
-    }))))
+    setDepositItems(unlocked.flatMap(r => r.preview!.deposits.map(d => {
+      const existing = existingDepositsByAccountNumber.get(d.account_number)
+      return {
+        ...d,
+        // A matching existing FD/RD's recorded owner/compounding pre-fills
+        // here instead of asking again — the freshly parsed statement still
+        // wins for every other field (it's the current, authoritative source).
+        member_id: existing?.member_id ?? memberFor(d.account_number),
+        compounding: existing?.compounding ?? d.compounding,
+        // tenure_months/installment_amount are auto-derived from the sheet's
+        // Tenor + Principal Amount columns (sbi_statement_parser.py) —
+        // still editable per-row if the parse guessed wrong.
+        tenure_months: d.tenure_months ?? undefined,
+      }
+    })))
+    setDeactivateIds(new Set())
     setStep('confirm')
   }
 
@@ -186,8 +216,12 @@ export function SBIStatementImportWizard({ householdId }: Props) {
     setDepositItems(prev => prev.map((item, i) => i === index ? { ...item, ...patch } : item))
   }
 
-  const applyMemberToAllFDs = (memberId: number) => {
-    setDepositItems(prev => prev.map(item => item.doc_type === 'fd_advice' ? { ...item, member_id: memberId } : item))
+  const applyToAllDeposits = (docType: 'fd_advice' | 'rd_statement', patch: Partial<SbiConfirmedDeposit>) => {
+    setDepositItems(prev => prev.map(item => item.doc_type === docType ? { ...item, ...patch } : item))
+  }
+
+  const applyMemberToAllSavings = (memberId: number) => {
+    setSavingsItems(prev => prev.map(item => ({ ...item, member_id: memberId })))
   }
 
   const handleImport = async () => {
@@ -204,7 +238,7 @@ export function SBIStatementImportWizard({ householdId }: Props) {
           ? { account_id: m.accountId! }
           : { name: m.newName.trim(), member_id: m.memberId }
       }
-      const res = await importApi.applySBIStatementImport(householdId, accountMapping, savingsItems, depositItems)
+      const res = await importApi.applySBIStatementImport(householdId, accountMapping, savingsItems, depositItems, Array.from(deactivateIds))
       setResult(res)
       setStep('result')
       void refreshAll()
@@ -222,6 +256,7 @@ export function SBIStatementImportWizard({ householdId }: Props) {
     setMappingRows([])
     setSavingsItems([])
     setDepositItems([])
+    setDeactivateIds(new Set())
     setResult(null)
     setError('')
   }
@@ -361,10 +396,22 @@ export function SBIStatementImportWizard({ householdId }: Props) {
                   placeholder="Account name"
                 />
               </div>
-              <label className="grid gap-0.5 text-[10px] text-[var(--text-muted)] max-w-xs">
-                Owner
-                {memberSelect(row.memberId, v => updateMappingRow(row.accountNumber, { memberId: v }))}
-              </label>
+              {row.mode === 'existing' ? (
+                row.accountId != null && (
+                  <p className="text-[10px] text-[var(--text-muted)]">
+                    Owner: {(() => {
+                      const owner = existingAccounts.find(a => a.id === row.accountId)?.primary_member_id
+                      return owner ? (allMembers.find(m => m.id === owner)?.name ?? 'Assigned') : 'Unassigned'
+                    })()}
+                    {' '}<span className="italic">(edit on the Accounts page — already set for this account)</span>
+                  </p>
+                )
+              ) : (
+                <label className="grid gap-0.5 text-[10px] text-[var(--text-muted)] max-w-xs">
+                  Owner
+                  {memberSelect(row.memberId, v => updateMappingRow(row.accountNumber, { memberId: v }))}
+                </label>
+              )}
             </div>
           ))}
         </div>
@@ -383,6 +430,25 @@ export function SBIStatementImportWizard({ householdId }: Props) {
       </select>
     )
 
+    const importedAccountNumbers = new Set(depositItems.map(i => i.account_number))
+    const mappedAccountNumbers = new Set(mappingRows.map(r => r.accountNumber))
+    // Existing FDs/RDs under one of the mapped accounts that this statement
+    // doesn't mention at all — never touched unless explicitly marked below.
+    const missingDeposits = existingDeposits.filter(d =>
+      mappedAccountNumbers.has(d.account_number) && !importedAccountNumbers.has(d.account_number) && d.is_active,
+    )
+    const toggleDeactivate = (instrumentId: number) => {
+      setDeactivateIds(prev => {
+        const next = new Set(prev)
+        if (next.has(instrumentId)) next.delete(instrumentId)
+        else next.add(instrumentId)
+        return next
+      })
+    }
+    const existingBadge = (
+      <span className="rounded-full bg-primary-100 px-1.5 py-0.5 text-[9px] font-medium text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">Existing</span>
+    )
+
     return (
       <div className="grid gap-5">
         <div className="flex items-center justify-between">
@@ -396,6 +462,18 @@ export function SBIStatementImportWizard({ householdId }: Props) {
         {savingsItems.length > 0 && (
           <div className="grid gap-2">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Savings Accounts ({savingsItems.length})</h4>
+            <div className="flex flex-wrap items-end gap-2 rounded-lg bg-[var(--surface-2)] p-2">
+              <label className="grid gap-0.5 text-[10px] text-[var(--text-muted)]">
+                Owner (all)
+                <select className={cellInput} value={bulkSavingsMemberId} onChange={e => setBulkSavingsMemberId(e.target.value)}>
+                  <option value="">— select —</option>
+                  {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </label>
+              <Button size="sm" onClick={() => { if (bulkSavingsMemberId) applyMemberToAllSavings(Number(bulkSavingsMemberId)) }}>
+                Apply to all Savings
+              </Button>
+            </div>
             <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
               <table className="w-full text-xs">
                 <thead className="bg-[var(--surface-2)]">
@@ -430,13 +508,22 @@ export function SBIStatementImportWizard({ householdId }: Props) {
             </h4>
             <div className="flex flex-wrap items-end gap-2 rounded-lg bg-[var(--surface-2)] p-2">
               <label className="grid gap-0.5 text-[10px] text-[var(--text-muted)]">
+                Compounding (all)
+                {compoundingSelect(bulkFdCompounding, setBulkFdCompounding)}
+              </label>
+              <label className="grid gap-0.5 text-[10px] text-[var(--text-muted)]">
                 Owner (all)
                 <select className={cellInput} value={bulkFdMemberId} onChange={e => setBulkFdMemberId(e.target.value)}>
                   <option value="">— select —</option>
                   {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </label>
-              <Button size="sm" onClick={() => { if (bulkFdMemberId) applyMemberToAllFDs(Number(bulkFdMemberId)) }}>
+              <Button size="sm" onClick={() => {
+                const patch: Partial<SbiConfirmedDeposit> = {}
+                if (bulkFdCompounding) patch.compounding = bulkFdCompounding as SbiConfirmedDeposit['compounding']
+                if (bulkFdMemberId) patch.member_id = Number(bulkFdMemberId)
+                if (Object.keys(patch).length > 0) applyToAllDeposits('fd_advice', patch)
+              }}>
                 Apply to all FDs
               </Button>
             </div>
@@ -455,18 +542,25 @@ export function SBIStatementImportWizard({ householdId }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {depositItems.map((item, index) => item.doc_type !== 'fd_advice' ? null : (
-                    <tr key={`${item.account_number}-${index}`} className="border-t border-[var(--border)] align-top">
-                      <td className={td}><span className="font-mono">•••{item.account_number.slice(-4)}</span></td>
-                      <td className={td}><input className={cellInput} value={item.principal ?? ''} onChange={e => updateDepositItem(index, { principal: e.target.value })} /></td>
-                      <td className={td}><input className={cellInput} value={item.annual_rate} onChange={e => updateDepositItem(index, { annual_rate: e.target.value })} /></td>
-                      <td className={td}><input type="date" className={cellInput} value={item.investment_date} onChange={e => updateDepositItem(index, { investment_date: e.target.value })} /></td>
-                      <td className={td}><input type="date" className={cellInput} value={item.maturity_date} onChange={e => updateDepositItem(index, { maturity_date: e.target.value })} /></td>
-                      <td className={td}><input className={cellInput} value={item.maturity_value ?? ''} onChange={e => updateDepositItem(index, { maturity_value: e.target.value })} /></td>
-                      <td className={td}>{compoundingSelect(item.compounding, v => updateDepositItem(index, { compounding: v as SbiConfirmedDeposit['compounding'] }))}</td>
-                      <td className={td}>{memberSelect(item.member_id, v => updateDepositItem(index, { member_id: v }))}</td>
-                    </tr>
-                  ))}
+                  {depositItems
+                    .map((item, index) => ({ item, index }))
+                    .filter(({ item }) => item.doc_type === 'fd_advice')
+                    .sort((a, b) => Number(existingDepositsByAccountNumber.has(b.item.account_number)) - Number(existingDepositsByAccountNumber.has(a.item.account_number)))
+                    .map(({ item, index }) => (
+                      <tr key={`${item.account_number}-${index}`} className="border-t border-[var(--border)] align-top">
+                        <td className={td}>
+                          <span className="font-mono">•••{item.account_number.slice(-4)}</span>
+                          {existingDepositsByAccountNumber.has(item.account_number) && <div className="mt-0.5">{existingBadge}</div>}
+                        </td>
+                        <td className={td}><input className={cellInput} value={item.principal ?? ''} onChange={e => updateDepositItem(index, { principal: e.target.value })} /></td>
+                        <td className={td}><input className={cellInput} value={item.annual_rate} onChange={e => updateDepositItem(index, { annual_rate: e.target.value })} /></td>
+                        <td className={td}><input type="date" className={cellInput} value={item.investment_date} onChange={e => updateDepositItem(index, { investment_date: e.target.value })} /></td>
+                        <td className={td}><input type="date" className={cellInput} value={item.maturity_date} onChange={e => updateDepositItem(index, { maturity_date: e.target.value })} /></td>
+                        <td className={td}><input className={cellInput} value={item.maturity_value ?? ''} onChange={e => updateDepositItem(index, { maturity_value: e.target.value })} /></td>
+                        <td className={td}>{compoundingSelect(item.compounding, v => updateDepositItem(index, { compounding: v as SbiConfirmedDeposit['compounding'] }))}</td>
+                        <td className={td}>{memberSelect(item.member_id, v => updateDepositItem(index, { member_id: v }))}</td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -478,6 +572,27 @@ export function SBIStatementImportWizard({ householdId }: Props) {
             <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
               Recurring Deposits ({depositItems.filter(i => i.doc_type === 'rd_statement').length})
             </h4>
+            <div className="flex flex-wrap items-end gap-2 rounded-lg bg-[var(--surface-2)] p-2">
+              <label className="grid gap-0.5 text-[10px] text-[var(--text-muted)]">
+                Compounding (all)
+                {compoundingSelect(bulkRdCompounding, setBulkRdCompounding)}
+              </label>
+              <label className="grid gap-0.5 text-[10px] text-[var(--text-muted)]">
+                Owner (all)
+                <select className={cellInput} value={bulkRdMemberId} onChange={e => setBulkRdMemberId(e.target.value)}>
+                  <option value="">— select —</option>
+                  {allMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </label>
+              <Button size="sm" onClick={() => {
+                const patch: Partial<SbiConfirmedDeposit> = {}
+                if (bulkRdCompounding) patch.compounding = bulkRdCompounding as SbiConfirmedDeposit['compounding']
+                if (bulkRdMemberId) patch.member_id = Number(bulkRdMemberId)
+                if (Object.keys(patch).length > 0) applyToAllDeposits('rd_statement', patch)
+              }}>
+                Apply to all RDs
+              </Button>
+            </div>
             <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
               <table className="w-full text-xs">
                 <thead className="bg-[var(--surface-2)]">
@@ -493,24 +608,76 @@ export function SBIStatementImportWizard({ householdId }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {depositItems.map((item, index) => item.doc_type !== 'rd_statement' ? null : (
-                    <tr key={`${item.account_number}-${index}`} className="border-t border-[var(--border)] align-top">
-                      <td className={td}><span className="font-mono">•••{item.account_number.slice(-4)}</span></td>
-                      <td className={td}><input className={cellInput} value={item.current_balance ?? ''} onChange={e => updateDepositItem(index, { current_balance: e.target.value })} /></td>
-                      <td className={td}><input className={cellInput} value={item.installment_amount ?? ''} onChange={e => updateDepositItem(index, { installment_amount: e.target.value })} /></td>
-                      <td className={td}><input className={cellInput} value={item.annual_rate} onChange={e => updateDepositItem(index, { annual_rate: e.target.value })} /></td>
-                      <td className={td}><input type="date" className={cellInput} value={item.investment_date} onChange={e => updateDepositItem(index, { investment_date: e.target.value })} /></td>
-                      <td className={td}><input type="number" min={1} className={cellInput} value={item.tenure_months ?? ''} onChange={e => updateDepositItem(index, { tenure_months: e.target.value ? Number(e.target.value) : undefined })} /></td>
-                      <td className={td}>{compoundingSelect(item.compounding, v => updateDepositItem(index, { compounding: v as SbiConfirmedDeposit['compounding'] }))}</td>
-                      <td className={td}>{memberSelect(item.member_id, v => updateDepositItem(index, { member_id: v }))}</td>
-                    </tr>
-                  ))}
+                  {depositItems
+                    .map((item, index) => ({ item, index }))
+                    .filter(({ item }) => item.doc_type === 'rd_statement')
+                    .sort((a, b) => Number(existingDepositsByAccountNumber.has(b.item.account_number)) - Number(existingDepositsByAccountNumber.has(a.item.account_number)))
+                    .map(({ item, index }) => (
+                      <tr key={`${item.account_number}-${index}`} className="border-t border-[var(--border)] align-top">
+                        <td className={td}>
+                          <span className="font-mono">•••{item.account_number.slice(-4)}</span>
+                          {existingDepositsByAccountNumber.has(item.account_number) && <div className="mt-0.5">{existingBadge}</div>}
+                        </td>
+                        <td className={td}><input className={cellInput} value={item.current_balance ?? ''} onChange={e => updateDepositItem(index, { current_balance: e.target.value })} /></td>
+                        <td className={td}><input className={cellInput} value={item.installment_amount ?? ''} onChange={e => updateDepositItem(index, { installment_amount: e.target.value })} /></td>
+                        <td className={td}><input className={cellInput} value={item.annual_rate} onChange={e => updateDepositItem(index, { annual_rate: e.target.value })} /></td>
+                        <td className={td}><input type="date" className={cellInput} value={item.investment_date} onChange={e => updateDepositItem(index, { investment_date: e.target.value })} /></td>
+                        <td className={td}><input type="number" min={1} className={cellInput} value={item.tenure_months ?? ''} onChange={e => updateDepositItem(index, { tenure_months: e.target.value ? Number(e.target.value) : undefined })} /></td>
+                        <td className={td}>{compoundingSelect(item.compounding, v => updateDepositItem(index, { compounding: v as SbiConfirmedDeposit['compounding'] }))}</td>
+                        <td className={td}>{memberSelect(item.member_id, v => updateDepositItem(index, { member_id: v }))}</td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
             <p className="text-xs text-[var(--text-muted)]">
-              * Not present in the statement — enter the installment amount and tenure to complete the RD import.
+              * Auto-calculated from the statement's Principal Amount and Tenor (installment = principal ÷ tenure months) — review and correct if it looks off.
             </p>
+          </div>
+        )}
+
+        {missingDeposits.length > 0 && (
+          <div className="grid gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Not in this statement ({missingDeposits.length})
+            </h4>
+            <p className="text-xs text-[var(--text-muted)]">
+              These FDs/RDs are on file for the account(s) you mapped, but this statement doesn't mention them —
+              matured, closed, or moved elsewhere? Mark inactive to reflect that, or leave as-is if it's still open
+              and just missing from this particular export.
+            </p>
+            <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+              <table className="w-full text-xs">
+                <thead className="bg-[var(--surface-2)]">
+                  <tr>
+                    <th className={th}>Instrument</th>
+                    <th className={th}>Account No.</th>
+                    <th className={th}>Type</th>
+                    <th className={th}>Owner</th>
+                    <th className={th}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {missingDeposits.map(d => {
+                    const marked = deactivateIds.has(d.instrument_id)
+                    return (
+                      <tr key={d.instrument_id} className="border-t border-[var(--border)] align-top">
+                        <td className={td}>{d.instrument_name}</td>
+                        <td className={td}><span className="font-mono">•••{d.account_number.slice(-4)}</span></td>
+                        <td className={td}>{d.doc_type === 'fd_advice' ? 'FD' : 'RD'}</td>
+                        <td className={td}>{d.member_id ? (allMembers.find(m => m.id === d.member_id)?.name ?? '—') : 'Unassigned'}</td>
+                        <td className={td}>
+                          <label className="flex items-center gap-1.5 text-[var(--text-2)]">
+                            <input type="checkbox" checked={marked} onChange={() => toggleDeactivate(d.instrument_id)} />
+                            Mark Inactive
+                          </label>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -536,6 +703,9 @@ export function SBIStatementImportWizard({ householdId }: Props) {
         <div>
           <p className="font-semibold text-[var(--text)]">Import complete</p>
           {totalErrors > 0 && <p className="text-sm text-amber-500">{totalErrors} errors — see details below</p>}
+          {!!result?.deactivated_count && (
+            <p className="text-sm text-[var(--text-muted)]">{result.deactivated_count} instrument{result.deactivated_count === 1 ? '' : 's'} marked inactive.</p>
+          )}
         </div>
       </div>
       <div className="grid gap-3">

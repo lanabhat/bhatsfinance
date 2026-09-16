@@ -8,6 +8,8 @@ type Props = {
   children: ReactNode
   /** Kept for API compatibility; the sheet always scrolls when content overflows. */
   tall?: boolean
+  /** Wider panel (max-w-xl instead of max-w-lg) for forms with denser content, e.g. a searchable picker. */
+  wide?: boolean
 }
 
 // Shared counter so stacked sheets/dialogs layer above one another.
@@ -18,7 +20,7 @@ let openCount = 0
  * Assets…). Bottom-sheet on mobile, centered modal on desktop. Portaled to
  * document.body so it always paints above page content and other overlays.
  */
-export function Sheet({ title, onClose, children }: Props) {
+export function Sheet({ title, onClose, children, wide }: Props) {
   const [dragY, setDragY] = useState(0)
   const startY = useRef<number | null>(null)
   const [layer, setLayer] = useState(50)
@@ -60,7 +62,7 @@ export function Sheet({ title, onClose, children }: Props) {
         onClick={onClose}
       >
         <div
-          className="dialog-panel relative flex max-h-[90dvh] w-full max-w-lg flex-col bg-[var(--surface)] shadow-[var(--shadow-modal)] rounded-t-2xl md:rounded-2xl md:max-h-[88vh]"
+          className={`dialog-panel relative flex max-h-[90dvh] w-full flex-col bg-[var(--surface)] shadow-[var(--shadow-modal)] rounded-t-2xl md:rounded-2xl md:max-h-[88vh] ${wide ? 'max-w-xl' : 'max-w-lg'}`}
           style={{
             transform: dragY ? `translateY(${dragY}px)` : undefined,
             transition: startY.current === null ? 'transform 0.22s ease-out' : 'none',

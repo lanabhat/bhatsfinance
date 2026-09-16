@@ -81,21 +81,24 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
         value = None
         method = None
 
-        # Try FD auto-compute — skipped for sweep/Multi Option Deposits, whose
-        # balance moves with sweep-ins/sweep-outs rather than compounding on a
-        # fixed principal; those fall through to carrying forward their last
-        # bank-stated import snapshot instead (see apply_fd_advice_import).
+        # Try FD auto-compute — an instrument can now hold several FD
+        # investments (e.g. multiple deposits under one "HDFC Bank FD"
+        # instrument), so sum each one's compounded value. Skipped for
+        # sweep/Multi Option Deposits, whose balance moves with
+        # sweep-ins/sweep-outs rather than compounding on a fixed principal;
+        # those fall through to carrying forward their last bank-stated
+        # import snapshot instead (see apply_fd_advice_import).
         is_sweep_deposit = bool(instrument.metadata.get('is_sweep_deposit')) or \
             'multi option' in str(instrument.metadata.get('sbi_deposit_type') or '').lower()
-        fd = getattr(instrument, 'fd_details', None)
-        if fd is not None and not is_sweep_deposit:
-            value = _compute_fd_value(fd, as_of)
+        fds = list(instrument.fd_details.all())
+        if fds and not is_sweep_deposit:
+            value = sum((_compute_fd_value(fd, as_of) for fd in fds), start=ZERO)
             method = 'formula'
 
-        # Try Bond auto-compute
-        bond = getattr(instrument, 'bond_details', None)
-        if bond is not None:
-            value = _compute_bond_value(bond, as_of)
+        # Try Bond auto-compute — same sum-across-investments treatment.
+        bonds = list(instrument.bond_details.all())
+        if bonds:
+            value = sum((_compute_bond_value(bond, as_of) for bond in bonds), start=ZERO)
             method = 'formula'
 
         # Carry forward last known snapshot

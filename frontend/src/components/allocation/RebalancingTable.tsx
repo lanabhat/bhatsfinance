@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Money } from '../common/Money'
+import { DataTable } from '../ui/DataTable'
+import type { DataTableColumn } from '../ui/DataTable'
 import type { RebalancingRow } from '../../types/domain'
 
 type Props = {
@@ -69,52 +71,65 @@ const ACTION_LABELS: Record<RebalancingRow['suggested_action'], string> = {
 }
 
 export function RebalancingTable({ rows, canWrite, onSaveTarget }: Props) {
+  const columns: DataTableColumn<RebalancingRow>[] = [
+    {
+      key: 'category', label: 'Category', sortable: true, searchable: true,
+      sortValue: (r) => r.category_name, searchValue: (r) => r.category_name,
+      render: (r) => (
+        <span className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: r.color }} />
+          <span className="text-[var(--text)]">{r.category_name}</span>
+        </span>
+      ),
+    },
+    {
+      key: 'current', label: 'Current', align: 'right', sortable: true,
+      sortValue: (r) => parseFloat(r.current_percent),
+      render: (r) => `${r.current_percent}%`,
+    },
+    {
+      key: 'target', label: 'Target', align: 'right',
+      render: (r) => <TargetCell row={r} canWrite={canWrite} onSaveTarget={onSaveTarget} />,
+    },
+    {
+      key: 'drift', label: 'Drift', align: 'right', sortable: true,
+      sortValue: (r) => parseFloat(r.drift_percent),
+      dataBar: { value: (r) => parseFloat(r.drift_percent), mode: 'diverging' },
+      render: (r) => {
+        const drift = parseFloat(r.drift_percent)
+        return (
+          <span className={`font-medium ${drift > 0 ? 'text-amber-600 dark:text-amber-400' : drift < 0 ? 'text-sky-600 dark:text-sky-400' : 'text-[var(--text-muted)]'}`}>
+            {drift > 0 ? '+' : ''}{r.drift_percent}%
+          </span>
+        )
+      },
+    },
+    {
+      key: 'value', label: 'Value', align: 'right', sortable: true,
+      sortValue: (r) => parseFloat(r.current_value),
+      dataBar: { value: (r) => parseFloat(r.current_value) || null },
+      render: (r) => <Money value={r.current_value} />,
+    },
+    {
+      key: 'suggested', label: 'Suggested', align: 'right',
+      render: (r) => (
+        <span className={`text-xs font-semibold ${ACTION_STYLES[r.suggested_action]}`}>
+          {r.suggested_action === 'hold' ? ACTION_LABELS.hold : (
+            <>{ACTION_LABELS[r.suggested_action]} <Money value={r.suggested_amount} /></>
+          )}
+        </span>
+      ),
+    },
+  ]
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-[var(--border)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            <th className="py-2 pr-3">Category</th>
-            <th className="py-2 pr-3 text-right">Current</th>
-            <th className="py-2 pr-3 text-right">Target</th>
-            <th className="py-2 pr-3 text-right">Drift</th>
-            <th className="py-2 pr-3 text-right">Value</th>
-            <th className="py-2 text-right">Suggested</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const drift = parseFloat(r.drift_percent)
-            return (
-              <tr key={r.category_id ?? 'uncategorised'} className="border-b border-[var(--border)] last:border-0">
-                <td className="py-2.5 pr-3">
-                  <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: r.color }} />
-                    <span className="text-[var(--text)]">{r.category_name}</span>
-                  </span>
-                </td>
-                <td className="py-2.5 pr-3 text-right tabular-nums text-[var(--text)]">{r.current_percent}%</td>
-                <td className="py-2.5 pr-3">
-                  <TargetCell row={r} canWrite={canWrite} onSaveTarget={onSaveTarget} />
-                </td>
-                <td className={`py-2.5 pr-3 text-right tabular-nums font-medium ${drift > 0 ? 'text-amber-600 dark:text-amber-400' : drift < 0 ? 'text-sky-600 dark:text-sky-400' : 'text-[var(--text-muted)]'}`}>
-                  {drift > 0 ? '+' : ''}{r.drift_percent}%
-                </td>
-                <td className="py-2.5 pr-3 text-right tabular-nums text-[var(--text-muted)]">
-                  <Money value={r.current_value} />
-                </td>
-                <td className={`py-2.5 text-right text-xs font-semibold ${ACTION_STYLES[r.suggested_action]}`}>
-                  {r.suggested_action === 'hold' ? ACTION_LABELS.hold : (
-                    <>
-                      {ACTION_LABELS[r.suggested_action]} <Money value={r.suggested_amount} />
-                    </>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      rows={rows}
+      rowKey={(r) => r.category_id ?? 'uncategorised'}
+      defaultSortCol="value"
+      defaultSortDir="desc"
+      minWidth="min-w-[560px]"
+    />
   )
 }

@@ -4,7 +4,7 @@ import { portfolioApi } from '../../api/portfolioApi'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { AiInsightCard } from '../common/AiInsightCard'
-import type { ApiErrorMap, BondDetails, FDDetails, Instrument } from '../../types/domain'
+import type { ApiErrorMap, Instrument } from '../../types/domain'
 
 function firstErrorMessage(err: unknown, fallback: string): string {
   if (err && typeof err === 'object') {
@@ -20,54 +20,27 @@ function firstErrorMessage(err: unknown, fallback: string): string {
 
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const INSTRUMENT_TYPES = ['equity','mutual_fund','fd','rd','bond','epf','ppf','nps','gold','real_estate','insurance','cash','other','vehicle','liability','sip'] as const
-const COMPOUNDING_OPTIONS = ['simple', 'monthly', 'quarterly', 'half_yearly', 'annually'] as const
-const COUPON_FREQUENCY_OPTIONS = ['monthly', 'quarterly', 'half_yearly', 'annual', 'cumulative'] as const
-const BOND_TYPE_OPTIONS = ['government', 'corporate', 'tax_free', 'sgb', 'ncd', 'other'] as const
-
-type FDForm = {
-  principal: string
-  annual_rate: string
-  investment_date: string
-  maturity_date: string
-  compounding: FDDetails['compounding']
-  maturity_value: string
-}
-
-const EMPTY_FD_FORM: FDForm = {
-  principal: '', annual_rate: '', investment_date: '', maturity_date: '', compounding: 'quarterly', maturity_value: '',
-}
-
-type MfForm = { amc: string; fund_category: string; fund_sub_category: string; folio_no: string; expense_ratio: string | null }
-const EMPTY_MF_FORM: MfForm = { amc: '', fund_category: '', fund_sub_category: '', folio_no: '', expense_ratio: null }
-
-type BondForm = {
-  issuer_name: string
-  bond_type: BondDetails['bond_type']
-  isin: string
-  face_value: string
-  quantity: string
-  coupon_rate: string
-  coupon_frequency: BondDetails['coupon_frequency']
-  investment_date: string
-  maturity_date: string
-  first_coupon_date: string
-  grace_days: string
-  maturity_value: string
-  credit_rating: string
-  notes: string
-}
-
-const EMPTY_BOND_FORM: BondForm = {
-  issuer_name: '', bond_type: 'other', isin: '', face_value: '', quantity: '1',
-  coupon_rate: '', coupon_frequency: 'annual', investment_date: '', maturity_date: '',
-  first_coupon_date: '', grace_days: '15', maturity_value: '', credit_rating: '', notes: '',
+// A household has exactly one shared "Mutual Fund"/"SIP" shell Instrument
+// (auto-created lazily server-side — see instruments/services.py's
+// get_or_create_mf_shell) with each fund/folio living underneath it as an
+// Investment, not as its own Instrument. So these types are hidden from
+// "Add Instrument" — there is never a reason for a user to hand-create a
+// second shell. Adding a new fund happens via "Record Buy" (HoldingsPage.tsx),
+// and editing a fund's AMC/category/folio/expense-ratio happens via
+// InvestmentForm.tsx. Still selectable when editing a pre-existing Instrument
+// of this type (legacy data from before the shell/Investment migration).
+const CREATE_HIDDEN_TYPES = new Set(['mutual_fund', 'sip'])
+const SUB_CATEGORIES = ['', 'debt', 'equity', 'liquid', 'retirement', 'hybrid', 'gold', 'real_asset', 'other'] as const
+const SUB_CATEGORY_LABELS: Record<string, string> = {
+  '': '— Unclassified —', debt: 'Debt', equity: 'Equity', liquid: 'Liquid',
+  retirement: 'Retirement', hybrid: 'Hybrid', gold: 'Gold', real_asset: 'Real Asset', other: 'Other',
 }
 
 const BUCKET_LABELS: Record<string, string> = { equity: 'Equity', debt: 'Debt', hybrid: 'Hybrid' }
 const RULE_LABELS: Record<string, string> = { growth: 'Growth (60%)', stability: 'Stability (40%)' }
 
 /** AI classification entry point — manual trigger only, cached result. */
-function FundClassificationCard({ instrumentId }: { instrumentId: number }) {
+export function FundClassificationCard({ instrumentId }: { instrumentId: number }) {
   const { canWrite } = useAuth()
   return (
     <AiInsightCard
@@ -89,6 +62,13 @@ function FundClassificationCard({ instrumentId }: { instrumentId: number }) {
   )
 }
 
+/**
+ * Defines what an instrument IS (name/type/category/account/owner) — nothing
+ * about a specific purchase. FD/Bond principal, rate, and maturity date are
+ * per-investment details entered via "Record Buy" (HoldingsPage.tsx's
+ * BuyForm), since one instrument (e.g. "HDFC Bank FD") can hold several
+ * distinct deposits with different rates/maturities.
+ */
 export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDelete }: {
   householdId: number; instrument?: Instrument
   onSave: () => void; onCancel: () => void; onDelete?: () => void
@@ -98,6 +78,7 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
     household: householdId,
     name: instrument?.name ?? '',
     instrument_type: instrument?.instrument_type ?? 'equity',
+    sub_category: instrument?.sub_category ?? '',
     symbol: instrument?.symbol ?? '',
     default_account: instrument?.default_account ?? null,
     asset_category: instrument?.asset_category ?? null,
@@ -109,14 +90,6 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
   const [existingOwnershipId, setExistingOwnershipId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [fdForm, setFdForm] = useState<FDForm>(EMPTY_FD_FORM)
-  const [existingFDDetailsId, setExistingFDDetailsId] = useState<number | null>(null)
-  const [fdLoaded, setFdLoaded] = useState(!instrument)
-  const [mfForm, setMfForm] = useState<MfForm>(EMPTY_MF_FORM)
-  const [existingMfDetailsId, setExistingMfDetailsId] = useState<number | null>(null)
-  const [bondForm, setBondForm] = useState<BondForm>(EMPTY_BOND_FORM)
-  const [existingBondDetailsId, setExistingBondDetailsId] = useState<number | null>(null)
-  const [bondLoaded, setBondLoaded] = useState(!instrument)
 
   useEffect(() => {
     if (!instrument) return
@@ -126,58 +99,6 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
         setExistingOwnershipId(owns[0].id)
       }
     }).catch(() => {})
-  }, [instrument])
-
-  useEffect(() => {
-    const isMutualFund = instrument?.instrument_type === 'mutual_fund' || instrument?.instrument_type === 'sip'
-    if (!instrument || !isMutualFund) return
-    portfolioApi.getMutualFundDetails(instrument.id).then((d) => {
-      if (!d) return
-      setExistingMfDetailsId(d.id)
-      setMfForm({ amc: d.amc, fund_category: d.fund_category, fund_sub_category: d.fund_sub_category, folio_no: d.folio_no, expense_ratio: d.expense_ratio })
-    }).catch(() => {})
-  }, [instrument])
-
-  useEffect(() => {
-    if (!instrument || instrument.instrument_type !== 'fd') { setFdLoaded(true); return }
-    portfolioApi.getFDDetails(instrument.id).then((details) => {
-      if (details) {
-        setExistingFDDetailsId(details.id)
-        setFdForm({
-          principal: details.principal,
-          annual_rate: details.annual_rate,
-          investment_date: details.investment_date,
-          maturity_date: details.maturity_date,
-          compounding: details.compounding,
-          maturity_value: details.maturity_value ?? '',
-        })
-      }
-    }).finally(() => setFdLoaded(true))
-  }, [instrument])
-
-  useEffect(() => {
-    if (!instrument || instrument.instrument_type !== 'bond') { setBondLoaded(true); return }
-    portfolioApi.getBondDetails(instrument.id).then((details) => {
-      if (details) {
-        setExistingBondDetailsId(details.id)
-        setBondForm({
-          issuer_name: details.issuer_name,
-          bond_type: details.bond_type,
-          isin: details.isin,
-          face_value: details.face_value,
-          quantity: String(details.quantity),
-          coupon_rate: details.coupon_rate,
-          coupon_frequency: details.coupon_frequency,
-          investment_date: details.investment_date,
-          maturity_date: details.maturity_date,
-          first_coupon_date: details.first_coupon_date ?? '',
-          grace_days: String(details.grace_days),
-          maturity_value: details.maturity_value ?? '',
-          credit_rating: details.credit_rating,
-          notes: details.notes,
-        })
-      }
-    }).finally(() => setBondLoaded(true))
   }, [instrument])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -197,56 +118,6 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
         await portfolioApi.deleteInstrumentOwnership(existingOwnershipId)
       }
 
-      const isMutualFund = form.instrument_type === 'mutual_fund' || form.instrument_type === 'sip'
-      if (isMutualFund && (mfForm.amc || mfForm.fund_category || mfForm.fund_sub_category || mfForm.folio_no || mfForm.expense_ratio)) {
-        if (existingMfDetailsId) {
-          await portfolioApi.updateMutualFundDetails(existingMfDetailsId, mfForm)
-        } else {
-          await portfolioApi.createMutualFundDetails({ instrument: saved.id, ...mfForm })
-        }
-      }
-
-      if (form.instrument_type === 'fd' && fdForm.principal && fdForm.annual_rate && fdForm.investment_date && fdForm.maturity_date) {
-        const payload = {
-          instrument: saved.id,
-          principal: fdForm.principal,
-          annual_rate: fdForm.annual_rate,
-          investment_date: fdForm.investment_date,
-          maturity_date: fdForm.maturity_date,
-          compounding: fdForm.compounding,
-          maturity_value: fdForm.maturity_value || null,
-        }
-        if (existingFDDetailsId) {
-          await portfolioApi.updateFDDetails(existingFDDetailsId, payload)
-        } else {
-          await portfolioApi.createFDDetails(payload)
-        }
-      }
-
-      if (form.instrument_type === 'bond' && bondForm.face_value && bondForm.coupon_rate && bondForm.investment_date && bondForm.maturity_date) {
-        const payload = {
-          instrument: saved.id,
-          issuer_name: bondForm.issuer_name,
-          bond_type: bondForm.bond_type,
-          isin: bondForm.isin,
-          face_value: bondForm.face_value,
-          quantity: Number(bondForm.quantity || '1'),
-          coupon_rate: bondForm.coupon_rate,
-          coupon_frequency: bondForm.coupon_frequency,
-          investment_date: bondForm.investment_date,
-          maturity_date: bondForm.maturity_date,
-          first_coupon_date: bondForm.first_coupon_date || null,
-          grace_days: Number(bondForm.grace_days || '15'),
-          maturity_value: bondForm.maturity_value || null,
-          credit_rating: bondForm.credit_rating,
-          notes: bondForm.notes,
-        }
-        if (existingBondDetailsId) {
-          await portfolioApi.updateBondDetails(existingBondDetailsId, payload)
-        } else {
-          await portfolioApi.createBondDetails(payload)
-        }
-      }
       onSave()
     } catch (e) {
       setError(firstErrorMessage(e, 'Failed to save instrument'))
@@ -259,8 +130,14 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
         <input className={INP} value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required /></div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Type</label>
         <select className={INP} value={form.instrument_type} onChange={(e) => setForm((p) => ({ ...p, instrument_type: e.target.value as Instrument['instrument_type'] }))}>
-          {INSTRUMENT_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+          {INSTRUMENT_TYPES.filter((t) => !CREATE_HIDDEN_TYPES.has(t) || instrument?.instrument_type === t).map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
         </select></div>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Sub-category</label>
+        <select className={INP} value={form.sub_category} onChange={(e) => setForm((p) => ({ ...p, sub_category: e.target.value as Instrument['sub_category'] }))}>
+          {SUB_CATEGORIES.map((s) => <option key={s} value={s}>{SUB_CATEGORY_LABELS[s]}</option>)}
+        </select>
+        <p className="mt-1 text-[11px] text-[var(--text-muted)]">Cross-cutting risk/liquidity grouping (e.g. group FDs + EPF + debt funds together as "Debt").</p>
+      </div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Category</label>
         <select className={INP} value={form.asset_category ?? ''} onChange={(e) => setForm((p) => ({ ...p, asset_category: e.target.value ? Number(e.target.value) : null }))}>
           <option value="">— None —</option>
@@ -282,113 +159,23 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
       </div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Symbol / Ticker</label>
         <input className={INP} value={form.symbol ?? ''} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} />
-        {form.instrument_type === 'fd' && (
-          <p className="mt-1 text-[11px] text-[var(--text-muted)]">For FDs, this is the bank account number — used to detect duplicate FDs.</p>
-        )}
       </div>
       <label className="flex items-center gap-2 py-1">
         <input type="checkbox" checked={form.is_active} onChange={(e) => setForm((p) => ({ ...p, is_active: e.target.checked }))} />
         <span className="text-sm text-[var(--text-2)]">Active</span>
       </label>
       {(form.instrument_type === 'mutual_fund' || form.instrument_type === 'sip') && (
-        <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
-          <p className="text-xs font-medium text-[var(--text-2)]">Mutual Fund Details</p>
-          <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">AMC</label>
-            <input className={INP} value={mfForm.amc} onChange={(e) => setMfForm((p) => ({ ...p, amc: e.target.value }))} /></div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Fund Category</label>
-              <input className={INP} placeholder="e.g. Equity" value={mfForm.fund_category} onChange={(e) => setMfForm((p) => ({ ...p, fund_category: e.target.value }))} /></div>
-            <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Sub-category</label>
-              <input className={INP} placeholder="e.g. Large Cap" value={mfForm.fund_sub_category} onChange={(e) => setMfForm((p) => ({ ...p, fund_sub_category: e.target.value }))} /></div>
-          </div>
-          <p className="text-[11px] text-[var(--text-muted)]">Sub-category drives which benchmark index (Nifty 50 / Midcap 150 / Smallcap 250 / 500) this fund is compared against.</p>
-          <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Folio Number</label>
-            <input className={INP} value={mfForm.folio_no} onChange={(e) => setMfForm((p) => ({ ...p, folio_no: e.target.value }))} /></div>
-          <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Expense Ratio (%)</label>
-            <input className={INP} type="number" step="0.001" placeholder="e.g. 0.45" value={mfForm.expense_ratio ?? ''} onChange={(e) => setMfForm((p) => ({ ...p, expense_ratio: e.target.value || null }))} /></div>
-          {instrument && <FundClassificationCard instrumentId={instrument.id} />}
-        </div>
+        <p className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-xs text-[var(--text-muted)]">
+          AMC, category, folio number, and expense ratio are edited per-fund from the Holdings
+          page — this shell instrument holds every mutual fund/SIP in the household as separate
+          funds underneath it.
+        </p>
       )}
-      {form.instrument_type === 'fd' && (
-        <div className="grid gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
-          <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">Fixed Deposit Details</p>
-          {!fdLoaded ? (
-            <p className="text-xs text-[var(--text-muted)]">Loading…</p>
-          ) : (
-            <>
-              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Principal (₹)</label>
-                <input type="number" className={INP} value={fdForm.principal} onChange={(e) => setFdForm((p) => ({ ...p, principal: e.target.value }))} /></div>
-              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Annual Rate (%)</label>
-                <input type="number" step="0.01" className={INP} value={fdForm.annual_rate} onChange={(e) => setFdForm((p) => ({ ...p, annual_rate: e.target.value }))} /></div>
-              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Investment Date</label>
-                <input type="date" className={INP} value={fdForm.investment_date} onChange={(e) => setFdForm((p) => ({ ...p, investment_date: e.target.value }))} /></div>
-              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Maturity Date</label>
-                <input type="date" className={INP} value={fdForm.maturity_date} onChange={(e) => setFdForm((p) => ({ ...p, maturity_date: e.target.value }))} /></div>
-              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Compounding</label>
-                <select className={INP} value={fdForm.compounding} onChange={(e) => setFdForm((p) => ({ ...p, compounding: e.target.value as FDForm['compounding'] }))}>
-                  {COMPOUNDING_OPTIONS.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
-                </select></div>
-              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Maturity Value (₹, optional — bank-stated if known)</label>
-                <input type="number" className={INP} value={fdForm.maturity_value} onChange={(e) => setFdForm((p) => ({ ...p, maturity_value: e.target.value }))} /></div>
-              <p className="text-[11px] text-[var(--text-muted)]">Fill in principal, rate, and both dates to save/update the FD's maturity details.</p>
-            </>
-          )}
-        </div>
-      )}
-      {form.instrument_type === 'bond' && (
-        <div className="grid gap-3 rounded-xl border border-teal-100 bg-teal-50/60 p-3">
-          <p className="text-xs font-medium text-teal-700 dark:text-teal-300">Bond Details</p>
-          {!bondLoaded ? (
-            <p className="text-xs text-[var(--text-muted)]">Loading…</p>
-          ) : (
-            <>
-              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Issuer Name</label>
-                <input className={INP} value={bondForm.issuer_name} onChange={(e) => setBondForm((p) => ({ ...p, issuer_name: e.target.value }))} /></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Bond Type</label>
-                  <select className={INP} value={bondForm.bond_type} onChange={(e) => setBondForm((p) => ({ ...p, bond_type: e.target.value as BondForm['bond_type'] }))}>
-                    {BOND_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-                  </select></div>
-                <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">ISIN</label>
-                  <input className={INP} value={bondForm.isin} onChange={(e) => setBondForm((p) => ({ ...p, isin: e.target.value }))} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Face Value (₹, per unit)</label>
-                  <input type="number" className={INP} value={bondForm.face_value} onChange={(e) => setBondForm((p) => ({ ...p, face_value: e.target.value }))} /></div>
-                <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Quantity</label>
-                  <input type="number" className={INP} value={bondForm.quantity} onChange={(e) => setBondForm((p) => ({ ...p, quantity: e.target.value }))} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Coupon Rate (% p.a.)</label>
-                  <input type="number" step="0.01" className={INP} value={bondForm.coupon_rate} onChange={(e) => setBondForm((p) => ({ ...p, coupon_rate: e.target.value }))} /></div>
-                <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Coupon Frequency</label>
-                  <select className={INP} value={bondForm.coupon_frequency} onChange={(e) => setBondForm((p) => ({ ...p, coupon_frequency: e.target.value as BondForm['coupon_frequency'] }))}>
-                    {COUPON_FREQUENCY_OPTIONS.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
-                  </select></div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Investment Date</label>
-                  <input type="date" className={INP} value={bondForm.investment_date} onChange={(e) => setBondForm((p) => ({ ...p, investment_date: e.target.value }))} /></div>
-                <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Maturity Date</label>
-                  <input type="date" className={INP} value={bondForm.maturity_date} onChange={(e) => setBondForm((p) => ({ ...p, maturity_date: e.target.value }))} /></div>
-              </div>
-              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">First Coupon Date (optional)</label>
-                <input type="date" className={INP} value={bondForm.first_coupon_date} onChange={(e) => setBondForm((p) => ({ ...p, first_coupon_date: e.target.value }))} />
-                <p className="mt-1 text-[11px] text-[var(--text-muted)]">Leave blank to assume one coupon period after the investment date.</p></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Grace Days</label>
-                  <input type="number" className={INP} value={bondForm.grace_days} onChange={(e) => setBondForm((p) => ({ ...p, grace_days: e.target.value }))} /></div>
-                <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Credit Rating</label>
-                  <input className={INP} placeholder="e.g. AAA" value={bondForm.credit_rating} onChange={(e) => setBondForm((p) => ({ ...p, credit_rating: e.target.value }))} /></div>
-              </div>
-              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Maturity Value (₹, optional — issuer-stated if known)</label>
-                <input type="number" className={INP} value={bondForm.maturity_value} onChange={(e) => setBondForm((p) => ({ ...p, maturity_value: e.target.value }))} /></div>
-              <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Notes</label>
-                <input className={INP} value={bondForm.notes} onChange={(e) => setBondForm((p) => ({ ...p, notes: e.target.value }))} /></div>
-              <p className="text-[11px] text-[var(--text-muted)]">Fill in face value, coupon rate, and both dates to save/update the bond's schedule.</p>
-            </>
-          )}
-        </div>
+      {(form.instrument_type === 'fd' || form.instrument_type === 'bond') && (
+        <p className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-xs text-[var(--text-muted)]">
+          Principal, rate, and maturity date are entered per-deposit via <strong>Record Buy</strong> on the
+          Investments page — one instrument can hold several {form.instrument_type === 'fd' ? 'FD deposits' : 'bond investments'}.
+        </p>
       )}
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2 pt-2">

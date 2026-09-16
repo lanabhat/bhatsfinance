@@ -85,6 +85,16 @@ class Instrument(TimeStampedModel):
         LENDING = 'lending', 'Lending (Loan Given)'
         OTHER = 'other', 'Other'
 
+    class SubCategory(models.TextChoices):
+        DEBT = 'debt', 'Debt'
+        EQUITY = 'equity', 'Equity'
+        LIQUID = 'liquid', 'Liquid'
+        RETIREMENT = 'retirement', 'Retirement'
+        HYBRID = 'hybrid', 'Hybrid'
+        GOLD = 'gold', 'Gold'
+        REAL_ASSET = 'real_asset', 'Real Asset'
+        OTHER = 'other', 'Other'
+
     household = models.ForeignKey('core.Household', on_delete=models.CASCADE, related_name='instruments')
     asset_category = models.ForeignKey(
         'AssetCategory',
@@ -102,6 +112,12 @@ class Instrument(TimeStampedModel):
     )
     name = models.CharField(max_length=200)
     instrument_type = models.CharField(max_length=30, choices=InstrumentType.choices)
+    sub_category = models.CharField(
+        max_length=20, choices=SubCategory.choices, blank=True,
+        help_text='Cross-cutting risk/liquidity classification (e.g. Debt, Equity, Retirement) — '
+                  'independent of instrument_type, so holdings of different types can be grouped '
+                  'together (e.g. FD + EPF + Debt mutual funds all as "Debt").',
+    )
     symbol = models.CharField(max_length=32, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     is_active = models.BooleanField(default=True)
@@ -115,28 +131,15 @@ class Instrument(TimeStampedModel):
     class Meta:
         unique_together = ('household', 'name')
         ordering = ['name']
-        constraints = [
-            # Prevents the same FD account number from being entered twice
-            # under a different instrument name/owner — symbol holds the bank
-            # account number for FDs, and the (household, name) uniqueness
-            # above doesn't catch this because the two rows can have
-            # different names. Scoped to FD only (other instrument types use
-            # symbol differently, e.g. ISIN) and to non-blank symbol so
-            # multiple manually-added FDs without an account number don't
-            # collide with each other.
-            models.UniqueConstraint(
-                fields=['household', 'symbol'],
-                condition=models.Q(instrument_type='fd') & ~models.Q(symbol=''),
-                name='unique_fd_account_number_per_household',
-            ),
-        ]
 
     def __str__(self) -> str:
         return self.name
 
 
 class FDDetails(TimeStampedModel):
-    """Fixed-income instrument details for auto-computing current value."""
+    """One fixed-deposit investment under an Instrument — an Instrument (e.g.
+    "HDFC Bank FD") can hold several of these (different deposits opened at
+    different times/rates), each auto-computing its own current value."""
 
     class Compounding(models.TextChoices):
         SIMPLE = 'simple', 'Simple Interest'
@@ -145,7 +148,15 @@ class FDDetails(TimeStampedModel):
         HALF_YEARLY = 'half_yearly', 'Half-Yearly'
         ANNUALLY = 'annually', 'Annually'
 
-    instrument = models.OneToOneField(Instrument, on_delete=models.CASCADE, related_name='fd_details')
+    instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE, related_name='fd_details')
+    funding_transaction = models.OneToOneField(
+        'ledger.Transaction', on_delete=models.SET_NULL, null=True, blank=True, related_name='fd_details',
+        help_text='The buy/deposit Transaction that funded this FD, if recorded through the app.',
+    )
+    account_number = models.CharField(
+        max_length=60, blank=True,
+        help_text='Bank FD account/receipt number — used to detect a duplicate import of the same deposit.',
+    )
     principal = models.DecimalField(max_digits=18, decimal_places=2)
     annual_rate = models.DecimalField(max_digits=6, decimal_places=4, help_text='Annual interest rate as percentage, e.g. 7.5')
     investment_date = models.DateField()
@@ -176,7 +187,11 @@ class BondDetails(TimeStampedModel):
         NCD = 'ncd', 'NCD'
         OTHER = 'other', 'Other'
 
-    instrument = models.OneToOneField(Instrument, on_delete=models.CASCADE, related_name='bond_details')
+    instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE, related_name='bond_details')
+    funding_transaction = models.OneToOneField(
+        'ledger.Transaction', on_delete=models.SET_NULL, null=True, blank=True, related_name='bond_details',
+        help_text='The buy Transaction that funded this bond investment, if recorded through the app.',
+    )
     issuer_name = models.CharField(max_length=200, blank=True)
     bond_type = models.CharField(max_length=20, choices=BondType.choices, default=BondType.OTHER)
     isin = models.CharField(max_length=20, blank=True)
@@ -229,21 +244,61 @@ class InstrumentOwnership(TimeStampedModel):
         unique_together = ('instrument', 'member')
 
 
-class MutualFundDetails(TimeStampedModel):
-    """Structured mutual-fund detail fields, promoted out of Instrument.metadata JSON."""
+class Investment(TimeStampedModel):
+    """One specific holding under a shared type-level Instrument shell — e.g.
+    "TCS" or "Parag Parikh Flexi Cap (folio 123)" under the household's single
+    "Equity" or "Mutual Fund" Instrument. Exists so the same shell instrument
+    can hold many distinct stocks/funds, each with its own owner, without
+    needing a separate Instrument row per stock/fund (which made "who owns
+    this" and "which broker" instrument-level facts instead of per-holding
+    facts). Household is reached via instrument.household, not duplicated
+    here. No cached quantity/value — those stay derived from Transaction/
+    ValuationSnapshot rows exactly as they are for Instrument-level holdings.
+    """
 
-    instrument = models.OneToOneField(Instrument, on_delete=models.CASCADE, related_name='mf_details')
+    instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE, related_name='investments')
+    member = models.ForeignKey(
+        'core.Member', on_delete=models.SET_NULL, null=True, blank=True, related_name='investments',
+        help_text='Who owns this specific holding — the per-holding equivalent of InstrumentOwnership.',
+    )
+    name = models.CharField(max_length=200, help_text='e.g. company/ticker name for equity, scheme name for a fund')
+    symbol = models.CharField(max_length=32, blank=True, help_text='Ticker (equity) or AMFI code (mutual fund)')
+    isin = models.CharField(max_length=20, blank=True)
+    folio_no = models.CharField(max_length=60, blank=True, help_text='Mutual fund folio number')
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        # member is part of identity, not just a label — two members can
+        # each hold the same-named stock (no natural folio to disambiguate
+        # equity the way MF folios do), and NULL member values (the
+        # genuinely-ambiguous multi-owner case 0015's MF migration leaves
+        # unset) are treated as distinct by the DB, so this doesn't collide
+        # with existing member=None rows.
+        unique_together = ('instrument', 'name', 'folio_no', 'member')
+        ordering = ['name']
+
+    def __str__(self) -> str:
+        return f'{self.name} ({self.instrument.name})'
+
+
+class MutualFundDetails(TimeStampedModel):
+    """Structured mutual-fund detail fields, promoted out of Instrument.metadata JSON.
+
+    Keyed to Investment (one specific scheme/folio), not Instrument — the
+    household's mutual funds all share one "Mutual Fund" Instrument shell, so
+    AMC/category/expense-ratio are per-Investment facts, not per-Instrument."""
+
+    investment = models.OneToOneField('Investment', on_delete=models.CASCADE, related_name='mf_details')
     amc = models.CharField(max_length=120, blank=True)
     fund_category = models.CharField(max_length=80, blank=True, help_text='e.g. Equity, Debt, Hybrid')
     fund_sub_category = models.CharField(max_length=80, blank=True, help_text='e.g. Large Cap, Flexi Cap')
-    folio_no = models.CharField(max_length=60, blank=True)
     expense_ratio = models.DecimalField(
         max_digits=5, decimal_places=3, null=True, blank=True,
         help_text='Total expense ratio (TER) as a percentage, e.g. 0.450. From the fund factsheet.',
     )
 
     def __str__(self) -> str:
-        return f'{self.instrument.name} ({self.amc})'
+        return f'{self.investment.name} ({self.amc})'
 
 
 class AllocationTarget(TimeStampedModel):
@@ -262,20 +317,23 @@ class AllocationTarget(TimeStampedModel):
 
 
 class FundHoldingsSnapshot(TimeStampedModel):
-    """One monthly portfolio-disclosure upload for an MF/equity instrument, giving its
-    stock-level composition as of a specific date — used for overlap/diversification analysis."""
+    """One monthly portfolio-disclosure upload for an MF/equity holding, giving its
+    stock-level composition as of a specific date — used for overlap/diversification analysis.
 
-    instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE, related_name='holdings_snapshots')
+    Keyed to Investment (one specific fund), not Instrument — the shared
+    "Mutual Fund"/"Equity" shell can't distinguish whose portfolio disclosure this is."""
+
+    investment = models.ForeignKey('Investment', on_delete=models.CASCADE, related_name='holdings_snapshots', null=True, blank=True)
     as_of_date = models.DateField()
     source_url = models.URLField(blank=True, max_length=500, help_text='Where you downloaded this from, for next time.')
     uploaded_file_name = models.CharField(max_length=255, blank=True)
 
     class Meta:
-        unique_together = ('instrument', 'as_of_date')
+        unique_together = ('investment', 'as_of_date')
         ordering = ['-as_of_date']
 
     def __str__(self) -> str:
-        return f'{self.instrument.name} holdings @ {self.as_of_date}'
+        return f'{self.investment.name} holdings @ {self.as_of_date}'
 
 
 class FundHolding(TimeStampedModel):

@@ -3,17 +3,25 @@ import { CoinSpinner } from '../components/common/CoinSpinner'
 import { getJson, toQueryString, unwrapList, deleteJson } from '../api/http'
 import { Money } from '../components/common/Money'
 import { assetCategoryApi } from '../api/assetCategoryApi'
+import { investmentApi } from '../api/investmentApi'
 import { portfolioApi } from '../api/portfolioApi'
 import { AssetCategoryForm } from '../components/assets/AssetCategoryForm'
 import { InstrumentForm } from '../components/assets/InstrumentForm'
 import { InstrumentRow } from '../components/assets/InstrumentRow'
+import { InvestmentForm } from '../components/assets/InvestmentForm'
+import { InvestmentsSubList } from '../components/assets/InvestmentsSubList'
 import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
 import { BulkClassifyReviewModal } from '../components/instruments/BulkClassifyReviewModal'
 import { useExpandable } from '../hooks/useExpandable'
 import { Sheet } from '../components/ui/Sheet'
+import { DataTable } from '../components/ui/DataTable'
+import type { DataTableColumn } from '../components/ui/DataTable'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
-import type { ApiListResponse, AssetCategory, Instrument, InstrumentOwnership, Transaction, ValuationSnapshot } from '../types/domain'
+import { TYPE_ICONS } from '../lib/instrumentTypes'
+import type { ApiListResponse, AssetCategory, Instrument, InstrumentOwnership, Investment, Transaction, ValuationSnapshot } from '../types/domain'
+
+const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
 // ── shared ownership row ──────────────────────────────────────────────────────
 function OwnershipRow({ name, subtitle, currentMemberId, memberOptions, onSave }: {
@@ -270,13 +278,13 @@ function BulkDeleteSheet({ householdId, instrumentType, count, onDeleted, onCanc
 
 // ── main page ─────────────────────────────────────────────────────────────────
 type GroupBy = 'none' | 'category' | 'type' | 'owner'
-type SortBy = 'name' | 'type' | 'category'
 type SheetState =
   | { type: 'none' }
   | { type: 'instrument'; item?: Instrument }
   | { type: 'delete'; instrument: Instrument }
   | { type: 'category'; item?: AssetCategory }
   | { type: 'bulk-delete'; instrumentType: string; count: number }
+  | { type: 'investment'; item: Investment }
 
 type ViewMode = 'table' | 'card'
 const VIEW_MODE_KEY = 'instruments:viewMode'
@@ -293,9 +301,11 @@ export function InstrumentsPage() {
   const { householdId, categories, refreshCategories, refreshAll, members, accounts } = useApp()
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
+  const [investments, setInvestments] = useState<Investment[]>([])
+  const [investmentSearch, setInvestmentSearch] = useState<Record<number, string>>({})
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [groupBy, setGroupBy] = useState<GroupBy>('type')
-  const [sortBy, setSortBy] = useState<SortBy>('name')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
@@ -317,9 +327,13 @@ export function InstrumentsPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const [i, o] = await Promise.all([portfolioApi.listInstruments(householdId), portfolioApi.listInstrumentOwnerships(undefined, 200)])
+      const [i, o, iv] = await Promise.all([
+        portfolioApi.listInstruments(householdId),
+        portfolioApi.listInstrumentOwnerships(undefined, 200),
+        investmentApi.listInvestments({ household: householdId }),
+      ])
       console.log('[load] instruments', i.length, 'ownerships', o.length, o)
-      setInstruments(i); setOwnerships(o)
+      setInstruments(i); setOwnerships(o); setInvestments(iv)
     } finally { setLoading(false) }
   }
 
@@ -333,6 +347,19 @@ export function InstrumentsPage() {
     }
     return m
   }, [instruments, ownerships, members])
+
+  // Only mutual_fund/sip instruments have Investment children (the shared
+  // shell pattern — see instruments/models.py's Investment docstring).
+  // Every other instrument type maps to an empty/absent entry here.
+  const investmentsByInstrument = useMemo(() => {
+    const m = new Map<number, Investment[]>()
+    for (const iv of investments) {
+      if (!m.has(iv.instrument)) m.set(iv.instrument, [])
+      m.get(iv.instrument)!.push(iv)
+    }
+    for (const list of m.values()) list.sort((a, b) => a.name.localeCompare(b.name))
+    return m
+  }, [investments])
 
   const ownershipGroups = useMemo(() => {
     const g = new Map<string, Instrument[]>()
@@ -351,17 +378,24 @@ export function InstrumentsPage() {
     )
   }, [instruments, ownerMap])
 
-  const sortedInstruments = useMemo(() => {
-    return [...instruments].sort((a, b) => {
-      if (sortBy === 'type') return a.instrument_type.localeCompare(b.instrument_type)
-      if (sortBy === 'category') {
-        const ca = categories.find(c => c.id === a.asset_category)?.name ?? 'z'
-        const cb = categories.find(c => c.id === b.asset_category)?.name ?? 'z'
-        return ca.localeCompare(cb)
-      }
-      return a.name.localeCompare(b.name)
+  // An instrument matches the search if its own name matches, OR any fund
+  // living under it (name/folio) matches — so searching a fund name surfaces
+  // the shell instrument it belongs to, not just instruments named that.
+  const filteredInstruments = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return instruments
+    return instruments.filter((inst) => {
+      if (inst.name.toLowerCase().includes(q)) return true
+      const children = investmentsByInstrument.get(inst.id)
+      return children?.some((iv) => iv.name.toLowerCase().includes(q) || iv.folio_no.toLowerCase().includes(q)) ?? false
     })
-  }, [instruments, sortBy, categories])
+  }, [instruments, search, investmentsByInstrument])
+
+  // Card view only — table view sorts/groups/searches via DataTable itself.
+  const sortedInstruments = useMemo(
+    () => [...filteredInstruments].sort((a, b) => a.name.localeCompare(b.name)),
+    [filteredInstruments],
+  )
 
   const typeCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -422,6 +456,7 @@ export function InstrumentsPage() {
   const renderRow = (inst: Instrument) => {
     const cat = categories.find((c) => c.id === inst.asset_category)
     const isExpanded = cardExpand.isExpanded(inst.id)
+    const childInvestments = investmentsByInstrument.get(inst.id) ?? []
     return (
       <div key={inst.id} className="flex items-start gap-2">
         {canWrite && (
@@ -437,7 +472,7 @@ export function InstrumentsPage() {
             expanded={isExpanded}
             onToggle={() => cardExpand.toggle(inst.id)}
             className={isExpanded ? 'ring-2 ring-primary-400 ring-offset-1 rounded-xl' : ''}
-            collapsed={<InstrumentRow instrument={inst} category={cat} />}
+            collapsed={<InstrumentRow instrument={inst} category={cat} childCount={childInvestments.length} />}
           >
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
               <dl className="grid grid-cols-2 gap-3 text-sm">
@@ -450,6 +485,26 @@ export function InstrumentsPage() {
                   <dd className="text-[var(--text)]">{cat?.name ?? 'Uncategorised'}</dd>
                 </div>
               </dl>
+              {childInvestments.length > 0 && (
+                <div className="mt-3 border-t border-[var(--border)] pt-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Funds under this instrument</p>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); window.location.hash = `/instruments/${inst.id}` }}
+                      className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-300"
+                    >
+                      View all →
+                    </button>
+                  </div>
+                  <InvestmentsSubList
+                    investments={childInvestments}
+                    search={investmentSearch[inst.id] ?? ''}
+                    onSearchChange={(v) => setInvestmentSearch((p) => ({ ...p, [inst.id]: v }))}
+                    onSelect={(iv) => setSheet({ type: 'investment', item: iv })}
+                  />
+                </div>
+              )}
               <div className="mt-3 flex gap-2">
                 <button type="button" onClick={() => setSheet({ type: 'instrument', item: inst })} disabled={!canWrite}
                   className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
@@ -467,103 +522,129 @@ export function InstrumentsPage() {
     )
   }
 
-  const TYPE_ICONS: Record<string, string> = {
-    mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', bond: '📜', epf: '🛡',
-    ppf: '🛡', nps: '🛡', gold: '🪙', real_estate: '🏠', sip: '🔄',
-    insurance: '☂️', cash: '💵', other: '💼', vehicle: '🚗', liability: '⚠️',
-  }
-
-  const thCls = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] whitespace-nowrap'
-
-  const renderTableRow = (inst: Instrument) => {
-    const cat = categories.find((c) => c.id === inst.asset_category)
-    const account = accounts.find((a) => a.id === inst.default_account)
-    return (
-      <tr key={inst.id} className="border-t border-[var(--border)] hover:bg-[var(--surface-2)]">
-        <td className="px-3 py-2">
+  const instrumentColumns: DataTableColumn<Instrument>[] = [
+    {
+      key: 'name', label: 'Name', sortable: true, searchable: true,
+      sortValue: (inst) => inst.name,
+      searchValue: (inst) => {
+        const children = investmentsByInstrument.get(inst.id) ?? []
+        return [inst.name, ...children.flatMap((iv) => [iv.name, iv.folio_no])].join(' ')
+      },
+      render: (inst) => {
+        const childInvestments = investmentsByInstrument.get(inst.id) ?? []
+        const hasChildren = childInvestments.length > 0
+        return (
           <div className="flex items-center gap-2">
             {canWrite && (
               <input
                 type="checkbox"
                 checked={selectedInstrumentIds.has(inst.id)}
                 onChange={() => toggleInstrumentSelected(inst.id)}
+                onClick={(e) => e.stopPropagation()}
                 className="h-4 w-4 shrink-0 rounded border-[var(--border)] text-primary-600 focus:ring-primary-500"
               />
             )}
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
               {TYPE_ICONS[inst.instrument_type] ?? '💼'}
             </span>
-            <span className="truncate text-sm font-medium text-[var(--text)]">{inst.name}</span>
-          </div>
-        </td>
-        <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-2)]">{inst.instrument_type.replace(/_/g, ' ')}</td>
-        <td className="px-3 py-2 text-xs text-[var(--text-muted)]">{inst.symbol || '—'}</td>
-        <td className="px-3 py-2 text-xs text-[var(--text-2)]">
-          {cat ? (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: cat.color }} />
-              {cat.name}
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); window.location.hash = `/instruments/${inst.id}` }}
+                className="truncate text-sm font-medium text-[var(--text)] hover:text-primary-600 hover:underline dark:hover:text-primary-300"
+              >
+                {inst.name}
+              </button>
+            ) : (
+              <span className="truncate text-sm font-medium text-[var(--text)]">{inst.name}</span>
+            )}
+            <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">
+              {childInvestments.length} investment{childInvestments.length === 1 ? '' : 's'}
             </span>
-          ) : <span className="text-[var(--text-faint)]">Uncategorised</span>}
-        </td>
-        <td className="px-3 py-2 text-xs text-[var(--text-2)]">{account?.label ?? '—'}</td>
-        <td className="px-3 py-2 text-xs text-[var(--text-2)]">{ownerMap.get(inst.id) ?? 'Unassigned'}</td>
-        <td className="px-3 py-2">
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${inst.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
-            {inst.is_active ? 'Active' : 'Inactive'}
-          </span>
-        </td>
-        <td className="px-3 py-2 text-right">
-          <div className="flex items-center justify-end gap-1">
-            <button type="button" onClick={() => setSheet({ type: 'instrument', item: inst })} disabled={!canWrite}
-              className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
-              Edit
-            </button>
-            <button type="button" onClick={() => setSheet({ type: 'delete', instrument: inst })} disabled={!canWrite}
-              className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
-              Delete
-            </button>
           </div>
-        </td>
-      </tr>
+        )
+      },
+    },
+    {
+      key: 'type', label: 'Type', sortable: true,
+      sortValue: (inst) => inst.instrument_type,
+      render: (inst) => <span className="capitalize">{inst.instrument_type.replace(/_/g, ' ')}</span>,
+    },
+    { key: 'symbol', label: 'Symbol', render: (inst) => inst.symbol || '—' },
+    {
+      key: 'category', label: 'Category', sortable: true,
+      sortValue: (inst) => categories.find((c) => c.id === inst.asset_category)?.name ?? 'z',
+      render: (inst) => {
+        const cat = categories.find((c) => c.id === inst.asset_category)
+        return cat ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: cat.color }} />
+            {cat.name}
+          </span>
+        ) : <span className="text-[var(--text-faint)]">Uncategorised</span>
+      },
+    },
+    { key: 'account', label: 'Default Account', render: (inst) => accounts.find((a) => a.id === inst.default_account)?.label ?? '—' },
+    { key: 'owner', label: 'Owner', render: (inst) => ownerMap.get(inst.id) ?? 'Unassigned' },
+    {
+      key: 'status', label: 'Status',
+      render: (inst) => (
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${inst.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
+          {inst.is_active ? 'Active' : 'Inactive'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions', label: '', align: 'right',
+      render: (inst) => (
+        <div className="flex items-center justify-end gap-1">
+          <button type="button" onClick={() => setSheet({ type: 'instrument', item: inst })} disabled={!canWrite}
+            className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
+            Edit
+          </button>
+          <button type="button" onClick={() => setSheet({ type: 'delete', instrument: inst })} disabled={!canWrite}
+            className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50">
+            Delete
+          </button>
+        </div>
+      ),
+    },
+  ]
+
+  const renderInstrumentDetail = (inst: Instrument) => {
+    const childInvestments = investmentsByInstrument.get(inst.id) ?? []
+    if (childInvestments.length === 0) return null
+    return (
+      <div className="px-4 py-3">
+        <InvestmentsSubList
+          investments={childInvestments}
+          search={investmentSearch[inst.id] ?? ''}
+          onSearchChange={(v) => setInvestmentSearch((p) => ({ ...p, [inst.id]: v }))}
+          onSelect={(iv) => setSheet({ type: 'investment', item: iv })}
+        />
+      </div>
     )
   }
-
-  const renderTable = (items: Instrument[]) => (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-      <table className="w-full text-sm">
-        <thead className="bg-[var(--surface-2)]">
-          <tr>
-            <th className={thCls}>Name</th>
-            <th className={thCls}>Type</th>
-            <th className={thCls}>Symbol</th>
-            <th className={thCls}>Category</th>
-            <th className={thCls}>Default Account</th>
-            <th className={thCls}>Owner</th>
-            <th className={thCls}>Status</th>
-            <th className={thCls}></th>
-          </tr>
-        </thead>
-        <tbody>{items.map(renderTableRow)}</tbody>
-      </table>
-    </div>
-  )
 
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-[var(--text-muted)]">Group:</span>
-          {([['type', 'Type'], ['category', 'Category'], ['owner', 'Owner'], ['none', 'None']] as [GroupBy, string][]).map(([v, l]) => (
-            <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-[var(--text-muted)]">Sort:</span>
-          {([['name', 'Name'], ['type', 'Type'], ['category', 'Category']] as [SortBy, string][]).map(([v, l]) => (
-            <button key={v} type="button" onClick={() => setSortBy(v)} className={pillCls(sortBy === v)}>{l}</button>
-          ))}
-        </div>
+        {viewMode === 'card' && (
+          <>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search instruments and funds…"
+              className={`${INP} w-full sm:w-64`}
+            />
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-[var(--text-muted)]">Group:</span>
+              {([['type', 'Type'], ['category', 'Category'], ['owner', 'Owner'], ['none', 'None']] as [GroupBy, string][]).map(([v, l]) => (
+                <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           {canWrite && (
@@ -653,10 +734,36 @@ export function InstrumentsPage() {
           <p className="mt-2 text-sm font-medium text-[var(--text-2)]">No instruments yet</p>
           <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first instrument.</p>
         </div>
+      ) : viewMode === 'table' ? (
+        <DataTable
+          columns={instrumentColumns}
+          rows={instruments}
+          rowKey={(inst) => inst.id}
+          defaultSortCol="name"
+          defaultSortDir="asc"
+          searchPlaceholder="Search instruments and funds…"
+          groupBy={{
+            options: [{ value: 'type', label: 'Type' }, { value: 'category', label: 'Category' }, { value: 'owner', label: 'Owner' }],
+            getGroup: (inst, by) => {
+              if (by === 'category') {
+                const cat = categories.find((c) => c.id === inst.asset_category)
+                return { key: cat?.name ?? 'Uncategorised', label: cat?.name ?? 'Uncategorised', color: cat?.color }
+              }
+              if (by === 'owner') { const label = ownerMap.get(inst.id) ?? 'Unassigned'; return { key: label, label } }
+              return { key: inst.instrument_type, label: inst.instrument_type.replace(/_/g, ' ') }
+            },
+          }}
+          renderExpanded={renderInstrumentDetail}
+          emptyState="No matches — try a different search."
+        />
+      ) : sortedInstruments.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
+          <p className="text-3xl">🔍</p>
+          <p className="mt-2 text-sm font-medium text-[var(--text-2)]">No matches</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Try a different search.</p>
+        </div>
       ) : groupBy === 'none' ? (
-        viewMode === 'table' ? renderTable(sortedInstruments) : (
-          <div className="card-grid grid gap-3">{instruments.map(renderRow)}</div>
-        )
+        <div className="card-grid grid gap-3">{sortedInstruments.map(renderRow)}</div>
       ) : (
         <div className="grid gap-1">
           {Array.from(grouped.entries()).map(([label, { items, color }]) => {
@@ -675,7 +782,7 @@ export function InstrumentsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </button>
-                {isOpen && (viewMode === 'table' ? renderTable(items) : <div className="card-grid grid gap-3 pb-2">{items.map(renderRow)}</div>)}
+                {isOpen && <div className="card-grid grid gap-3 pb-2">{items.map(renderRow)}</div>}
               </div>
             )
           })}
@@ -790,6 +897,11 @@ export function InstrumentsPage() {
         <Sheet title="Bulk Delete Instruments" onClose={close}>
           <BulkDeleteSheet householdId={householdId} instrumentType={sheet.instrumentType} count={sheet.count}
             onDeleted={async () => { close(); setBulkDeleteType(''); await load(); void refreshAll() }} onCancel={close} />
+        </Sheet>
+      )}
+      {sheet.type === 'investment' && (
+        <Sheet title="Edit Fund" onClose={close}>
+          <InvestmentForm investment={sheet.item} onSave={afterSave} onCancel={close} />
         </Sheet>
       )}
       {showBulkClassify && (

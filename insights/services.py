@@ -24,6 +24,26 @@ def _signed_quantity(transaction: Transaction) -> Decimal:
     return Decimal('0')
 
 
+def compute_holding_cost_basis(
+    household_id: int, instrument_id: int, investment_id: int | None, as_of: date,
+) -> tuple[Decimal, Decimal]:
+    """
+    Returns (quantity, net_invested) for one (instrument, investment) holding
+    key as of a date — the same running totals compute_holdings() computes
+    for every holding in a household, scoped to a single one. Used to derive
+    average cost per unit (net_invested / quantity) at the moment of a sale,
+    without recomputing the whole household's holdings for every sell.
+    """
+    txs = Transaction.objects.filter(household_id=household_id, tx_date__lte=as_of)
+    txs = txs.filter(investment_id=investment_id) if investment_id else txs.filter(instrument_id=instrument_id, investment__isnull=True)
+    quantity = Decimal('0')
+    net_invested = Decimal('0')
+    for tx in txs:
+        quantity += _signed_quantity(tx)
+        net_invested += -_signed_amount(tx)
+    return quantity, net_invested
+
+
 def _latest_valuation(instrument_id: int, as_of: date):
     return (
         ValuationSnapshot.objects.filter(instrument_id=instrument_id, valuation_date__lte=as_of)
@@ -56,6 +76,65 @@ def _latest_valuations_by_instrument(instrument_ids, as_of: date) -> dict[int, V
         if snap.instrument_id not in latest:
             latest[snap.instrument_id] = snap
     return latest
+
+
+def _latest_valuations_by_holding(keys, as_of: date) -> dict[tuple[str, int], ValuationSnapshot]:
+    """Same batching idea as _latest_valuations_by_instrument, but keyed by
+    the same ('instrument'|'investment', id) tuples compute_holdings() groups
+    transactions by, so a shell instrument's snapshots (keyed by investment_id)
+    don't get confused with a regular instrument's snapshots (keyed by
+    instrument_id, investment_id NULL)."""
+    keys = list(keys)
+    instrument_ids = [i for kind, i in keys if kind == 'instrument']
+    investment_ids = [i for kind, i in keys if kind == 'investment']
+
+    latest: dict[tuple[str, int], ValuationSnapshot] = {}
+
+    if instrument_ids:
+        snapshots = (
+            ValuationSnapshot.objects
+            .filter(instrument_id__in=instrument_ids, investment__isnull=True, valuation_date__lte=as_of)
+            .order_by('instrument_id', '-valuation_date', '-id')
+        )
+        for snap in snapshots:
+            key = ('instrument', snap.instrument_id)
+            if key not in latest:
+                latest[key] = snap
+
+    if investment_ids:
+        snapshots = (
+            ValuationSnapshot.objects
+            .filter(investment_id__in=investment_ids, valuation_date__lte=as_of)
+            .order_by('investment_id', '-valuation_date', '-id')
+        )
+        for snap in snapshots:
+            key = ('investment', snap.investment_id)
+            if key not in latest:
+                latest[key] = snap
+
+    return latest
+
+
+def _household_investment_share_map(household_id: int) -> dict[int, Decimal]:
+    """Investment-level equivalent of _household_share_maps' instrument_share:
+    summed allocation across active, net-worth-included members for each
+    Investment (single member per Investment today, so this is always 0 or 1,
+    but expressed as a share for symmetry with the instrument-level map and
+    in case split ownership is added later)."""
+    from core.models import Member
+    from instruments.models import Investment
+
+    included_member_ids = set(
+        Member.objects.filter(
+            household_id=household_id, is_active=True, include_in_networth=True,
+        ).values_list('id', flat=True)
+    )
+    share: dict[int, Decimal] = {}
+    for inv_id, member_id in Investment.objects.filter(instrument__household_id=household_id).values_list('id', 'member_id'):
+        if member_id is None:
+            continue  # unowned Investment — caller's default (factor 1, fully included) applies
+        share[inv_id] = Decimal('1') if member_id in included_member_ids else Decimal('0')
+    return share
 
 
 def _household_share_maps(household_id: int) -> tuple[dict[int, Decimal], dict[int, Decimal]]:
@@ -92,44 +171,89 @@ def _household_share_maps(household_id: int) -> tuple[dict[int, Decimal], dict[i
     return instrument_share, account_share
 
 
+def holding_display_name(h: dict) -> str:
+    """Real scheme/fund name for a holding dict from compute_holdings(), falling
+    back to the shell Instrument's name for holdings with no Investment (FD/bond/
+    equity/etc.)."""
+    return h['investment_name'] or h['instrument_name']
+
+
 def compute_holdings(household_id: int, as_of: date, member_id: int | None = None) -> list[dict]:
+    """
+    Groups Transactions into one dict per holding. Most instrument types are
+    still one Instrument = one holding (grouping key: instrument_id). For
+    equity/mutual-fund instruments where `instrument` is a shared type-level
+    shell (e.g. one household-wide "Equity" instrument) holding many distinct
+    stocks/funds, `tx.investment` identifies the specific holding instead —
+    grouping falls back to `investment_id` when it's set, so a shell
+    instrument correctly produces one row per Investment rather than one row
+    for the whole shell. Every holding dict still carries `instrument_id`/
+    `instrument_name` (the shell's, for equity/MF) for backward-compatible
+    type/category filtering, plus `investment_id`/`investment_name` (None
+    for non-equity/MF holdings, where there's no finer grain than the
+    instrument itself). Also carries `realized_gain_total` — the sum of
+    every sell transaction's realized_gain for this holding (0 if none).
+    A fully-exited position (quantity == 0 with prior activity) is still
+    returned, not filtered out — callers wanting "closed positions" should
+    check quantity == 0 themselves.
+    """
     txs = (
         Transaction.objects.filter(household_id=household_id, tx_date__lte=as_of, instrument__isnull=False)
-        .select_related('instrument')
+        .select_related('instrument', 'investment')
         .order_by('tx_date', 'id')
     )
 
-    # Build allocation map for member filtering
+    # Build allocation map for member filtering. Investment.member is the
+    # per-holding equivalent of InstrumentOwnership for shell-instrument
+    # holdings, so both maps are consulted — a holding with an Investment
+    # uses that Investment's member; everything else uses InstrumentOwnership
+    # as before.
     member_allocation: dict[int, Decimal] | None = None
+    investment_member_allocation: dict[int, Decimal] | None = None
     household_instrument_share: dict[int, Decimal] | None = None
+    household_investment_share: dict[int, Decimal] | None = None
     if member_id is not None:
-        from instruments.models import InstrumentOwnership
+        from instruments.models import Investment, InstrumentOwnership
         ownerships = InstrumentOwnership.objects.filter(member_id=member_id).values('instrument_id', 'allocation_percent')
         member_allocation = {o['instrument_id']: Decimal(str(o['allocation_percent'])) / Decimal('100') for o in ownerships}
-        txs = txs.filter(instrument_id__in=member_allocation.keys())
+        investment_ids = list(Investment.objects.filter(member_id=member_id).values_list('id', flat=True))
+        investment_member_allocation = {i: Decimal('1') for i in investment_ids}
+        from django.db.models import Q
+        txs = txs.filter(
+            Q(investment_id__in=investment_ids) | Q(investment__isnull=True, instrument_id__in=member_allocation.keys())
+        )
     else:
         household_instrument_share, _ = _household_share_maps(household_id)
+        household_investment_share = _household_investment_share_map(household_id)
 
-    by_instrument: dict[int, dict] = {}
+    by_holding: dict[tuple[str, int], dict] = {}
+
+    def _holding_key(tx: Transaction) -> tuple[str, int]:
+        return ('investment', tx.investment_id) if tx.investment_id else ('instrument', tx.instrument_id)
 
     for tx in txs:
-        key = tx.instrument_id
-        item = by_instrument.setdefault(
+        key = _holding_key(tx)
+        item = by_holding.setdefault(
             key,
             {
                 'instrument_id': tx.instrument_id,
                 'instrument_name': tx.instrument.name,
                 'instrument_type': tx.instrument.instrument_type,
                 'asset_category': tx.instrument.asset_category_id,
+                'investment_id': tx.investment_id,
+                'investment_name': tx.investment.name if tx.investment_id else None,
                 'quantity': Decimal('0'),
                 'net_invested': Decimal('0'),
                 'invested_since_snapshot': Decimal('0'),
+                'realized_gain_total': Decimal('0'),
             },
         )
         item['quantity'] += _signed_quantity(tx)
         item['net_invested'] += -_signed_amount(tx)
+        if tx.transaction_type == Transaction.TransactionType.SELL and tx.realized_gain is not None:
+            item['realized_gain_total'] += tx.realized_gain
 
-    valuations_by_instrument = _latest_valuations_by_instrument(by_instrument.keys(), as_of)
+    valuations_by_key = _latest_valuations_by_holding(by_holding.keys(), as_of)
 
     # For market_value-based instruments (no NAV/unit_price — e.g. EPF/PPF/FD,
     # where a snapshot is only refreshed periodically), contributions made
@@ -140,15 +264,16 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
     # hasn't had time to earn anything yet), so gain% reflects real growth up
     # to the last snapshot rather than being diluted by recent contributions.
     for tx in txs:
-        valuation = valuations_by_instrument.get(tx.instrument_id)
+        key = _holding_key(tx)
+        valuation = valuations_by_key.get(key)
         if valuation is None or valuation.unit_price is not None:
             continue
         if tx.tx_date > valuation.valuation_date:
-            by_instrument[tx.instrument_id]['invested_since_snapshot'] += -_signed_amount(tx)
+            by_holding[key]['invested_since_snapshot'] += -_signed_amount(tx)
 
     holdings = []
-    for instrument_id, item in by_instrument.items():
-        valuation = valuations_by_instrument.get(instrument_id)
+    for key, item in by_holding.items():
+        valuation = valuations_by_key.get(key)
         quantity = item['quantity']
         if valuation and valuation.unit_price is not None:
             market_value = quantity * valuation.unit_price
@@ -158,14 +283,23 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
             market_value = item['net_invested']
 
         # Apply member allocation scaling
-        if member_allocation is not None:
-            factor = member_allocation.get(instrument_id, Decimal('1'))
-            market_value = market_value * factor
-        elif household_instrument_share is not None:
-            # Household-wide: scale by summed share of members included in net worth.
-            # Instruments with no ownership rows fall through (treated as fully included).
-            factor = household_instrument_share.get(instrument_id, Decimal('1'))
-            market_value = market_value * factor
+        kind, raw_id = key
+        if kind == 'investment':
+            if investment_member_allocation is not None:
+                factor = investment_member_allocation.get(raw_id, Decimal('0'))
+                market_value = market_value * factor
+            elif household_investment_share is not None:
+                factor = household_investment_share.get(raw_id, Decimal('1'))
+                market_value = market_value * factor
+        else:
+            if member_allocation is not None:
+                factor = member_allocation.get(raw_id, Decimal('1'))
+                market_value = market_value * factor
+            elif household_instrument_share is not None:
+                # Household-wide: scale by summed share of members included in net worth.
+                # Instruments with no ownership rows fall through (treated as fully included).
+                factor = household_instrument_share.get(raw_id, Decimal('1'))
+                market_value = market_value * factor
 
         item.pop('invested_since_snapshot', None)
         holdings.append(
@@ -173,6 +307,7 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
                 **item,
                 'quantity': quantity.quantize(Decimal('0.000001')),
                 'market_value': market_value.quantize(Decimal('0.01')),
+                'realized_gain_total': item['realized_gain_total'].quantize(Decimal('0.01')),
             }
         )
 
@@ -923,17 +1058,37 @@ def _xirr(flows: list[tuple[date, float]]) -> float:
     return guess
 
 
-def compute_cagr(household_id: int, as_of: date, period_months: int, instrument_id: int | None = None) -> float | None:
+def _latest_valuation_for_holding(kind: str, raw_id: int, as_of: date):
+    """Like _latest_valuation(), but for either an instrument_id or an
+    investment_id — mirrors compute_holdings()'s ('instrument'|'investment', id)
+    holding key so CAGR/XIRR can look up the right snapshot for a fund/folio
+    living under a shared shell instrument, not just a standalone instrument."""
+    if kind == 'investment':
+        return (
+            ValuationSnapshot.objects.filter(investment_id=raw_id, valuation_date__lte=as_of)
+            .order_by('-valuation_date', '-id')
+            .first()
+        )
+    return _latest_valuation(raw_id, as_of)
+
+
+def compute_cagr(household_id: int, as_of: date, period_months: int, instrument_id: int | None = None, investment_id: int | None = None) -> float | None:
     """Simple point-to-point CAGR over a fixed period ending at as_of — NOT
     money-weighted like compute_xirr(). (end_value / start_value) ** (365/days) - 1.
 
-    For a single instrument, "value" is the fund's own NAV/unit price (not the
+    For a single holding, "value" is the fund's own NAV/unit price (not the
     position's total market value) — total value moves with new contributions
     as well as fund performance, which would make CAGR spike whenever a
     contribution landed inside the lookback window even though nothing about
     the fund's own growth changed. NAV isolates the fund's actual performance.
-    Household-wide (no instrument_id) has no single per-unit price to track,
-    so it falls back to total market value across all holdings.
+    Household-wide (no instrument_id/investment_id) has no single per-unit
+    price to track, so it falls back to total market value across all holdings.
+
+    `investment_id` selects one specific fund/folio living under a shared
+    type-level shell Instrument (e.g. one MF/SIP scheme under the household's
+    single "Mutual Fund" Instrument) — pass it instead of instrument_id for
+    those holdings; `instrument_id` alone still works for holdings that are
+    their own Instrument (equity, FD, etc.), matching prior behaviour.
 
     Returns None (never extrapolates or fabricates) when the holding didn't
     exist yet, or had zero value, at the start of the period — a fund bought
@@ -942,19 +1097,27 @@ def compute_cagr(household_id: int, as_of: date, period_months: int, instrument_
     period_days = period_months * 30
     start_date = as_of - timedelta(days=period_days)
 
-    if instrument_id is not None:
+    if investment_id is not None:
+        kind, raw_id = 'investment', investment_id
+    elif instrument_id is not None:
+        kind, raw_id = 'instrument', instrument_id
+    else:
+        kind, raw_id = None, None
+
+    if kind is not None:
         # Require the position to already exist at start_date — a NAV lookup
         # alone can't tell "held zero units" from "held some," and CAGR for a
         # period before the holding existed would be fabricated.
         held_at_start = any(
-            h['instrument_id'] == instrument_id and h['quantity'] > 0
+            (h['investment_id'] == raw_id if kind == 'investment' else (h['instrument_id'] == raw_id and h['investment_id'] is None))
+            and h['quantity'] > 0
             for h in compute_holdings(household_id, start_date)
         )
         if not held_at_start:
             return None
 
-        start_snap = _latest_valuation(instrument_id, start_date)
-        end_snap = _latest_valuation(instrument_id, as_of)
+        start_snap = _latest_valuation_for_holding(kind, raw_id, start_date)
+        end_snap = _latest_valuation_for_holding(kind, raw_id, as_of)
         if not start_snap or not end_snap or start_snap.unit_price is None or end_snap.unit_price is None:
             return None
         start_value: Decimal | None = start_snap.unit_price if start_snap.unit_price > ZERO else None
@@ -981,12 +1144,18 @@ def compute_cagr(household_id: int, as_of: date, period_months: int, instrument_
     return round(cagr, 6)
 
 
-def compute_xirr(household_id: int, as_of: date, instrument_id: int | None = None) -> float | None:
+def compute_xirr(household_id: int, as_of: date, instrument_id: int | None = None, investment_id: int | None = None) -> float | None:
+    """`investment_id` selects one specific fund/folio under a shared
+    type-level shell Instrument (e.g. an MF/SIP scheme under the household's
+    single "Mutual Fund" Instrument); `instrument_id` alone still selects a
+    standalone holding (equity, FD, etc.) as before."""
     tx_query = Transaction.objects.filter(household_id=household_id, tx_date__lte=as_of).exclude(
         transaction_type=Transaction.TransactionType.WITHDRAWAL
     )
-    if instrument_id:
-        tx_query = tx_query.filter(instrument_id=instrument_id)
+    if investment_id:
+        tx_query = tx_query.filter(investment_id=investment_id)
+    elif instrument_id:
+        tx_query = tx_query.filter(instrument_id=instrument_id, investment__isnull=True)
     else:
         tx_query = tx_query.filter(instrument__isnull=False)
 
@@ -994,9 +1163,14 @@ def compute_xirr(household_id: int, as_of: date, instrument_id: int | None = Non
     if not flows:
         return None
 
-    if instrument_id:
+    if investment_id:
         terminal = sum(
-            (h['market_value'] for h in compute_holdings(household_id, as_of) if h['instrument_id'] == instrument_id),
+            (h['market_value'] for h in compute_holdings(household_id, as_of) if h['investment_id'] == investment_id),
+            start=ZERO,
+        )
+    elif instrument_id:
+        terminal = sum(
+            (h['market_value'] for h in compute_holdings(household_id, as_of) if h['instrument_id'] == instrument_id and h['investment_id'] is None),
             start=ZERO,
         )
     else:
@@ -1035,9 +1209,12 @@ def compute_fund_performance(household_id: int, as_of: date) -> list[dict]:
     """Per-fund distribution %, XIRR, and CAGR across the standard periods —
     the primitive the Fund Performance page and its charts are built from.
 
-    Only mutual_fund/sip instruments are included: CAGR's NAV-based math
-    (see compute_cagr) needs a per-unit price, which plain equities/other
-    instrument types in this codebase don't consistently carry.
+    Only mutual_fund/sip holdings are included: CAGR's NAV-based math (see
+    compute_cagr) needs a per-unit price, which plain equities/other
+    instrument types in this codebase don't consistently carry. MF/SIP
+    holdings are Investments living under the household's shared "Mutual
+    Fund" Instrument shell — each row here is one Investment (fund/folio),
+    identified by investment_id, not by the (shared) instrument_id.
     """
     from instruments.models import Instrument, MutualFundDetails
 
@@ -1047,29 +1224,33 @@ def compute_fund_performance(household_id: int, as_of: date) -> list[dict]:
         return []
 
     total_value = sum((h['market_value'] for h in fund_holdings), start=ZERO)
-    mf_details_by_instrument = {
-        d.instrument_id: d
-        for d in MutualFundDetails.objects.filter(instrument_id__in=[h['instrument_id'] for h in fund_holdings])
+    investment_ids = [h['investment_id'] for h in fund_holdings if h['investment_id']]
+    mf_details_by_investment = {
+        d.investment_id: d
+        for d in MutualFundDetails.objects.filter(investment_id__in=investment_ids)
     }
 
     rows = []
     for h in fund_holdings:
         instrument_id = h['instrument_id']
+        investment_id = h['investment_id']
         allocation_percent = (
             Decimal('0.00') if total_value == ZERO
             else (h['market_value'] / total_value * Decimal('100')).quantize(Decimal('0.01'))
         )
-        details = mf_details_by_instrument.get(instrument_id)
+        details = mf_details_by_investment.get(investment_id)
+        xirr_kwargs = {'investment_id': investment_id} if investment_id else {'instrument_id': instrument_id}
         rows.append({
             'instrument_id': instrument_id,
-            'instrument_name': h['instrument_name'],
+            'investment_id': investment_id,
+            'instrument_name': holding_display_name(h),
             'fund_category': details.fund_category if details else '',
             'fund_sub_category': details.fund_sub_category if details else '',
             'market_value': h['market_value'],
             'net_invested': h['net_invested'],
             'allocation_percent': allocation_percent,
-            'xirr': compute_xirr(household_id, as_of, instrument_id),
-            'cagr': {label: compute_cagr(household_id, as_of, months, instrument_id) for label, months in CAGR_PERIODS},
+            'xirr': compute_xirr(household_id, as_of, **xirr_kwargs),
+            'cagr': {label: compute_cagr(household_id, as_of, months, **xirr_kwargs) for label, months in CAGR_PERIODS},
         })
     rows.sort(key=lambda r: r['market_value'], reverse=True)
     return rows

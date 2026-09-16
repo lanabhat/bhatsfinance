@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from instruments.models import Account
@@ -49,6 +51,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             'member',
             'account',
             'instrument',
+            'investment',
             'tx_date',
             'amount',
             'quantity',
@@ -69,10 +72,11 @@ class TransactionSerializer(serializers.ModelSerializer):
             'for_members',
             'tags',
             'notes',
+            'realized_gain',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'realized_gain', 'created_at', 'updated_at']
         extra_kwargs = {
             'idempotency_key': {'required': False, 'allow_blank': True, 'default': ''},
             'external_reference': {'required': False, 'allow_blank': True, 'default': ''},
@@ -82,4 +86,26 @@ class TransactionSerializer(serializers.ModelSerializer):
         tx_type = attrs.get('transaction_type')
         if tx_type in _DIRECTION_MAP:
             attrs['direction'] = _DIRECTION_MAP[tx_type]
+
+        # realized_gain is computed here, not client-supplied, so it can't
+        # drift from the holding's actual state — average cost per unit
+        # (net_invested / quantity) as of just before this sale, times units
+        # sold, subtracted from sale proceeds. This is a create-only
+        # serializer (Transaction is immutable — see Transaction.save()), so
+        # "as of tx_date" here always reflects state prior to this row since
+        # it doesn't exist in the DB yet.
+        if tx_type == Transaction.TransactionType.SELL and attrs.get('instrument') and attrs.get('quantity'):
+            from insights.services import compute_holding_cost_basis
+            instrument = attrs['instrument']
+            investment = attrs.get('investment')
+            quantity, net_invested = compute_holding_cost_basis(
+                household_id=attrs['household'].id,
+                instrument_id=instrument.id,
+                investment_id=investment.id if investment else None,
+                as_of=attrs['tx_date'],
+            )
+            if quantity > 0:
+                avg_cost_per_unit = net_invested / quantity
+                attrs['realized_gain'] = (attrs['amount'] - avg_cost_per_unit * attrs['quantity']).quantize(Decimal('0.01'))
+
         return attrs

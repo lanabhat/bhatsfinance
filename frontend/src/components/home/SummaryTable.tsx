@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Money, useMaskedFmt } from '../common/Money'
+import { useSortableColumn } from '../../hooks/useSortableColumn'
+import { SortableTh } from '../ui/SortableTh'
 import type { CategoryBreakdownItem, DashboardAccount, DashboardHolding, MemberNetWorth } from '../../types/domain'
 
 const TYPE_LABELS: Record<string, string> = {
@@ -61,19 +63,6 @@ function Chevron({ open }: { open: boolean }) {
 
 // hidden on mobile, shown sm+: Invested (col 3), Gain ₹ (col 4), Alloc % (col 6)
 const HIDE_MOBILE = 'hidden sm:table-cell'
-
-type ColHeaderProps = { label: string; col: SortCol; sortCol: SortCol; sortDir: 'asc' | 'desc'; onSort: (c: SortCol) => void; className?: string }
-function ColHeader({ label, col, sortCol, sortDir, onSort, className }: ColHeaderProps) {
-  const active = sortCol === col
-  return (
-    <th
-      className={`cursor-pointer select-none whitespace-nowrap px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] hover:text-[var(--text)] ${className ?? ''}`}
-      onClick={() => onSort(col)}
-    >
-      {label}{active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-    </th>
-  )
-}
 
 // Leaf rows for instruments
 function InstrumentLeafRows({ instruments, totalCurrent, q }: { instruments: DashboardHolding[]; totalCurrent: number; q: string }) {
@@ -580,13 +569,7 @@ export function SummaryTable({
 }: Props) {
   const [dimension, setDimension] = useState<Dimension>('type')
   const [search, setSearch] = useState('')
-  const [sortCol, setSortCol] = useState<SortCol>('current')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-
-  const handleSort = (col: SortCol) => {
-    if (col === sortCol) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortCol(col); setSortDir('desc') }
-  }
+  const { sortCol, sortDir, onSort: handleSort } = useSortableColumn<SortCol>('current', 'desc')
 
   const dimPill = (d: Dimension, label: string) => (
     <button
@@ -628,11 +611,11 @@ export function SummaryTable({
         <table className="w-full min-w-[280px] border-collapse text-sm">
           <thead className="bg-[var(--surface-2)]">
             <tr>
-              <ColHeader label="Name" col="name" {...sharedColProps} className="text-left pl-3" />
-              <ColHeader label="Current" col="current" {...sharedColProps} />
-              <ColHeader label="Invested" col="invested" {...sharedColProps} className={HIDE_MOBILE} />
-              <ColHeader label="Gain ₹" col="gain" {...sharedColProps} className={HIDE_MOBILE} />
-              <ColHeader label="Gain %" col="gainPct" {...sharedColProps} />
+              <SortableTh label="Name" col="name" {...sharedColProps} align="left" className="pl-3 text-[10px] py-2" />
+              <SortableTh label="Current" col="current" {...sharedColProps} align="right" className="text-[10px] py-2" />
+              <SortableTh label="Invested" col="invested" {...sharedColProps} align="right" className={`text-[10px] py-2 ${HIDE_MOBILE}`} />
+              <SortableTh label="Gain ₹" col="gain" {...sharedColProps} align="right" className={`text-[10px] py-2 ${HIDE_MOBILE}`} />
+              <SortableTh label="Gain %" col="gainPct" {...sharedColProps} align="right" className="text-[10px] py-2" />
               <th className={`whitespace-nowrap px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] ${HIDE_MOBILE}`}>Alloc %</th>
             </tr>
           </thead>

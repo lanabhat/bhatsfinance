@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
@@ -9,6 +9,8 @@ import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
 import { Money } from '../components/common/Money'
 import { useExpandable } from '../hooks/useExpandable'
 import { Sheet } from '../components/ui/Sheet'
+import { DataTable } from '../components/ui/DataTable'
+import type { DataTableColumn } from '../components/ui/DataTable'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import type { Account, AccountOwnership } from '../types/domain'
@@ -223,7 +225,6 @@ function CCSpendForm({ account, householdId, onSave, onCancel, mode }: {
 }
 
 type GroupBy = 'none' | 'owner' | 'type'
-type SortBy = 'name' | 'type' | 'institution'
 type SheetState =
   | { type: 'none' }
   | { type: 'account'; item?: Account }
@@ -252,7 +253,6 @@ export function AccountsPage() {
   const [ownerships, setOwnerships] = useState<AccountOwnership[]>([])
   const [loading, setLoading] = useState(false)
   const [groupBy, setGroupBy] = useState<GroupBy>('type')
-  const [sortBy, setSortBy] = useState<SortBy>('name')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [sheet, setSheet] = useState<SheetState>({ type: 'none' })
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode)
@@ -302,17 +302,10 @@ export function AccountsPage() {
     [accounts, ownerMap]
   )
 
-  const sortedAccounts = useMemo(() => {
-    return [...accounts].sort((a, b) => {
-      if (sortBy === 'type') return a.account_type.localeCompare(b.account_type)
-      if (sortBy === 'institution') return (a.institution_name || '').localeCompare(b.institution_name || '')
-      return a.name.localeCompare(b.name)
-    })
-  }, [accounts, sortBy])
-
   const grouped = useMemo(() => {
+    // Card view only — table view groups/sorts via DataTable's own groupBy prop.
     const g = new Map<string, Account[]>()
-    for (const a of sortedAccounts) {
+    for (const a of [...accounts].sort((x, y) => x.name.localeCompare(y.name))) {
       const key = groupBy === 'owner' ? (ownerMap.get(a.id) ?? 'Unassigned')
         : groupBy === 'type' ? a.account_type.replace(/_/g, ' ')
         : '__flat__'
@@ -320,7 +313,7 @@ export function AccountsPage() {
       g.get(key)!.push(a)
     }
     return g
-  }, [sortedAccounts, groupBy, ownerMap])
+  }, [accounts, groupBy, ownerMap])
 
   const close = () => setSheet({ type: 'none' })
   const afterSave = async () => { close(); await load() }
@@ -355,97 +348,91 @@ export function AccountsPage() {
       )
     })
 
-  const thCls = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] whitespace-nowrap'
+  const accountColumns: DataTableColumn<Account>[] = [
+    {
+      key: 'name', label: 'Name', sortable: true, searchable: true,
+      sortValue: (a) => a.name, searchValue: (a) => `${a.name} ${a.institution_name}`,
+      render: (a) => (
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
+            {ACCOUNT_TYPE_ICONS[a.account_type] ?? '💼'}
+          </span>
+          <span className="truncate text-sm font-medium text-[var(--text)]">{a.name}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'type', label: 'Type', sortable: true,
+      sortValue: (a) => a.account_type,
+      render: (a) => <span className="capitalize">{a.account_type.replace(/_/g, ' ')}</span>,
+    },
+    {
+      key: 'institution', label: 'Institution', sortable: true,
+      sortValue: (a) => a.institution_name || '',
+      render: (a) => a.institution_name || '—',
+    },
+    { key: 'owner', label: 'Owner', render: (a) => ownerMap.get(a.id) ?? 'Unassigned' },
+    {
+      key: 'balance', label: 'Balance', align: 'right', sortable: true,
+      sortValue: (a) => {
+        const b = balanceMap.get(a.id)
+        if (b === undefined) return null
+        return a.account_type === 'credit_card' ? -parseFloat(b) : parseFloat(b)
+      },
+      dataBar: { value: (a) => {
+        const b = balanceMap.get(a.id)
+        return b === undefined ? null : (a.account_type === 'credit_card' ? -parseFloat(b) : parseFloat(b))
+      }, mode: 'diverging' },
+      render: (a) => {
+        const isCC = a.account_type === 'credit_card'
+        const balance = balanceMap.get(a.id)
+        const displayValue = balance !== undefined ? (isCC ? -parseFloat(balance) : parseFloat(balance)) : null
+        return displayValue !== null ? <Money value={displayValue} className={`font-semibold ${isCC ? 'text-rose-600 dark:text-rose-400' : ''}`} /> : '—'
+      },
+    },
+    {
+      key: 'status', label: 'Status',
+      render: (a) => (
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${a.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
+          {a.is_active ? 'Active' : 'Inactive'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions', label: '', align: 'right',
+      render: (a) => (
+        <button type="button" onClick={() => setSheet({ type: 'account', item: a })} disabled={!canWrite}
+          className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
+          Edit
+        </button>
+      ),
+    },
+  ]
 
-  const renderTableRow = (a: Account) => {
-    const isCC = a.account_type === 'credit_card'
-    const balance = balanceMap.get(a.id)
-    const displayValue = balance !== undefined ? (isCC ? -parseFloat(balance) : parseFloat(balance)) : null
-    const isExpanded = cardExpand.isExpanded(a.id)
-    return (
-      <Fragment key={a.id}>
-        <tr
-          className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--surface-2)]"
-          onClick={() => cardExpand.toggle(a.id)}
-        >
-          <td className="px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-sm">
-                {ACCOUNT_TYPE_ICONS[a.account_type] ?? '💼'}
-              </span>
-              <span className="truncate text-sm font-medium text-[var(--text)]">{a.name}</span>
-            </div>
-          </td>
-          <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-2)]">{a.account_type.replace(/_/g, ' ')}</td>
-          <td className="px-3 py-2 text-xs text-[var(--text-muted)]">{a.institution_name || '—'}</td>
-          <td className="px-3 py-2 text-xs text-[var(--text-2)]">{ownerMap.get(a.id) ?? 'Unassigned'}</td>
-          <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold">
-            {displayValue !== null ? <Money value={displayValue} className={isCC ? 'text-rose-600 dark:text-rose-400' : ''} /> : '—'}
-          </td>
-          <td className="px-3 py-2">
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${a.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-[var(--surface-2)] text-[var(--text-muted)]'}`}>
-              {a.is_active ? 'Active' : 'Inactive'}
-            </span>
-          </td>
-          <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
-            <button type="button" onClick={() => setSheet({ type: 'account', item: a })} disabled={!canWrite}
-              className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
-              Edit
-            </button>
-          </td>
-        </tr>
-        {isExpanded && (
-          <tr>
-            <td colSpan={7} className="bg-[var(--surface-2)] px-4 py-3">
-              <AccountExpandedDetail
-                account={a}
-                householdId={householdId}
-                onEdit={() => setSheet({ type: 'account', item: a })}
-                onRecordSpend={() => setSheet({ type: 'cc_spend', item: a, mode: 'spend' })}
-                onRecordPayment={() => setSheet({ type: 'cc_spend', item: a, mode: 'payment' })}
-                onUpdateBalance={() => setSheet({ type: 'update_balance', item: a })}
-              />
-            </td>
-          </tr>
-        )}
-      </Fragment>
-    )
-  }
-
-  const renderTable = (list: Account[]) => (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-      <table className="w-full text-sm">
-        <thead className="bg-[var(--surface-2)]">
-          <tr>
-            <th className={thCls}>Name</th>
-            <th className={thCls}>Type</th>
-            <th className={thCls}>Institution</th>
-            <th className={thCls}>Owner</th>
-            <th className={`${thCls} text-right`}>Balance</th>
-            <th className={thCls}>Status</th>
-            <th className={thCls}></th>
-          </tr>
-        </thead>
-        <tbody>{list.map(renderTableRow)}</tbody>
-      </table>
+  const renderAccountDetail = (a: Account) => (
+    <div className="px-4 py-3">
+      <AccountExpandedDetail
+        account={a}
+        householdId={householdId}
+        onEdit={() => setSheet({ type: 'account', item: a })}
+        onRecordSpend={() => setSheet({ type: 'cc_spend', item: a, mode: 'spend' })}
+        onRecordPayment={() => setSheet({ type: 'cc_spend', item: a, mode: 'payment' })}
+        onUpdateBalance={() => setSheet({ type: 'update_balance', item: a })}
+      />
     </div>
   )
 
   return (
     <div className="grid grid-cols-1 min-w-0 gap-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-[var(--text-muted)]">Group:</span>
-          {([['type', 'Type'], ['owner', 'Owner'], ['none', 'None']] as [GroupBy, string][]).map(([v, l]) => (
-            <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-[var(--text-muted)]">Sort:</span>
-          {([['name', 'Name'], ['type', 'Type'], ['institution', 'Institution']] as [SortBy, string][]).map(([v, l]) => (
-            <button key={v} type="button" onClick={() => setSortBy(v)} className={pillCls(sortBy === v)}>{l}</button>
-          ))}
-        </div>
+        {viewMode === 'card' && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-[var(--text-muted)]">Group:</span>
+            {([['type', 'Type'], ['owner', 'Owner'], ['none', 'None']] as [GroupBy, string][]).map(([v, l]) => (
+              <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
+            ))}
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <button
             type="button"
@@ -494,10 +481,24 @@ export function AccountsPage() {
           <p className="mt-2 text-sm font-medium text-[var(--text-2)]">No accounts yet</p>
           <p className="mt-1 text-xs text-[var(--text-muted)]">Tap + to add your first account.</p>
         </div>
+      ) : viewMode === 'table' ? (
+        <DataTable
+          columns={accountColumns}
+          rows={accounts}
+          rowKey={(a) => a.id}
+          defaultSortCol="name"
+          defaultSortDir="asc"
+          searchPlaceholder="Search accounts…"
+          groupBy={{
+            options: [{ value: 'type', label: 'Type' }, { value: 'owner', label: 'Owner' }],
+            getGroup: (a, by) => by === 'owner'
+              ? { key: ownerMap.get(a.id) ?? 'Unassigned', label: ownerMap.get(a.id) ?? 'Unassigned' }
+              : { key: a.account_type, label: a.account_type.replace(/_/g, ' ') },
+          }}
+          renderExpanded={renderAccountDetail}
+        />
       ) : groupBy === 'none' ? (
-        viewMode === 'table' ? renderTable(sortedAccounts) : (
-          <div className="card-grid grid min-w-0 gap-3">{renderList(sortedAccounts)}</div>
-        )
+        <div className="card-grid grid min-w-0 gap-3">{renderList([...accounts].sort((a, b) => a.name.localeCompare(b.name)))}</div>
       ) : (
         <div className="flex w-full min-w-0 max-w-full flex-col gap-1 overflow-hidden">
           {Array.from(grouped.entries()).map(([label, group]) => {
@@ -515,7 +516,7 @@ export function AccountsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </button>
-                {isOpen && (viewMode === 'table' ? renderTable(group) : <div className="card-grid grid gap-3 pb-2">{renderList(group)}</div>)}
+                {isOpen && <div className="card-grid grid gap-3 pb-2">{renderList(group)}</div>}
               </div>
             )
           })}
