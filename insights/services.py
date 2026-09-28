@@ -178,7 +178,7 @@ def holding_display_name(h: dict) -> str:
     return h['investment_name'] or h['instrument_name']
 
 
-def compute_holdings(household_id: int, as_of: date, member_id: int | None = None) -> list[dict]:
+def compute_holdings(household_id: int, as_of: date, member_id: int | None = None, include_inactive: bool = False) -> list[dict]:
     """
     Groups Transactions into one dict per holding. Most instrument types are
     still one Instrument = one holding (grouping key: instrument_id). For
@@ -196,12 +196,23 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
     A fully-exited position (quantity == 0 with prior activity) is still
     returned, not filtered out — callers wanting "closed positions" should
     check quantity == 0 themselves.
+
+    Instruments marked is_active=False (e.g. an FD confirmed closed/matured
+    during an SBI statement re-import) are excluded by default, mirroring the
+    Account.is_active=True filter already applied to account balances in
+    compute_networth — a closed FD's money has moved elsewhere and shouldn't
+    keep counting toward net worth/allocation. Pass include_inactive=True for
+    a single-instrument lookup (e.g. viewing one closed FD's own XIRR/CAGR
+    history), where the caller explicitly wants that specific holding
+    regardless of its active status.
     """
     txs = (
         Transaction.objects.filter(household_id=household_id, tx_date__lte=as_of, instrument__isnull=False)
         .select_related('instrument', 'investment')
         .order_by('tx_date', 'id')
     )
+    if not include_inactive:
+        txs = txs.filter(instrument__is_active=True)
 
     # Build allocation map for member filtering. Investment.member is the
     # per-holding equivalent of InstrumentOwnership for shell-instrument
@@ -1111,7 +1122,7 @@ def compute_cagr(household_id: int, as_of: date, period_months: int, instrument_
         held_at_start = any(
             (h['investment_id'] == raw_id if kind == 'investment' else (h['instrument_id'] == raw_id and h['investment_id'] is None))
             and h['quantity'] > 0
-            for h in compute_holdings(household_id, start_date)
+            for h in compute_holdings(household_id, start_date, include_inactive=True)
         )
         if not held_at_start:
             return None
@@ -1165,12 +1176,12 @@ def compute_xirr(household_id: int, as_of: date, instrument_id: int | None = Non
 
     if investment_id:
         terminal = sum(
-            (h['market_value'] for h in compute_holdings(household_id, as_of) if h['investment_id'] == investment_id),
+            (h['market_value'] for h in compute_holdings(household_id, as_of, include_inactive=True) if h['investment_id'] == investment_id),
             start=ZERO,
         )
     elif instrument_id:
         terminal = sum(
-            (h['market_value'] for h in compute_holdings(household_id, as_of) if h['instrument_id'] == instrument_id and h['investment_id'] is None),
+            (h['market_value'] for h in compute_holdings(household_id, as_of, include_inactive=True) if h['instrument_id'] == instrument_id and h['investment_id'] is None),
             start=ZERO,
         )
     else:

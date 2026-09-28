@@ -232,6 +232,16 @@ export function HoldingsPage() {
     [activeHoldings],
   )
 
+  // Instruments marked is_active=False (e.g. an FD confirmed closed/matured
+  // during an SBI statement re-import) are excluded from compute_holdings()
+  // by default now, so they no longer appear in dashboard.holdings at all —
+  // sourced here from the separately-loaded, unfiltered instruments list
+  // instead, purely for historical reference (never counted in net worth).
+  const inactiveInstruments = useMemo(
+    () => instruments.filter((i) => !i.is_active),
+    [instruments],
+  )
+
   const resolveInstrument = (h: DashboardHolding): Instrument =>
     instruments.find((i) => i.id === h.instrument_id) ?? {
       id: h.instrument_id,
@@ -841,6 +851,40 @@ export function HoldingsPage() {
                   <p className={`shrink-0 text-sm font-semibold ${gain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                     {gain >= 0 ? '+' : ''}<Money value={gain} />
                   </p>
+                </div>
+              )
+            })}
+          </div>
+        </details>
+      )}
+
+      {inactiveInstruments.length > 0 && (
+        <details className="group mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Inactive Holdings <span className="rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">{inactiveInstruments.length}</span>
+            </p>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 text-[var(--text-faint)] transition-transform group-open:rotate-90">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 4l4 4-4 4" />
+            </svg>
+          </summary>
+          <div className="border-t border-[var(--border)] px-4 py-1">
+            <p className="py-2 text-xs text-[var(--text-muted)]">Closed/matured deposits and other holdings marked inactive — excluded from net worth, allocation and rebalancing. Last known value shown for reference only.</p>
+            {inactiveInstruments.map((inst) => {
+              const legs = maturityByInstrument.get(inst.id) ?? []
+              const lastLeg = legs[legs.length - 1]
+              const fdDetail = lastLeg ? fdDetails.find((d) => d.instrument === inst.id && d.maturity_date === lastLeg.date) : undefined
+              return (
+                <div key={inst.id} className="flex items-center justify-between border-b border-[var(--border)] py-2.5 last:border-0">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-[var(--text)]">{inst.name}</p>
+                    <p className="text-xs text-[var(--text-muted)]">{TYPE_LABELS[inst.instrument_type] ?? inst.instrument_type}</p>
+                  </div>
+                  {fdDetail && (
+                    <p className="shrink-0 text-sm font-semibold text-[var(--text-muted)]">
+                      <Money value={fdDetail.maturity_value ?? fdDetail.principal} />
+                    </p>
+                  )}
                 </div>
               )
             })}

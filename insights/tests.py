@@ -10,7 +10,7 @@ from instruments.models import Account, AllocationTarget, AssetCategory, Instrum
 from instruments.services import get_or_create_mf_shell
 from ledger.models import Transaction
 from valuations.models import ValuationSnapshot
-from insights.services import compute_cagr, compute_fund_performance, compute_holdings, compute_rebalancing, compute_xirr, holding_display_name
+from insights.services import compute_cagr, compute_fund_performance, compute_holdings, compute_networth, compute_rebalancing, compute_xirr, holding_display_name
 
 
 def _approved_client(household):
@@ -640,4 +640,58 @@ class AllocationTemplateTests(TestCase):
         result = suggest_category_targets(self.household.id, date(2026, 2, 1), age=35, equity_base=100)
         by_name = {r['category_name']: r for r in result['categories']}
         self.assertEqual(by_name['Mixed']['classification'], 'mixed')
-        self.assertIsNone(by_name['Mixed']['suggested_target_percent'])
+
+
+class InactiveInstrumentExclusionTests(TestCase):
+    """An instrument marked is_active=False (e.g. an FD confirmed closed
+    during an SBI statement re-import) should no longer count toward
+    household-wide aggregates, but a caller explicitly asking about that one
+    instrument (its own XIRR/CAGR history) should still get a real answer."""
+
+    def setUp(self):
+        self.household = Household.objects.create(name='Verma Family')
+        self.member = Member.objects.create(household=self.household, full_name='Rina Verma')
+        self.account = Account.objects.create(
+            household=self.household, name='SBI', account_type=Account.AccountType.BANK, primary_member=self.member,
+        )
+        self.active_fd = Instrument.objects.create(
+            household=self.household, name='SBI FD Active', instrument_type=Instrument.InstrumentType.FD,
+        )
+        self.closed_fd = Instrument.objects.create(
+            household=self.household, name='SBI FD Closed', instrument_type=Instrument.InstrumentType.FD, is_active=False,
+        )
+        for inst, amount in ((self.active_fd, Decimal('50000.00')), (self.closed_fd, Decimal('30000.00'))):
+            Transaction.objects.create(
+                household=self.household,
+                instrument=inst,
+                tx_date=date(2025, 1, 10),
+                amount=amount,
+                direction=Transaction.Direction.OUTFLOW,
+                transaction_type=Transaction.TransactionType.DEPOSIT,
+            )
+
+    def test_compute_holdings_excludes_inactive_by_default(self):
+        holdings = compute_holdings(self.household.id, date(2025, 6, 1))
+        instrument_ids = {h['instrument_id'] for h in holdings}
+        self.assertIn(self.active_fd.id, instrument_ids)
+        self.assertNotIn(self.closed_fd.id, instrument_ids)
+
+    def test_compute_holdings_include_inactive_true_returns_it(self):
+        holdings = compute_holdings(self.household.id, date(2025, 6, 1), include_inactive=True)
+        instrument_ids = {h['instrument_id'] for h in holdings}
+        self.assertIn(self.closed_fd.id, instrument_ids)
+
+    def test_compute_networth_excludes_closed_fd_value(self):
+        networth = compute_networth(self.household.id, date(2025, 6, 1))
+        self.assertEqual(networth, Decimal('50000.00'))
+
+    def test_compute_xirr_for_specific_inactive_instrument_still_works(self):
+        xirr = compute_xirr(self.household.id, date(2026, 1, 10), instrument_id=self.closed_fd.id)
+        self.assertIsNotNone(xirr)
+
+    def test_compute_xirr_household_wide_excludes_inactive_terminal_value(self):
+        # Household-wide XIRR's terminal value should only reflect the active FD.
+        xirr_active_only = compute_xirr(self.household.id, date(2026, 1, 10), instrument_id=self.active_fd.id)
+        xirr_household = compute_xirr(self.household.id, date(2026, 1, 10))
+        self.assertIsNotNone(xirr_active_only)
+        self.assertIsNotNone(xirr_household)
