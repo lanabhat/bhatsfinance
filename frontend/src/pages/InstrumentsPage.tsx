@@ -276,6 +276,60 @@ function BulkDeleteSheet({ householdId, instrumentType, count, onDeleted, onCanc
   )
 }
 
+function BulkDeleteSelectedSheet({ householdId, instrumentIds, onDeleted, onCancel }: {
+  householdId: number; instrumentIds: number[]; onDeleted: () => void; onCancel: () => void
+}) {
+  const [confirmText, setConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
+  const count = instrumentIds.length
+  const canConfirm = confirmText.trim().toUpperCase() === 'DELETE'
+
+  const doDelete = async () => {
+    setDeleting(true); setError('')
+    try {
+      await portfolioApi.bulkDeleteInstrumentsByIds(householdId, instrumentIds)
+      onDeleted()
+    } catch {
+      setError('Failed to delete. Please try again.')
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-4 px-5 py-4">
+      <div className="rounded-xl bg-red-50 dark:bg-red-900/15 border border-red-200 p-3 text-center">
+        <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+          Delete {count} selected instrument{count === 1 ? '' : 's'}?
+        </p>
+        <p className="mt-1 text-xs text-red-500">
+          This permanently deletes the selected instruments, along with their valuation history and
+          ownership assignments. Any linked transactions are kept but detached (no longer counted
+          against these instruments). This cannot be undone.
+        </p>
+      </div>
+      <label className="grid gap-1">
+        <span className="text-xs text-[var(--text-muted)]">Type <strong>DELETE</strong> to confirm</span>
+        <input
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-red-400"
+          placeholder="DELETE"
+          autoFocus
+        />
+      </label>
+      {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+      <div className="flex gap-2 pb-2">
+        <button type="button" onClick={onCancel} className="flex-1 rounded-xl border border-[var(--border)] py-2.5 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
+        <button type="button" disabled={!canConfirm || deleting} onClick={doDelete}
+          className="flex-1 rounded-xl py-2.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 bg-red-500 hover:bg-red-600">
+          {deleting ? 'Deleting…' : `Delete ${count} Selected`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── main page ─────────────────────────────────────────────────────────────────
 type GroupBy = 'none' | 'category' | 'type' | 'owner'
 type SheetState =
@@ -284,6 +338,7 @@ type SheetState =
   | { type: 'delete'; instrument: Instrument }
   | { type: 'category'; item?: AssetCategory }
   | { type: 'bulk-delete'; instrumentType: string; count: number }
+  | { type: 'bulk-delete-selected'; instrumentIds: number[] }
   | { type: 'investment'; item: Investment }
 
 type ViewMode = 'table' | 'card'
@@ -718,6 +773,13 @@ export function InstrumentsPage() {
           </button>
           <button
             type="button"
+            onClick={() => setSheet({ type: 'bulk-delete-selected', instrumentIds: Array.from(selectedInstrumentIds) })}
+            className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"
+          >
+            Delete selected
+          </button>
+          <button
+            type="button"
             onClick={() => setSelectedInstrumentIds(new Set())}
             className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-300"
           >
@@ -897,6 +959,12 @@ export function InstrumentsPage() {
         <Sheet title="Bulk Delete Instruments" onClose={close}>
           <BulkDeleteSheet householdId={householdId} instrumentType={sheet.instrumentType} count={sheet.count}
             onDeleted={async () => { close(); setBulkDeleteType(''); await load(); void refreshAll() }} onCancel={close} />
+        </Sheet>
+      )}
+      {sheet.type === 'bulk-delete-selected' && (
+        <Sheet title="Delete Selected Instruments" onClose={close}>
+          <BulkDeleteSelectedSheet householdId={householdId} instrumentIds={sheet.instrumentIds}
+            onDeleted={async () => { close(); setSelectedInstrumentIds(new Set()); await load(); void refreshAll() }} onCancel={close} />
         </Sheet>
       )}
       {sheet.type === 'investment' && (

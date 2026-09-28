@@ -436,4 +436,42 @@ class SplitSharedEquityInstrumentsMigrationTests(TestCase):
         migration = self._import_migration()
         migration.migrate_forward(django.apps.apps, None)
         self.assertEqual(Instrument.objects.filter(household=self.household).count(), 1)
+
+
+class BulkDeleteInstrumentsViewTests(TestCase):
+    def setUp(self):
+        self.household = Household.objects.create(name='Kapoor Family')
+        self.client = _approved_client(self.household)
+        self.fd_1 = Instrument.objects.create(household=self.household, name='SBI FD 1', instrument_type='fd')
+        self.fd_2 = Instrument.objects.create(household=self.household, name='SBI FD 2', instrument_type='fd')
+        self.fd_3 = Instrument.objects.create(household=self.household, name='SBI FD 3', instrument_type='fd')
+
+    def test_deletes_only_specified_ids(self):
+        response = self.client.delete(
+            f'/api/instruments/bulk-delete/?household_id={self.household.id}&instrument_id={self.fd_1.id}&instrument_id={self.fd_2.id}',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['deleted'], 2)
+        self.assertFalse(Instrument.objects.filter(id=self.fd_1.id).exists())
+        self.assertFalse(Instrument.objects.filter(id=self.fd_2.id).exists())
+        self.assertTrue(Instrument.objects.filter(id=self.fd_3.id).exists())
+
+    def test_no_ids_or_types_deletes_everything_for_household(self):
+        # Matches existing type-wide bulk-delete semantics: no filter means
+        # "everything for this household" — the frontend always sends an
+        # explicit type or id list, but the endpoint itself doesn't require one.
+        response = self.client.delete(f'/api/instruments/bulk-delete/?household_id={self.household.id}')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['deleted'], 3)
+        self.assertEqual(Instrument.objects.filter(household=self.household).count(), 0)
+
+    def test_instrument_id_does_not_affect_other_households(self):
+        other_household = Household.objects.create(name='Other Family')
+        other_fd = Instrument.objects.create(household=other_household, name='Other FD', instrument_type='fd')
+        response = self.client.delete(
+            f'/api/instruments/bulk-delete/?household_id={self.household.id}&instrument_id={other_fd.id}',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['deleted'], 0)
+        self.assertTrue(Instrument.objects.filter(id=other_fd.id).exists())
         self.assertFalse(Instrument.objects.filter(household=self.household, name='Equity').exists())

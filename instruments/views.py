@@ -77,7 +77,17 @@ class InstrumentViewSet(viewsets.ModelViewSet):
 
 
 class BulkDeleteInstrumentsView(APIView):
-    """Delete all instruments of specified types for a household. Cascades to transactions and valuations."""
+    """
+    Delete instruments for a household, filtered by type and/or explicit ids.
+
+    Detaches linked Transactions (instrument FK is SET_NULL — kept, no
+    longer counted against anything) and cascade-deletes ValuationSnapshots/
+    InstrumentOwnerships/AllocationTargets, same as deleting one instrument
+    via InstrumentViewSet — this view just does it for many at once, with no
+    "clear everything first" gate. Pass instrument_id (repeatable) to target
+    a specific selection (e.g. instruments picked via checkbox on the
+    Instruments page) instead of, or in addition to, instrument_type.
+    """
 
     def delete(self, request):
         from rest_framework import status as http_status
@@ -85,9 +95,12 @@ class BulkDeleteInstrumentsView(APIView):
         if not household_id:
             return Response({'detail': 'household_id is required.'}, status=http_status.HTTP_400_BAD_REQUEST)
         types = request.query_params.getlist('instrument_type')
+        ids = request.query_params.getlist('instrument_id')
         qs = Instrument.objects.filter(household_id=int(household_id))
         if types:
             qs = qs.filter(instrument_type__in=types)
+        if ids:
+            qs = qs.filter(id__in=ids)
         count, _ = qs.delete()
         return Response({'deleted': count})
 

@@ -62,6 +62,11 @@ export const portfolioApi = {
     for (const t of instrumentTypes) q.append('instrument_type', t)
     return deleteJsonResult<{ deleted: number }>(`/api/instruments/bulk-delete/?${q.toString()}`)
   },
+  async bulkDeleteInstrumentsByIds(householdId: number, instrumentIds: number[]) {
+    const q = new URLSearchParams({ household_id: String(householdId) })
+    for (const id of instrumentIds) q.append('instrument_id', String(id))
+    return deleteJsonResult<{ deleted: number }>(`/api/instruments/bulk-delete/?${q.toString()}`)
+  },
   async deleteAccountOwnership(id: number) { return deleteJson(`/api/account-ownerships/${id}/`) },
   async deleteInstrumentOwnership(id: number) { return deleteJson(`/api/instrument-ownerships/${id}/`) },
   async getFDDetails(instrumentId: number) {
