@@ -431,11 +431,14 @@ export function SBIStatementImportWizard({ householdId }: Props) {
     )
 
     const importedAccountNumbers = new Set(depositItems.map(i => i.account_number))
-    const mappedAccountNumbers = new Set(mappingRows.map(r => r.accountNumber))
-    // Existing FDs/RDs under one of the mapped accounts that this statement
-    // doesn't mention at all — never touched unless explicitly marked below.
+    // Existing FDs/RDs this statement doesn't mention at all — never touched
+    // unless explicitly marked below. Scoped by household (not by the
+    // savings-account mapping): FD account numbers never appear in
+    // mappingRows (FDs don't need an Account mapping — see
+    // proceedToMapAccounts), so gating on that set would silently hide
+    // almost every missing FD, including Multi Option/sweep deposits.
     const missingDeposits = existingDeposits.filter(d =>
-      mappedAccountNumbers.has(d.account_number) && !importedAccountNumbers.has(d.account_number) && d.is_active,
+      !importedAccountNumbers.has(d.account_number) && d.is_active,
     )
     const toggleDeactivate = (instrumentId: number) => {
       setDeactivateIds(prev => {
