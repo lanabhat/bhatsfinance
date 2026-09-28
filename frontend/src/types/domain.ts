@@ -707,6 +707,16 @@ export type MissedPremiumAlert = {
   premium_amount: string
 }
 
+export type SmsPaymentMatch = {
+  sms_id: number
+  sender: string
+  body: string
+  received_at: string
+  matched_amount: string | null
+  digits_matched: boolean
+  confidence: 'high' | 'low'
+}
+
 export type TransactionCorrectionInput = {
   originalTransactionId: number
   corrected: {

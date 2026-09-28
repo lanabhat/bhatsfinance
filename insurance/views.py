@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 from insurance.models import InsurancePolicy, InsurancePremiumAck, VehicleClaim
 from insurance.serializers import InsurancePolicySerializer, VehicleClaimSerializer
 from insurance.services import generate_missed_premium_reminders, _first_due_date, _next_due_date
+from insurance.sms_matching import find_sms_matches
 from ledger.models import Transaction
 
 
@@ -74,6 +75,13 @@ class InsurancePolicyViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=['get'], url_path='sms-matches')
+    def sms_matches(self, request, pk=None):
+        policy = self.get_object()
+        due_date_str = request.query_params.get('due_date')
+        due_date = date.fromisoformat(due_date_str) if due_date_str else None
+        matches = find_sms_matches(policy, due_date=due_date)
+        return Response({'matches': matches})
 
     @action(detail=False, methods=['get'], url_path='export')
     def export_csv(self, request):

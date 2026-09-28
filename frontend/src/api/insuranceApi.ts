@@ -1,5 +1,5 @@
 import { deleteJson, getJson, patchJson, postJson, toQueryString, unwrapList } from './http'
-import type { ApiListResponse, InsurancePolicy, InsuranceSummary, MissedPremiumAlert, VehicleClaim } from '../types/domain'
+import type { ApiListResponse, InsurancePolicy, InsuranceSummary, MissedPremiumAlert, SmsPaymentMatch, VehicleClaim } from '../types/domain'
 
 export const insuranceApi = {
   async listPolicies(householdId: number) {
@@ -35,6 +35,11 @@ export const insuranceApi = {
     const q = toQueryString({ household_id: householdId, ...(asOf ? { as_of: asOf } : {}) })
     const data = await getJson<{ as_of: string; missed: MissedPremiumAlert[] }>(`/api/alerts/missed-premiums?${q}`)
     return data.missed
+  },
+  async listSmsMatches(policyId: number, dueDate?: string) {
+    const q = toQueryString(dueDate ? { due_date: dueDate } : {})
+    const data = await getJson<{ matches: SmsPaymentMatch[] }>(`/api/insurance-policies/${policyId}/sms-matches/?${q}`)
+    return data.matches
   },
 
   // Vehicle claims

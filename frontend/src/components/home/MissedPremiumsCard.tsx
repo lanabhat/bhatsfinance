@@ -16,6 +16,7 @@ type Props = {
 type PolicyGroup = {
   policy_id: number
   policy_name: string
+  policy_number: string
   insurer_name: string
   member_name: string | null
   dues: MissedPremiumAlert[]
@@ -29,6 +30,7 @@ function groupByPolicy(items: MissedPremiumAlert[]): PolicyGroup[] {
       map.set(item.policy_id, {
         policy_id: item.policy_id,
         policy_name: item.policy_name,
+        policy_number: item.policy_number,
         insurer_name: item.insurer_name,
         member_name: item.member_name,
         dues: [],
@@ -102,6 +104,9 @@ export function MissedPremiumsCard({ items, accountOptions, onPaid }: Props) {
               collapsed={
                 <div className="tap min-w-0 rounded-xl border border-rose-100 bg-rose-50 dark:border-rose-900/30 dark:bg-rose-900/10 px-4 py-3">
                   <p className="truncate text-sm font-medium text-[var(--text)]">{group.policy_name}</p>
+                  {group.policy_number && (
+                    <p className="truncate font-mono text-[10px] text-[var(--text-faint)]">{group.policy_number}</p>
+                  )}
                   <p className="text-[11px] text-[var(--text-muted)]">
                     {group.dues.length} due{group.dues.length === 1 ? '' : 's'}
                     {group.insurer_name ? ` · ${group.insurer_name}` : ''}

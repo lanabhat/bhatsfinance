@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { insuranceApi } from '../../api/insuranceApi'
 import { DateField, MoneyInput, SelectField } from '../common/FormField'
 import { normalizeApiError } from '../../hooks/errorUtils'
-import type { MissedPremiumAlert, OptionItem } from '../../types/domain'
+import type { MissedPremiumAlert, OptionItem, SmsPaymentMatch } from '../../types/domain'
 
 type Props = {
   alert: MissedPremiumAlert
@@ -18,6 +18,22 @@ export function MarkPremiumPaidSheet({ alert, accountOptions, onClose, onPaid }:
   const [deduct, setDeduct] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [smsMatches, setSmsMatches] = useState<SmsPaymentMatch[]>([])
+  const [selectedSmsId, setSelectedSmsId] = useState<number | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    insuranceApi.listSmsMatches(alert.policy_id, alert.due_date).then((matches) => {
+      if (!cancelled) setSmsMatches(matches)
+    }).catch(() => { /* silent — suggestion is a convenience, not required */ })
+    return () => { cancelled = true }
+  }, [alert.policy_id, alert.due_date])
+
+  const applySuggestion = (match: SmsPaymentMatch) => {
+    setSelectedSmsId(match.sms_id)
+    setPaidOn(match.received_at.slice(0, 10))
+    if (match.matched_amount) setAmount(match.matched_amount)
+  }
 
   const submit = async () => {
     if (deduct && !accountId) {
@@ -61,6 +77,33 @@ export function MarkPremiumPaidSheet({ alert, accountOptions, onClose, onPaid }:
           <button type="button" onClick={onClose} className="text-xl text-[var(--text-muted)] hover:text-[var(--text-2)]">&times;</button>
         </div>
         <div className="space-y-3 px-5 py-4">
+          {smsMatches.length > 0 && (
+            <div className="space-y-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+              <p className="text-xs font-medium text-[var(--text-2)]">Suggested from SMS</p>
+              {smsMatches.map((match) => (
+                <button
+                  key={match.sms_id}
+                  type="button"
+                  onClick={() => applySuggestion(match)}
+                  className={`block w-full rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors ${
+                    selectedSmsId === match.sms_id
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                      : 'border-[var(--border)] hover:bg-[var(--surface)]'
+                  }`}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate font-medium text-[var(--text)]">{match.sender}</span>
+                    <span className="shrink-0 text-[var(--text-muted)]">{match.received_at.slice(0, 10)}</span>
+                  </span>
+                  <span className="mt-0.5 block truncate text-[var(--text-muted)]">{match.body}</span>
+                  {match.confidence === 'low' && (
+                    <span className="mt-0.5 block text-[10px] text-amber-600 dark:text-amber-400">Amount match only — policy number not found in message</span>
+                  )}
+                </button>
+              ))}
+              <p className="text-[10px] text-[var(--text-faint)]">Selecting a suggestion only fills the form below — it won't change the original SMS message.</p>
+            </div>
+          )}
           <DateField label="Paid On" value={paidOn} onChange={setPaidOn} />
           <label className="flex items-center gap-2 text-sm text-[var(--text-2)]">
             <input
