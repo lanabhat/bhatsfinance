@@ -24,6 +24,7 @@ type Props = {
 const EMPTY_FORM = (householdId: number): Omit<ValuationSnapshot, 'id'> => ({
   household: householdId,
   valuation_date: new Date().toISOString().slice(0, 10),
+  investment: null,
   account: null,
   instrument: null,
   unit_price: null,

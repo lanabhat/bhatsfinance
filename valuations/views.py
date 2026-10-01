@@ -12,7 +12,7 @@ from valuations.services import bulk_snapshot
 class ValuationSnapshotViewSet(viewsets.ModelViewSet):
     queryset = ValuationSnapshot.objects.select_related('household', 'account', 'instrument').all()
     serializer_class = ValuationSnapshotSerializer
-    filterset_fields = ['household', 'account', 'instrument', 'valuation_date', 'source']
+    filterset_fields = ['household', 'account', 'instrument', 'investment', 'valuation_date', 'source']
 
 
 class BulkSnapshotView(APIView):

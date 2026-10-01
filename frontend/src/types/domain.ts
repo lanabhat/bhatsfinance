@@ -316,6 +316,7 @@ export type ValuationSnapshot = {
   valuation_date: string
   account: number | null
   instrument: number | null
+  investment: number | null
   unit_price: string | null
   market_value: string | null
   balance: string

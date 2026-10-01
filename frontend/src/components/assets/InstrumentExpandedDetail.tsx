@@ -3,10 +3,12 @@ import { Money, useMaskedFmt } from '../common/Money'
 import { investmentApi } from '../../api/investmentApi'
 import { ledgerApi } from '../../api/ledgerApi'
 import { portfolioApi } from '../../api/portfolioApi'
+import { valuationApi } from '../../api/valuationApi'
+import { normalizeApiError } from '../../hooks/errorUtils'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { computeGain, fmtDate, formatMaturity } from '../../lib/fmt'
-import type { DashboardHolding, Instrument, InstrumentOwnership, Transaction } from '../../types/domain'
+import type { DashboardHolding, Instrument, InstrumentOwnership, Transaction, ValuationSnapshot } from '../../types/domain'
 import type { MaturityInfo } from './InstrumentRow'
 
 type Props = {
@@ -116,6 +118,7 @@ export function InstrumentExpandedDetail({ householdId, holding, instrument, mat
   const { members } = useApp()
   const fmt = useMaskedFmt()
   const [txs, setTxs] = useState<Transaction[]>([])
+  const [valuations, setValuations] = useState<ValuationSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
@@ -128,26 +131,31 @@ export function InstrumentExpandedDetail({ householdId, holding, instrument, mat
   const loadHistory = async () => {
     setLoading(true)
     if (investmentId) {
-      const [t, inv] = await Promise.all([
+      const [t, inv, v] = await Promise.all([
         ledgerApi.listTransactionsForInvestment(householdId, investmentId),
         investmentApi.getInvestment(investmentId),
+        valuationApi.listForInvestment(householdId, investmentId),
       ])
       setTxs(t)
+      setValuations(v)
       setOwnerships(inv.member ? [{ id: -1, instrument: instrument.id, member: inv.member, allocation_percent: '100.00' }] : [])
     } else {
-      const [t, o] = await Promise.all([
+      const [t, o, v] = await Promise.all([
         ledgerApi.listTransactionsForInstrument(householdId, instrument.id),
         portfolioApi.listInstrumentOwnerships(instrument.id),
+        valuationApi.listForInstrument(householdId, instrument.id),
       ])
       setTxs(t)
+      setValuations(v)
       setOwnerships(o)
     }
     setLoading(false)
   }
 
+  // market_value in deps: reload after "Update Value" refreshes the dashboard holding.
   useEffect(() => {
     void loadHistory()
-  }, [householdId, instrument.id, investmentId])
+  }, [householdId, instrument.id, investmentId, holding.market_value])
 
   const handleDeleteBuy = async (tx: Transaction) => {
     const label = tx.transaction_type === 'sell' ? 'sell' : 'buy'
@@ -166,33 +174,16 @@ export function InstrumentExpandedDetail({ householdId, holding, instrument, mat
   }
 
   const handleDeleteInstrument = async () => {
-    if (txs.length > 0) {
-      setActionError(investmentId
-        ? 'Delete all buy entries for this fund first, then delete it.'
-        : 'Delete all buy entries for this holding first, then delete the instrument.')
-      return
-    }
-    if (investmentId) {
-      if (!confirm(`Delete "${holding.display_name}"? This removes this fund and any linked details and valuations — every other fund under the shared Mutual Fund instrument is untouched. This cannot be undone.`)) return
-      setDeletingInstrument(true)
-      setActionError('')
-      try {
-        await investmentApi.deleteInvestment(investmentId)
-        await onDeleted()
-      } catch {
-        setActionError('Failed to delete fund.')
-        setDeletingInstrument(false)
-      }
-      return
-    }
-    if (!confirm(`Delete "${instrument.name}"? This removes the instrument and any linked FD/RD details, ownerships, and valuations. This cannot be undone.`)) return
+    const name = investmentId ? holding.display_name : instrument.name
+    if (!confirm(`Delete "${name}" along with its ${txs.length} transaction${txs.length === 1 ? '' : 's'} and ${valuations.length} valuation${valuations.length === 1 ? '' : 's'}? This cannot be undone.`)) return
     setDeletingInstrument(true)
     setActionError('')
     try {
-      await portfolioApi.deleteInstrument(instrument.id)
+      if (investmentId) await investmentApi.purgeInvestment(investmentId)
+      else await portfolioApi.purgeInstrument(instrument.id)
       await onDeleted()
-    } catch {
-      setActionError('Failed to delete instrument.')
+    } catch (e) {
+      setActionError(normalizeApiError(e))
       setDeletingInstrument(false)
     }
   }
@@ -272,6 +263,24 @@ export function InstrumentExpandedDetail({ householdId, holding, instrument, mat
           )
         })}
       </div>
+      <div className="max-h-52 overflow-y-auto border-t border-[var(--border)] px-3 py-2">
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Valuations</p>
+        {loading ? <p className="py-3 text-center text-xs text-[var(--text-muted)]">Loading...</p>
+        : valuations.length === 0 ? <p className="py-3 text-center text-xs text-[var(--text-muted)]">No valuations recorded.</p>
+        : valuations.map((v) => (
+          <div key={v.id} className="flex items-center justify-between border-b border-[var(--border)] py-2 last:border-0">
+            <div>
+              <p className="text-xs font-medium text-[var(--text-2)]">{fmtDate(v.valuation_date)}</p>
+              <p className="text-[10px] uppercase text-[var(--text-muted)]">{v.source}{v.notes ? ` · ${v.notes}` : ''}</p>
+            </div>
+            <p className="text-xs font-semibold text-[var(--text)]">
+              {v.unit_price !== null
+                ? `NAV ₹${parseFloat(v.unit_price).toFixed(4)}`
+                : v.market_value !== null ? <Money value={v.market_value} /> : '—'}
+            </p>
+          </div>
+        ))}
+      </div>
       {editingTx ? (
         <BuyHistoryEditor
           transaction={editingTx}
@@ -295,7 +304,7 @@ export function InstrumentExpandedDetail({ householdId, holding, instrument, mat
           onClick={() => void handleDeleteInstrument()}
           disabled={!canWrite || deletingInstrument || loading}
           className="rounded-xl border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:bg-red-900/15 disabled:opacity-50"
-          title={txs.length > 0 ? 'Delete all buy entries first' : investmentId ? 'Delete fund' : 'Delete instrument'}
+          title={investmentId ? 'Delete fund with its transactions' : 'Delete holding with its transactions'}
         >
           {deletingInstrument ? '…' : '🗑'}
         </button>

@@ -12,6 +12,7 @@ class ValuationSnapshotSerializer(serializers.ModelSerializer):
             'valuation_date',
             'account',
             'instrument',
+            'investment',
             'unit_price',
             'market_value',
             'balance',

@@ -19,6 +19,10 @@ export const investmentApi = {
   async deleteInvestment(id: number) {
     return deleteJson(`/api/investments/${id}/`)
   },
+  /** Delete the fund/stock along with its transactions and valuations. */
+  async purgeInvestment(id: number) {
+    return postJson<{ transactions_deleted: number; valuations_deleted: number }>(`/api/investments/${id}/purge/`, {})
+  },
   /** Get-or-create the household's shared MF/SIP shell Instrument plus an
    * Investment under it for the given fund name/folio — one round trip for
    * "record a mutual fund buy" instead of separately resolving the shell. */

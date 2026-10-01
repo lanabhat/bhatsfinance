@@ -57,6 +57,10 @@ export const portfolioApi = {
   },
   async deleteAccount(id: number) { return deleteJson(`/api/accounts/${id}/`) },
   async deleteInstrument(id: number) { return deleteJson(`/api/instruments/${id}/`) },
+  /** Delete the instrument along with its transactions (valuations/details cascade). */
+  async purgeInstrument(id: number) {
+    return postJson<{ transactions_deleted: number; valuations_deleted: number }>(`/api/instruments/${id}/purge/`, {})
+  },
   async bulkDeleteInstruments(householdId: number, instrumentTypes: string[]) {
     const q = new URLSearchParams({ household_id: String(householdId) })
     for (const t of instrumentTypes) q.append('instrument_type', t)

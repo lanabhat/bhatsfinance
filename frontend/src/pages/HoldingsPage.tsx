@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { postJson } from '../api/http'
 import { investmentApi } from '../api/investmentApi'
+import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
+import { valuationApi } from '../api/valuationApi'
+import { normalizeApiError } from '../hooks/errorUtils'
 import { CategorySection } from '../components/assets/CategorySection'
 import { InstrumentForm } from '../components/assets/InstrumentForm'
 import { InstrumentRow } from '../components/assets/InstrumentRow'
@@ -29,8 +32,8 @@ import type { AssetCategory, BondDetails, DashboardHolding, FDDetails, Instrumen
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
 // ── valuation form ────────────────────────────────────────────────────────────
-function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCancel }: {
-  householdId: number; instrumentId: number; instrumentName: string
+function ValuationForm({ householdId, instrumentId, investmentId, instrumentName, onSave, onCancel }: {
+  householdId: number; instrumentId: number; investmentId?: number | null; instrumentName: string
   onSave: () => void; onCancel: () => void
 }) {
   const today = new Date().toISOString().slice(0, 10)
@@ -45,7 +48,7 @@ function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCa
     setSaving(true); setError('')
     try {
       await postJson('/api/valuations/', {
-        household: householdId, instrument: instrumentId,
+        household: householdId, instrument: instrumentId, investment: investmentId ?? null,
         valuation_date: date,
         unit_price: unitPrice || null,
         market_value: marketValue || null,
@@ -76,7 +79,7 @@ function ValuationForm({ householdId, instrumentId, instrumentName, onSave, onCa
 // ── main page ─────────────────────────────────────────────────────────────────
 type SheetState =
   | { type: 'none' }
-  | { type: 'valuation'; instrumentId: number; instrumentName: string }
+  | { type: 'valuation'; instrumentId: number; investmentId?: number | null; instrumentName: string }
   | { type: 'buy'; instrumentId?: number; investmentId?: number }
   | { type: 'sell'; instrumentId: number; investmentId?: number; holdingName: string; currentQuantity: string | null }
   | { type: 'edit_instrument'; instrument: Instrument }
@@ -103,6 +106,21 @@ type HoldingSortBy = 'value' | 'gain' | 'gainPct' | 'name' | 'invested'
 
 const MF_TYPES = new Set(['mutual_fund', 'sip'])
 const QUANTITY_TRACKED_TYPES = new Set(['equity', 'mutual_fund', 'sip', 'bond'])
+
+// Filler words that differ between import sources without changing the holding.
+// direct/regular and growth/idcw/dividend are deliberately kept: they ARE different holdings.
+const DUP_FILLER_WORDS = new Set(['fund', 'plan', 'option', 'the', 'ltd', 'limited', 'scheme'])
+
+const dupKey = (h: DashboardHolding) => (h.investment_id ? `inv:${h.investment_id}` : `inst:${h.instrument_id}`)
+
+function normaliseHoldingName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w && !DUP_FILLER_WORDS.has(w))
+    .join('')
+}
 
 type ViewMode = 'table' | 'card'
 const VIEW_MODE_KEY = 'holdings:viewMode'
@@ -242,6 +260,116 @@ export function HoldingsPage() {
     [instruments],
   )
 
+  const summary = useMemo(() => {
+    const value = openHoldings.reduce((s, h) => s + parseFloat(h.market_value), 0)
+    const invested = openHoldings.reduce((s, h) => s + parseFloat(h.net_invested), 0)
+    return { value, invested, count: openHoldings.length, ...computeGain(value, invested) }
+  }, [openHoldings])
+
+  const ownerOf = useCallback(
+    (h: DashboardHolding) =>
+      h.investment_id ? (investmentOwnerMap.get(h.investment_id) ?? 'Unassigned') : (ownerMap.get(h.instrument_id) ?? 'Unassigned'),
+    [investmentOwnerMap, ownerMap],
+  )
+
+  // Possible duplicates from repeated imports: same type + owner + normalised name,
+  // or (FDs) same principal/rate/start date. Each group's first entry is the suggested keeper.
+  const duplicateGroups = useMemo(() => {
+    const groups: DashboardHolding[][] = []
+    const grouped = new Set<string>()
+    const folioOf = (h: DashboardHolding) => (h.investment_id ? investmentsById.get(h.investment_id)?.folio_no ?? '' : '')
+
+    const byName = new Map<string, DashboardHolding[]>()
+    for (const h of activeHoldings) {
+      const key = `${h.instrument_type}|${ownerOf(h)}|${normaliseHoldingName(h.display_name)}`
+      const list = byName.get(key)
+      if (list) list.push(h); else byName.set(key, [h])
+    }
+    for (const list of byName.values()) {
+      if (list.length < 2) continue
+      // Same fund in separate, distinct folios is legitimate — not a duplicate.
+      const folios = list.map(folioOf)
+      if (folios.every((f) => f) && new Set(folios).size === folios.length) continue
+      groups.push(list)
+      list.forEach((h) => grouped.add(dupKey(h)))
+    }
+
+    const fdKeyByInstrument = new Map<number, string>()
+    for (const d of fdDetails) fdKeyByInstrument.set(d.instrument, `${parseFloat(d.principal)}|${parseFloat(d.annual_rate)}|${d.investment_date}`)
+    const byFd = new Map<string, DashboardHolding[]>()
+    for (const h of activeHoldings) {
+      if (h.investment_id || grouped.has(dupKey(h))) continue
+      const fdKey = fdKeyByInstrument.get(h.instrument_id)
+      if (!fdKey) continue
+      const key = `${ownerOf(h)}|${fdKey}`
+      const list = byFd.get(key)
+      if (list) list.push(h); else byFd.set(key, [h])
+    }
+    for (const list of byFd.values()) {
+      if (list.length >= 2) groups.push(list)
+    }
+
+    // Suggested keeper first: has a folio (richer import), then oldest record.
+    const recordId = (h: DashboardHolding) => h.investment_id ?? h.instrument_id
+    return groups.map((g) => [...g].sort((a, b) => (folioOf(b) ? 1 : 0) - (folioOf(a) ? 1 : 0) || recordId(a) - recordId(b)))
+  }, [activeHoldings, investmentsById, ownerOf, fdDetails])
+
+  const duplicateKeys = useMemo(() => new Set(duplicateGroups.flat().map(dupKey)), [duplicateGroups])
+
+  const [purgingKeys, setPurgingKeys] = useState<Set<string>>(new Set())
+  const [selectedDupKeys, setSelectedDupKeys] = useState<Set<string>>(new Set())
+  // Only count selections that still exist — deleted holdings drop out of duplicateGroups.
+  const selectedDups = useMemo(
+    () => duplicateGroups.flat().filter((h) => selectedDupKeys.has(dupKey(h))),
+    [duplicateGroups, selectedDupKeys],
+  )
+  const toggleDupSelected = (h: DashboardHolding) => {
+    setSelectedDupKeys((prev) => {
+      const next = new Set(prev)
+      const k = dupKey(h)
+      if (next.has(k)) next.delete(k); else next.add(k)
+      return next
+    })
+  }
+  const selectSuggestedDups = () => setSelectedDupKeys(new Set(duplicateGroups.flatMap((g) => g.slice(1).map(dupKey))))
+
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  const countLinked = async (h: DashboardHolding) => {
+    const [txs, vals] = h.investment_id
+      ? await Promise.all([ledgerApi.listTransactionsForInvestment(householdId, h.investment_id), valuationApi.listForInvestment(householdId, h.investment_id)])
+      : await Promise.all([ledgerApi.listTransactionsForInstrument(householdId, h.instrument_id), valuationApi.listForInstrument(householdId, h.instrument_id)])
+    return { txs: txs.length, vals: vals.length }
+  }
+  const purgeOne = (h: DashboardHolding) =>
+    h.investment_id ? investmentApi.purgeInvestment(h.investment_id) : portfolioApi.purgeInstrument(h.instrument_id)
+
+  const purgeHoldings = async (targets: DashboardHolding[]) => {
+    if (targets.length === 0) return
+    setPurgingKeys(new Set(targets.map(dupKey)))
+    try {
+      const counts = await Promise.all(targets.map(countLinked))
+      const txs = counts.reduce((s, c) => s + c.txs, 0)
+      const vals = counts.reduce((s, c) => s + c.vals, 0)
+      const what = targets.length === 1 ? `"${targets[0].display_name}"` : plural(targets.length, 'holding')
+      const targetKeys = new Set(targets.map(dupKey))
+      const wiped = duplicateGroups.filter((g) => g.every((h) => targetKeys.has(dupKey(h)))).map((g) => g[0].display_name)
+      const wipedNote = wiped.length > 0 ? `\n\nNo copy will be kept of: ${wiped.join(', ')}.` : ''
+      if (!confirm(`Delete ${what} along with ${plural(txs, 'transaction')} and ${plural(vals, 'valuation')}? This cannot be undone.${wipedNote}`)) return
+
+      const failures: string[] = []
+      for (const h of targets) {
+        try { await purgeOne(h) } catch (e) { failures.push(`${h.display_name}: ${normalizeApiError(e)}`) }
+      }
+      setSelectedDupKeys(new Set())
+      await refreshDashboard(); await loadInstruments(); await loadInvestments()
+      if (failures.length > 0) alert(`Some holdings could not be deleted:\n${failures.join('\n')}`)
+    } catch (e) {
+      alert(normalizeApiError(e))
+    } finally {
+      setPurgingKeys(new Set())
+    }
+  }
+
   const resolveInstrument = (h: DashboardHolding): Instrument =>
     instruments.find((i) => i.id === h.instrument_id) ?? {
       id: h.instrument_id,
@@ -305,7 +433,7 @@ export function HoldingsPage() {
           collapsed={
             <InstrumentRow instrument={inst} holding={h} category={cat} maturities={maturities}
               onBuy={canWrite ? () => setSheet({ type: 'buy', instrumentId: inst.id, investmentId: h.investment_id ?? undefined }) : undefined}
-              onUpdateValue={canWrite ? () => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name }) : undefined}
+              onUpdateValue={canWrite ? () => setSheet({ type: 'valuation', instrumentId: inst.id, investmentId: h.investment_id, instrumentName: h.display_name }) : undefined}
             />
           }
         >
@@ -316,7 +444,7 @@ export function HoldingsPage() {
             maturities={maturities}
             onBuy={() => setSheet({ type: 'buy', instrumentId: inst.id, investmentId: h.investment_id ?? undefined })}
             onSell={() => setSheet({ type: 'sell', instrumentId: inst.id, investmentId: h.investment_id ?? undefined, holdingName: h.display_name, currentQuantity: h.quantity })}
-            onUpdateValue={() => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name })}
+            onUpdateValue={() => setSheet({ type: 'valuation', instrumentId: inst.id, investmentId: h.investment_id, instrumentName: h.display_name })}
             onEdit={() => openEdit(h, inst)}
             onTransactionsChanged={async () => { await refreshDashboard(); await loadInstruments(); await loadInvestments() }}
             onDeleted={async () => { await refreshDashboard(); await loadInstruments(); await loadInvestments() }}
@@ -561,7 +689,12 @@ export function HoldingsPage() {
               {TYPE_ICONS[inst.instrument_type] ?? '💼'}
             </span>
             <div className="min-w-0">
-              <span className="block truncate text-sm font-medium text-[var(--text)]">{h.display_name}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="truncate text-sm font-medium text-[var(--text)]">{h.display_name}</span>
+                {duplicateKeys.has(dupKey(h)) && (
+                  <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" title="Possible duplicate — see the panel above">dup</span>
+                )}
+              </span>
               {nearestMaturity && (
                 <span className="block truncate text-[11px] text-[var(--text-muted)]">
                   {nearestMaturity.rate}% · {formatMaturity(nearestMaturity.date)}{maturities && maturities.length > 1 ? ` (+${maturities.length - 1} more)` : ''}
@@ -658,7 +791,7 @@ export function HoldingsPage() {
               className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
               Sell
             </button>
-            <button type="button" onClick={() => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name })} disabled={!canWrite}
+            <button type="button" onClick={() => setSheet({ type: 'valuation', instrumentId: inst.id, investmentId: h.investment_id, instrumentName: h.display_name })} disabled={!canWrite}
               className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50">
               Update Value
             </button>
@@ -693,7 +826,7 @@ export function HoldingsPage() {
           maturities={maturities}
           onBuy={() => setSheet({ type: 'buy', instrumentId: inst.id, investmentId: h.investment_id ?? undefined })}
           onSell={() => setSheet({ type: 'sell', instrumentId: inst.id, investmentId: h.investment_id ?? undefined, holdingName: h.display_name, currentQuantity: h.quantity })}
-          onUpdateValue={() => setSheet({ type: 'valuation', instrumentId: inst.id, instrumentName: inst.name })}
+          onUpdateValue={() => setSheet({ type: 'valuation', instrumentId: inst.id, investmentId: h.investment_id, instrumentName: h.display_name })}
           onEdit={() => openEdit(h, inst)}
           onTransactionsChanged={async () => { await refreshDashboard(); await loadInstruments(); await loadInvestments() }}
           onDeleted={async () => { await refreshDashboard(); await loadInstruments(); await loadInvestments() }}
@@ -804,6 +937,108 @@ export function HoldingsPage() {
         </div>
       </div>
 
+      {!holdingsLoading && duplicateGroups.length > 0 && (
+        <details className="group rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/15">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+              Possible duplicates ({duplicateGroups.length})
+            </p>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 text-amber-600 transition-transform group-open:rotate-90">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 4l4 4-4 4" />
+            </svg>
+          </summary>
+          <div className="grid gap-3 border-t border-amber-200 px-4 py-3 dark:border-amber-800/50">
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              These look like the same holding imported more than once, which double-counts it in your totals.
+              Keep one and delete the rest — deleting removes the holding with its transactions and valuations.
+            </p>
+            {canWrite && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={selectSuggestedDups}
+                  className="rounded-lg border border-amber-300 bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30">
+                  Select suggested
+                </button>
+                {selectedDups.length > 0 && (
+                  <>
+                    <button type="button" onClick={() => setSelectedDupKeys(new Set())}
+                      className="text-xs text-amber-800 hover:underline dark:text-amber-300">
+                      Clear
+                    </button>
+                    <button type="button" disabled={purgingKeys.size > 0} onClick={() => void purgeHoldings(selectedDups)}
+                      className="ml-auto rounded-lg bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50">
+                      {purgingKeys.size > 0 ? 'Deleting…' : `Delete selected (${selectedDups.length})`}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            {duplicateGroups.map((group) => (
+              <div key={group.map(dupKey).join(',')} className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                {group.map((h, i) => {
+                  const folio = h.investment_id ? investmentsById.get(h.investment_id)?.folio_no : ''
+                  return (
+                    <div key={dupKey(h)} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--border)] px-3 py-2 last:border-0">
+                      {canWrite && (
+                        <input
+                          type="checkbox"
+                          checked={selectedDupKeys.has(dupKey(h))}
+                          onChange={() => toggleDupSelected(h)}
+                          aria-label={`Select ${h.display_name}`}
+                          className="h-4 w-4 shrink-0 rounded border-[var(--border)] text-primary-600 focus:ring-primary-500"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[var(--text)]">{h.display_name}</p>
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          {ownerOf(h)}{folio ? ` · Folio ${folio}` : ''} · Invested <Money value={h.net_invested} /> · Value <Money value={h.market_value} />
+                        </p>
+                      </div>
+                      {i === 0 ? (
+                        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Keep</span>
+                      ) : (
+                        <span className="shrink-0 text-[10px] font-medium text-amber-700 dark:text-amber-300">Suggested: delete</span>
+                      )}
+                      <button
+                        type="button"
+                        disabled={!canWrite || purgingKeys.size > 0}
+                        onClick={() => void purgeHoldings([h])}
+                        className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:hover:bg-red-900/20"
+                      >
+                        {purgingKeys.has(dupKey(h)) ? 'Deleting…' : 'Delete'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {!holdingsLoading && openHoldings.length > 0 && (
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-2)] sm:grid-cols-4">
+          {[
+            { label: 'Current Value', node: <Money value={summary.value} /> },
+            { label: 'Invested', node: <Money value={summary.invested} /> },
+            {
+              label: 'Gain / Loss',
+              node: (
+                <span className={summary.gain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
+                  {summary.gain >= 0 ? '+' : ''}<Money value={summary.gain} />
+                  {summary.gainPct !== null && <span className="text-xs font-medium"> ({summary.gain >= 0 ? '+' : ''}{summary.gainPct.toFixed(1)}%)</span>}
+                </span>
+              ),
+            },
+            { label: 'Holdings', node: summary.count },
+          ].map((s) => (
+            <div key={s.label} className="bg-[var(--surface)] px-3 py-2.5 text-center">
+              <p className="text-base font-bold text-[var(--text)] tabular-nums">{s.node}</p>
+              <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {holdingsLoading ? (
         <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
       ) : activeHoldings.length === 0 ? (
@@ -913,7 +1148,7 @@ export function HoldingsPage() {
       )}
       {sheet.type === 'valuation' && (
         <Sheet title="Update Value" onClose={close}>
-          <ValuationForm householdId={householdId} instrumentId={sheet.instrumentId} instrumentName={sheet.instrumentName} onSave={afterValuation} onCancel={close} />
+          <ValuationForm householdId={householdId} instrumentId={sheet.instrumentId} investmentId={sheet.investmentId} instrumentName={sheet.instrumentName} onSave={afterValuation} onCancel={close} />
         </Sheet>
       )}
       {sheet.type === 'edit_instrument' && (

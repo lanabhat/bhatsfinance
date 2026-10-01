@@ -75,6 +75,29 @@ class InstrumentViewSet(viewsets.ModelViewSet):
     serializer_class = InstrumentSerializer
     filterset_fields = ['household', 'instrument_type', 'is_active']
 
+    @action(detail=True, methods=['post'], url_path='purge')
+    def purge(self, request, pk=None):
+        """Delete the instrument together with its transactions — a plain delete
+        would SET_NULL them, leaving orphaned buys behind. Valuations, FD/bond
+        details and ownerships cascade on their own."""
+        from django.db import transaction as db_transaction
+        from ledger.models import Transaction
+        from valuations.models import ValuationSnapshot
+
+        instrument = self.get_object()
+        if instrument.investments.exists():
+            return Response(
+                {'detail': 'This is a shared instrument holding several funds/stocks — delete those individually instead.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with db_transaction.atomic():
+            valuations_deleted = ValuationSnapshot.objects.filter(instrument=instrument).count()
+            txs = Transaction.objects.filter(instrument=instrument)
+            transactions_deleted = txs.count()
+            txs.delete()
+            instrument.delete()
+        return Response({'transactions_deleted': transactions_deleted, 'valuations_deleted': valuations_deleted})
+
 
 class BulkDeleteInstrumentsView(APIView):
     """
@@ -135,6 +158,26 @@ class InvestmentViewSet(viewsets.ModelViewSet):
         if household_id:
             qs = qs.filter(instrument__household_id=household_id)
         return qs
+
+    @action(detail=True, methods=['post'], url_path='purge')
+    def purge(self, request, pk=None):
+        """Delete the fund/stock together with its transactions and valuations.
+        A plain delete would SET_NULL its transactions onto the shared shell
+        instrument, where compute_holdings shows them as a phantom holding."""
+        from django.db import transaction as db_transaction
+        from ledger.models import Transaction
+        from valuations.models import ValuationSnapshot
+
+        investment = self.get_object()
+        with db_transaction.atomic():
+            txs = Transaction.objects.filter(investment=investment)
+            valuations = ValuationSnapshot.objects.filter(investment=investment)
+            transactions_deleted = txs.count()
+            valuations_deleted = valuations.count()
+            txs.delete()
+            valuations.delete()
+            investment.delete()
+        return Response({'transactions_deleted': transactions_deleted, 'valuations_deleted': valuations_deleted})
 
 
 class MutualFundInvestmentView(APIView):

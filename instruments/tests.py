@@ -436,6 +436,7 @@ class SplitSharedEquityInstrumentsMigrationTests(TestCase):
         migration = self._import_migration()
         migration.migrate_forward(django.apps.apps, None)
         self.assertEqual(Instrument.objects.filter(household=self.household).count(), 1)
+        self.assertFalse(Instrument.objects.filter(household=self.household, name='Equity').exists())
 
 
 class BulkDeleteInstrumentsViewTests(TestCase):
@@ -474,4 +475,73 @@ class BulkDeleteInstrumentsViewTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()['deleted'], 0)
         self.assertTrue(Instrument.objects.filter(id=other_fd.id).exists())
-        self.assertFalse(Instrument.objects.filter(household=self.household, name='Equity').exists())
+
+
+class PurgeTests(TestCase):
+    """Purge = delete a holding with its transactions/valuations. A plain delete
+    SET_NULLs transactions, which for a fund leaves a phantom shell holding."""
+
+    def setUp(self):
+        from datetime import date
+        from ledger.models import Transaction
+        from valuations.models import ValuationSnapshot
+
+        self.household = Household.objects.create(name='Pillai Family')
+        self.client = _approved_client(self.household)
+        self.shell = get_or_create_mf_shell(self.household)
+        self.fund_keep = Investment.objects.create(instrument=self.shell, name='Fund Keep')
+        self.fund_dup = Investment.objects.create(instrument=self.shell, name='Fund Dup')
+        for inv in (self.fund_keep, self.fund_dup):
+            Transaction.objects.create(
+                household=self.household, instrument=self.shell, investment=inv, tx_date=date(2025, 1, 10),
+                amount=Decimal('1000.00'), quantity=Decimal('10'), direction='outflow', transaction_type='buy',
+            )
+            ValuationSnapshot.objects.create(
+                household=self.household, instrument=self.shell, investment=inv,
+                valuation_date=date(2025, 6, 1), unit_price=Decimal('120'),
+            )
+
+    def test_purge_investment_removes_its_data_only(self):
+        from datetime import date
+        from insights.services import compute_holdings
+        from ledger.models import Transaction
+        from valuations.models import ValuationSnapshot
+
+        response = self.client.post(f'/api/investments/{self.fund_dup.id}/purge/')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json(), {'transactions_deleted': 1, 'valuations_deleted': 1})
+        self.assertFalse(Investment.objects.filter(id=self.fund_dup.id).exists())
+        self.assertEqual(Transaction.objects.filter(investment=self.fund_keep).count(), 1)
+        self.assertEqual(ValuationSnapshot.objects.filter(investment=self.fund_keep).count(), 1)
+
+        holdings = compute_holdings(self.household.id, date(2025, 7, 1))
+        self.assertEqual([h['investment_id'] for h in holdings], [self.fund_keep.id])
+
+    def test_purge_fd_instrument_removes_transactions_and_details(self):
+        from datetime import date
+        from instruments.models import FDDetails
+        from ledger.models import Transaction
+
+        fd = Instrument.objects.create(household=self.household, name='SBI FD 999', instrument_type='fd')
+        tx = Transaction.objects.create(
+            household=self.household, instrument=fd, tx_date=date(2025, 1, 10),
+            amount=Decimal('50000.00'), direction='outflow', transaction_type='deposit',
+        )
+        FDDetails.objects.create(
+            instrument=fd, funding_transaction=tx, account_number='999', principal=Decimal('50000'),
+            annual_rate=Decimal('7'), investment_date=date(2025, 1, 10), maturity_date=date(2026, 1, 10),
+        )
+        response = self.client.post(f'/api/instruments/{fd.id}/purge/')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['transactions_deleted'], 1)
+        self.assertFalse(Instrument.objects.filter(id=fd.id).exists())
+        self.assertFalse(Transaction.objects.filter(id=tx.id).exists())
+        self.assertFalse(FDDetails.objects.filter(account_number='999').exists())
+
+    def test_purge_shell_with_investments_is_refused(self):
+        from ledger.models import Transaction
+
+        response = self.client.post(f'/api/instruments/{self.shell.id}/purge/')
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertTrue(Instrument.objects.filter(id=self.shell.id).exists())
+        self.assertEqual(Transaction.objects.filter(instrument=self.shell).count(), 2)
