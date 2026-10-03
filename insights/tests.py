@@ -695,3 +695,62 @@ class InactiveInstrumentExclusionTests(TestCase):
         xirr_household = compute_xirr(self.household.id, date(2026, 1, 10))
         self.assertIsNotNone(xirr_active_only)
         self.assertIsNotNone(xirr_household)
+
+
+class HoldingsHistoryPerFundTests(TestCase):
+    """Two funds under the shared Mutual Fund shell must each be priced with their
+    own NAV — not all units summed and priced with one fund's NAV."""
+
+    def setUp(self):
+        self.household = Household.objects.create(name='Rao Family')
+        self.shell = get_or_create_mf_shell(self.household)
+        self.cheap = Investment.objects.create(instrument=self.shell, name='Cheap NAV Fund')
+        self.pricey = Investment.objects.create(instrument=self.shell, name='Pricey NAV Fund')
+        for inv, units, nav in ((self.cheap, '100', '10'), (self.pricey, '10', '500')):
+            Transaction.objects.create(
+                household=self.household, instrument=self.shell, investment=inv, tx_date=date(2026, 1, 5),
+                amount=Decimal(units) * Decimal(nav), quantity=Decimal(units),
+                direction=Transaction.Direction.OUTFLOW, transaction_type=Transaction.TransactionType.BUY,
+            )
+            ValuationSnapshot.objects.create(
+                household=self.household, instrument=self.shell, investment=inv,
+                valuation_date=date(2026, 2, 1), unit_price=Decimal(nav) * Decimal('1.1'),
+            )
+
+    def test_each_fund_valued_with_its_own_nav(self):
+        from insights.services import compute_holdings_history
+        series = compute_holdings_history(self.household.id, instrument_type='mutual_fund')
+        point = next(p for p in series if p['date'] == '2026-02-01')
+        # 100 units x 11 + 10 units x 550 = 1100 + 5500
+        self.assertAlmostEqual(point['current'], 6600.0, places=2)
+        self.assertAlmostEqual(point['invested'], 6000.0, places=2)
+
+
+class ComputeAttentionTests(TestCase):
+    def setUp(self):
+        self.household = Household.objects.create(name='Nair Family')
+        self.shell = get_or_create_mf_shell(self.household)
+        self.fund = Investment.objects.create(instrument=self.shell, name='Axis Midcap Direct Growth')
+        Transaction.objects.create(
+            household=self.household, instrument=self.shell, investment=self.fund, tx_date=date(2026, 1, 5),
+            amount=Decimal('1000'), quantity=Decimal('10'),
+            direction=Transaction.Direction.OUTFLOW, transaction_type=Transaction.TransactionType.BUY,
+        )
+
+    def test_counts_unvalued_unlinked_and_duplicates(self):
+        from insights.services import compute_attention
+        # Same fund, same owner, no folio on either — a likely duplicate import.
+        Investment.objects.create(instrument=self.shell, name='AXIS MIDCAP - DIRECT GROWTH')
+        result = compute_attention(self.household.id, date(2026, 10, 2))
+        self.assertEqual(result['never_valued'], 1)
+        self.assertEqual(result['unlinked_funds'], 2)
+        self.assertEqual(result['duplicate_groups'], 1)
+
+    def test_old_valuation_counts_as_stale(self):
+        from insights.services import compute_attention
+        ValuationSnapshot.objects.create(
+            household=self.household, instrument=self.shell, investment=self.fund,
+            valuation_date=date(2026, 6, 1), unit_price=Decimal('110'),
+        )
+        result = compute_attention(self.household.id, date(2026, 10, 2))
+        self.assertEqual((result['stale_holdings'], result['never_valued']), (1, 0))

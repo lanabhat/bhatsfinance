@@ -1,5 +1,5 @@
-import { deleteJson, getJson, postJson, toQueryString, unwrapList } from './http'
-import type { ApiListResponse, ExternalFund, FundComparisonPayload, MfApiSearchResult } from '../types/domain'
+import { deleteJson, getJson, postJson, toQueryString } from './http'
+import type { FundComparisonPayload, FundMatchSuggestion, FundRefreshResult, MfApiSearchResult } from '../types/domain'
 
 export const fundDataApi = {
   search: async (query: string): Promise<MfApiSearchResult[]> => {
@@ -8,14 +8,18 @@ export const fundDataApi = {
     return data.results
   },
 
-  listLinks: async (instrumentId?: number): Promise<ExternalFund[]> => {
-    const q = toQueryString({ instrument: instrumentId })
-    const data = await getJson<ApiListResponse<ExternalFund>>(`/api/external-funds/?${q}`)
-    return unwrapList(data)
+  /** Suggested NAV scheme for every fund not yet linked. Slow-ish: searches mfapi.in per fund. */
+  matchSuggestions: async (householdId: number): Promise<FundMatchSuggestion[]> => {
+    const data = await getJson<{ suggestions: FundMatchSuggestion[] }>(`/api/fund-data/match-suggestions?${toQueryString({ household_id: householdId })}`)
+    return data.suggestions
   },
 
-  link: (payload: { instrument: number; mfapi_scheme_code: string; scheme_name: string; fund_house: string }): Promise<ExternalFund> =>
-    postJson('/api/external-funds/', payload),
+  linkBulk: (householdId: number, links: { investment: number; scheme_code: string; scheme_name: string }[]): Promise<{ linked: number }> =>
+    postJson('/api/fund-data/link-bulk', { household_id: householdId, links }),
+
+  /** Fetch latest NAVs for linked funds and value them now. */
+  refresh: (householdId: number): Promise<FundRefreshResult> =>
+    postJson('/api/fund-data/refresh', { household_id: householdId }),
 
   unlink: (id: number): Promise<void> =>
     deleteJson(`/api/external-funds/${id}/`),

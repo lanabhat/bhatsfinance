@@ -31,6 +31,96 @@ class FundSearchView(APIView):
         return Response({'results': results[:25]})
 
 
+class FundMatchSuggestionsView(APIView):
+    """Suggested mfapi.in scheme for every MF/SIP fund not yet linked to a NAV source.
+    Nothing is linked here — the user confirms via FundLinkBulkView."""
+
+    def get(self, request):
+        from functools import lru_cache
+
+        from fund_data.matching import suggest_scheme
+        from instruments.models import Instrument, Investment
+
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        unlinked = (
+            Investment.objects
+            .filter(
+                instrument__household_id=household_id,
+                instrument__instrument_type__in=[Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP],
+                instrument__is_active=True,
+                external_fund__isnull=True,
+            )
+            .select_related('member')
+            .order_by('name', 'id')
+        )
+        cached_search = lru_cache(maxsize=None)(search_schemes)
+        suggestions_by_name: dict[str, dict] = {}
+        rows = []
+        for inv in unlinked:
+            if inv.name not in suggestions_by_name:
+                suggestions_by_name[inv.name] = suggest_scheme(inv.name, search=cached_search)
+            rows.append({
+                'investment_id': inv.id,
+                'name': inv.name,
+                'folio_no': inv.folio_no,
+                'member_name': inv.member.full_name if inv.member else None,
+                **suggestions_by_name[inv.name],
+            })
+        return Response({'suggestions': rows})
+
+
+class FundLinkBulkView(APIView):
+    """Link several funds to their confirmed mfapi.in schemes in one call.
+    Body: {"household_id": N, "links": [{"investment": id, "scheme_code": "120505", "scheme_name": "..."}]}"""
+
+    def post(self, request):
+        from instruments.models import Investment
+
+        household_id = request.data.get('household_id')
+        links = request.data.get('links') or []
+        if not household_id or not isinstance(links, list) or not links:
+            return Response({'detail': 'household_id and a non-empty links list are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        investments = {
+            inv.id: inv for inv in Investment.objects.filter(
+                instrument__household_id=household_id, id__in=[l.get('investment') for l in links],
+            )
+        }
+        from django.db import transaction
+
+        linked = 0
+        with transaction.atomic():
+            for link in links:
+                inv = investments.get(link.get('investment'))
+                scheme_code = str(link.get('scheme_code') or '').strip()
+                if inv is None or not scheme_code:
+                    continue
+                ExternalFund.objects.update_or_create(
+                    investment=inv,
+                    defaults={'mfapi_scheme_code': scheme_code, 'scheme_name': str(link.get('scheme_name') or '')[:255]},
+                )
+                linked += 1
+        return Response({'linked': linked})
+
+
+class FundRefreshView(APIView):
+    """Pull the latest NAVs for a household's linked funds and value them now —
+    the on-demand version of the daily_refresh command's fund steps."""
+
+    def post(self, request):
+        from fund_data.navs import sync_navs, write_nav_snapshots
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        synced = sync_navs(household_id=int(household_id), include_benchmarks=False, log=lambda *_: None)
+        valued = write_nav_snapshots(household_id=int(household_id))
+        return Response({**synced, **valued})
+
+
 class FundComparisonView(APIView):
     """One row per MF/SIP fund (an Investment under the household's shared
     "Mutual Fund" Instrument shell) or equity holding (still its own

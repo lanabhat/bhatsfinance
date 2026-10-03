@@ -9,6 +9,7 @@ import { normalizeApiError } from '../hooks/errorUtils'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { DataTable } from '../components/ui/DataTable'
 import type { DataTableColumn } from '../components/ui/DataTable'
+import { LabeledSelect } from '../components/ui/LabeledSelect'
 import type { InsurancePolicy, OptionItem, VehicleClaim } from '../types/domain'
 
 const POLICY_TYPE_OPTIONS: OptionItem[] = [
@@ -314,17 +315,12 @@ export function InsurancePage({ householdId, memberOptions, accountOptions, inst
           >
             Import CSV
           </a>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={viewMode === 'card'}
-            onClick={() => changeViewMode(viewMode === 'table' ? 'card' : 'table')}
-            title={viewMode === 'table' ? 'Switch to Card view' : 'Switch to Table view'}
-            className="flex items-center gap-2 rounded-full bg-[var(--surface-2)] px-1 py-1 text-xs font-medium text-[var(--text-muted)]"
-          >
-            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'table' ? 'bg-primary-600 text-white' : ''}`}>Table</span>
-            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'card' ? 'bg-primary-600 text-white' : ''}`}>Card</span>
-          </button>
+          <LabeledSelect
+            label="View"
+            value={viewMode}
+            options={[{ value: 'table', label: 'Table' }, { value: 'card', label: 'Card' }]}
+            onChange={(v) => changeViewMode(v as ViewMode)}
+          />
           {canWrite && (
             <button
               type="button"

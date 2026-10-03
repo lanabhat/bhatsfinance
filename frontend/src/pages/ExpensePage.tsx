@@ -14,6 +14,10 @@ import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { normalizeApiError } from '../hooks/errorUtils'
 import type { ExpenseCategory, Tag, Transaction, UnmappedExpenseInfo, OptionItem } from '../types/domain'
 import { ledgerApi } from '../api/ledgerApi'
+import type { TransactionSummary } from '../api/ledgerApi'
+import { useFilterState } from '../hooks/useFilters'
+import type { FilterField } from '../hooks/useFilters'
+import { FilterBar } from '../components/ui/FilterBar'
 import { tagApi } from '../api/tagApi'
 
 type Props = {
@@ -68,9 +72,10 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   const [tableLoading, setTableLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [filterCategory, setFilterCategory] = useState('')
-  const [filterMember, setFilterMember] = useState('')
-  const [filterTags, setFilterTags] = useState<number[]>([])
+  // Category / member / account / tags live in the filter bar (several values each).
+  const [txFilters, setTxFilters] = useFilterState('transactions')
+  const filtersKey = JSON.stringify(txFilters)
+  const [summary, setSummary] = useState<TransactionSummary | null>(null)
   const [amountMin, setAmountMin] = useState('')
   const [amountMax, setAmountMax] = useState('')
   const [dateAfter, setDateAfter] = useState('')
@@ -134,7 +139,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
     try {
       const { deleted } = await tagApi.cleanup(householdId)
       setTagsCleanupMessage(deleted > 0 ? `Removed ${deleted} unused tag${deleted === 1 ? '' : 's'}.` : 'No unused tags found.')
-      setFilterTags(prev => prev.filter(id => allTags.some(t => t.id === id)))
+      setTxFilters({ ...txFilters, tags: (txFilters.tags ?? []).filter(id => allTags.some(t => String(t.id) === id)) })
       await loadTags()
     } catch {
       setTagsCleanupMessage('Cleanup failed.')
@@ -159,15 +164,16 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   // Reset to page 1 whenever a filter/search/order changes
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, filterCategory, filterMember, filterTags, amountMin, amountMax, dateAfter, dateBefore, ordering])
+  }, [debouncedSearch, filtersKey, amountMin, amountMax, dateAfter, dateBefore, ordering])
 
   const tableParams = () => ({
     householdId,
     classification: 'spend' as const,
     search: debouncedSearch || undefined,
-    member: filterMember ? Number(filterMember) : undefined,
-    spendCategory: filterCategory || undefined,
-    tags: filterTags.length > 0 ? filterTags : undefined,
+    memberIn: txFilters.member,
+    accountIn: txFilters.account,
+    spendCategoryIn: txFilters.category,
+    tags: txFilters.tags?.map(Number),
     amountMin: amountMin ? Number(amountMin) : undefined,
     amountMax: amountMax ? Number(amountMax) : undefined,
     txDateAfter: dateAfter || undefined,
@@ -208,13 +214,21 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   useEffect(() => {
     void loadTable()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [householdId, page, debouncedSearch, filterCategory, filterMember, filterTags, amountMin, amountMax, dateAfter, dateBefore, ordering, groupBy])
+  }, [householdId, page, debouncedSearch, filtersKey, amountMin, amountMax, dateAfter, dateBefore, ordering, groupBy])
+
+  // Totals across every matching spend, not just the visible page.
+  useEffect(() => {
+    let active = true
+    ledgerApi.summarizeTransactions(tableParams())
+      .then((s) => { if (active) setSummary(s) })
+      .catch(() => { if (active) setSummary(null) })
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [householdId, debouncedSearch, filtersKey, amountMin, amountMax, dateAfter, dateBefore])
 
   const resetTableFilters = () => {
     setSearch('')
-    setFilterCategory('')
-    setFilterMember('')
-    setFilterTags([])
+    setTxFilters({})
     setAmountMin('')
     setAmountMax('')
     setDateAfter('')
@@ -224,11 +238,18 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
   }
 
   const hasActiveTableFilters = !!(
-    search || filterCategory || filterMember || filterTags.length > 0 || amountMin || amountMax ||
+    search || Object.keys(txFilters).length > 0 || amountMin || amountMax ||
     dateAfter || dateBefore || ordering !== '-tx_date' || groupBy !== 'none'
   )
 
   const tagName = useMemo(() => Object.fromEntries(allTags.map(t => [t.id, t.name])), [allTags])
+
+  const txFilterFields = useMemo<FilterField[]>(() => [
+    { key: 'category', label: 'Category', options: categories.map(c => ({ value: c.key, label: c.label })) },
+    { key: 'member', label: 'Member', options: memberOptions.map(m => ({ value: String(m.id), label: m.label })) },
+    { key: 'account', label: 'Account', options: accountOptions.map(a => ({ value: String(a.id), label: a.label })) },
+    { key: 'tags', label: 'Tags', options: allTags.map(t => ({ value: String(t.id), label: `#${t.name}` })) },
+  ], [categories, memberOptions, accountOptions, allTags])
 
   // Client-side grouping of the (already filtered) rows in tableRows.
   const groupedRows = useMemo(() => {
@@ -557,21 +578,8 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
             onChange={e => setSearch(e.target.value)}
             className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)]"
           />
+          <FilterBar fields={txFilterFields} value={txFilters} onChange={setTxFilters} />
           <div className="flex flex-wrap items-end gap-2">
-            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-              Category
-              <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]">
-                <option value="">All</option>
-                {categories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
-              </select>
-            </label>
-            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-              Member
-              <select value={filterMember} onChange={e => setFilterMember(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]">
-                <option value="">All</option>
-                {memberOptions.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </select>
-            </label>
             <label className="grid gap-1 text-xs text-[var(--text-muted)]">
               From
               <input type="date" value={dateAfter} onChange={e => setDateAfter(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]" />
@@ -600,9 +608,16 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
               </button>
             )}
           </div>
-          {allTags.length > 0 && (
+          {summary && (
+            <p className="text-xs text-[var(--text-muted)]">
+              {summary.count.toLocaleString('en-IN')} spend{summary.count === 1 ? '' : 's'}
+              {hasActiveTableFilters ? ' matching' : ''} · total <Money value={summary.outflow} className="font-semibold text-[var(--text)]" />
+              {parseFloat(summary.inflow) > 0 && <> · refunds <Money value={summary.inflow} /></>}
+            </p>
+          )}
+          {allTags.length > 0 && canWrite && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-[var(--text-muted)]">Tags:</span>
+              <span className="text-xs text-[var(--text-muted)]">Tag options</span>
               {canWrite && (
                 <div className="relative">
                   <button
@@ -631,23 +646,6 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
                   )}
                 </div>
               )}
-              {allTags.map(t => {
-                const selected = filterTags.includes(t.id)
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setFilterTags(prev => selected ? prev.filter(x => x !== t.id) : [...prev, t.id])}
-                    className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-all ${
-                      selected
-                        ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
-                        : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'
-                    }`}
-                  >
-                    #{t.name}
-                  </button>
-                )
-              })}
             </div>
           )}
           {tagsCleanupMessage && <p className="text-xs text-[var(--text-2)]">{tagsCleanupMessage}</p>}

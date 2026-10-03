@@ -14,6 +14,10 @@ import type { DataTableColumn } from '../components/ui/DataTable'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import type { Account, AccountOwnership } from '../types/domain'
+import { applyFilters, filterFieldsFrom, useFilterState } from '../hooks/useFilters'
+import type { FilterAccessor } from '../hooks/useFilters'
+import { FilterBar } from '../components/ui/FilterBar'
+import { LabeledSelect } from '../components/ui/LabeledSelect'
 
 // ── shared ownership row ──────────────────────────────────────────────────────
 function OwnershipRow({ name, subtitle, currentMemberId, memberOptions, onSave }: {
@@ -297,6 +301,28 @@ export function AccountsPage() {
     return m
   }, [accounts, ownerships, members])
 
+  const accountFilterAccessors = useMemo<FilterAccessor<Account>[]>(() => [
+    { key: 'type', label: 'Type', get: (a) => a.account_type.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) },
+    { key: 'owner', label: 'Owner', get: (a) => (ownerMap.get(a.id) ?? 'Unassigned').split(', ') },
+    { key: 'institution', label: 'Institution', get: (a) => a.institution_name },
+    { key: 'status', label: 'Status', get: (a) => (a.is_active ? 'Active' : 'Inactive') },
+  ], [ownerMap])
+
+  const [accountFilters, setAccountFilters] = useFilterState('accounts')
+  const filteredAccounts = useMemo(
+    () => applyFilters(accounts, accountFilters, accountFilterAccessors),
+    [accounts, accountFilters, accountFilterAccessors],
+  )
+  const accountFilterFields = useMemo(
+    () => filterFieldsFrom(accounts, accountFilters, accountFilterAccessors),
+    [accounts, accountFilters, accountFilterAccessors],
+  )
+  // Credit card balances arrive negative from the household-accounts API, so this is a net figure.
+  const filteredBalance = useMemo(
+    () => filteredAccounts.reduce((s, a) => s + parseFloat(balanceMap.get(a.id) ?? '0'), 0),
+    [filteredAccounts, balanceMap],
+  )
+
   const unownedAccounts = useMemo(
     () => accounts.filter(a => ownerMap.get(a.id) === 'Unassigned'),
     [accounts, ownerMap]
@@ -305,7 +331,7 @@ export function AccountsPage() {
   const grouped = useMemo(() => {
     // Card view only — table view groups/sorts via DataTable's own groupBy prop.
     const g = new Map<string, Account[]>()
-    for (const a of [...accounts].sort((x, y) => x.name.localeCompare(y.name))) {
+    for (const a of [...filteredAccounts].sort((x, y) => x.name.localeCompare(y.name))) {
       const key = groupBy === 'owner' ? (ownerMap.get(a.id) ?? 'Unassigned')
         : groupBy === 'type' ? a.account_type.replace(/_/g, ' ')
         : '__flat__'
@@ -313,7 +339,7 @@ export function AccountsPage() {
       g.get(key)!.push(a)
     }
     return g
-  }, [accounts, groupBy, ownerMap])
+  }, [filteredAccounts, groupBy, ownerMap])
 
   const close = () => setSheet({ type: 'none' })
   const afterSave = async () => { close(); await load() }
@@ -321,9 +347,6 @@ export function AccountsPage() {
     try { await portfolioApi.deleteAccount(id); close(); await load() }
     catch { alert('Failed to delete account.') }
   }
-
-  const pillCls = (active: boolean) =>
-    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`
 
   const renderList = (list: Account[]) =>
     list.map((a) => {
@@ -425,26 +448,19 @@ export function AccountsPage() {
   return (
     <div className="grid grid-cols-1 min-w-0 gap-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        {viewMode === 'card' && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-[var(--text-muted)]">Group:</span>
-            {([['type', 'Type'], ['owner', 'Owner'], ['none', 'None']] as [GroupBy, string][]).map(([v, l]) => (
-              <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
-            ))}
-          </div>
-        )}
+        <LabeledSelect
+          label="Group by"
+          value={groupBy}
+          options={[{ value: 'type', label: 'Type' }, { value: 'owner', label: 'Owner' }, { value: 'none', label: 'None' }]}
+          onChange={(v) => setGroupBy(v as GroupBy)}
+        />
         <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={viewMode === 'card'}
-            onClick={() => changeViewMode(viewMode === 'table' ? 'card' : 'table')}
-            title={viewMode === 'table' ? 'Switch to Card view' : 'Switch to Table view'}
-            className="flex items-center gap-2 rounded-full bg-[var(--surface-2)] px-1 py-1 text-xs font-medium text-[var(--text-muted)]"
-          >
-            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'table' ? 'bg-primary-600 text-white' : ''}`}>Table</span>
-            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'card' ? 'bg-primary-600 text-white' : ''}`}>Card</span>
-          </button>
+          <LabeledSelect
+            label="View"
+            value={viewMode}
+            options={[{ value: 'table', label: 'Table' }, { value: 'card', label: 'Card' }]}
+            onChange={(v) => changeViewMode(v as ViewMode)}
+          />
           <button type="button" onClick={() => setSheet({ type: 'account' })} disabled={!canWrite}
             className="shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
             + Add Account
@@ -473,6 +489,18 @@ export function AccountsPage() {
         </div>
       )}
 
+      <FilterBar
+        fields={accountFilterFields}
+        value={accountFilters}
+        onChange={setAccountFilters}
+        resultLabel={Object.keys(accountFilters).length > 0 ? `Showing ${filteredAccounts.length} of ${accounts.length} accounts` : undefined}
+      />
+      {accounts.length > 0 && (
+        <p className="-mt-2 text-xs text-[var(--text-muted)]">
+          {Object.keys(accountFilters).length > 0 ? 'Filtered' : 'Total'} balance: <Money value={filteredBalance} className="font-semibold text-[var(--text)]" />
+        </p>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
       ) : accounts.length === 0 ? (
@@ -484,13 +512,14 @@ export function AccountsPage() {
       ) : viewMode === 'table' ? (
         <DataTable
           columns={accountColumns}
-          rows={accounts}
+          rows={filteredAccounts}
           rowKey={(a) => a.id}
           defaultSortCol="name"
           defaultSortDir="asc"
           searchPlaceholder="Search accounts…"
           groupBy={{
             options: [{ value: 'type', label: 'Type' }, { value: 'owner', label: 'Owner' }],
+            value: groupBy,
             getGroup: (a, by) => by === 'owner'
               ? { key: ownerMap.get(a.id) ?? 'Unassigned', label: ownerMap.get(a.id) ?? 'Unassigned' }
               : { key: a.account_type, label: a.account_type.replace(/_/g, ' ') },

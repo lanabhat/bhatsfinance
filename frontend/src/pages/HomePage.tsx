@@ -8,6 +8,7 @@ import { MissedSipsCard } from '../components/home/MissedSipsCard'
 import { MissedPremiumsCard } from '../components/home/MissedPremiumsCard'
 import { MissedRDsCard } from '../components/home/MissedRDsCard'
 import { InsuranceSummaryCard } from '../components/home/InsuranceSummaryCard'
+import { NeedsAttentionCard } from '../components/home/NeedsAttentionCard'
 import { MemberNetWorthRow } from '../components/home/MemberNetWorthRow'
 import { MemberViewSelector } from '../components/home/MemberViewSelector'
 import { MemberWealthBreakdown } from '../components/home/MemberWealthBreakdown'
@@ -358,6 +359,8 @@ export function HomePage({ onNavigate }: Props) {
         accountOptions={accounts}
         onReceived={refreshBondCoupons}
       />
+
+      <NeedsAttentionCard householdId={householdId} onNavigate={onNavigate} onChanged={refreshDashboard} />
 
       <MissedSipsCard
         items={dashboard.missedSip}

@@ -18,7 +18,11 @@ import { DataTable } from '../components/ui/DataTable'
 import type { DataTableColumn } from '../components/ui/DataTable'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
-import { TYPE_ICONS } from '../lib/instrumentTypes'
+import { TYPE_ICONS, TYPE_LABELS } from '../lib/instrumentTypes'
+import { applyFilters, filterFieldsFrom, useFilterState } from '../hooks/useFilters'
+import type { FilterAccessor } from '../hooks/useFilters'
+import { FilterBar } from '../components/ui/FilterBar'
+import { LabeledSelect } from '../components/ui/LabeledSelect'
 import type { ApiListResponse, AssetCategory, Instrument, InstrumentOwnership, Investment, Transaction, ValuationSnapshot } from '../types/domain'
 
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -436,15 +440,40 @@ export function InstrumentsPage() {
   // An instrument matches the search if its own name matches, OR any fund
   // living under it (name/folio) matches — so searching a fund name surfaces
   // the shell instrument it belongs to, not just instruments named that.
+  const instrumentFilterAccessors = useMemo<FilterAccessor<Instrument>[]>(() => [
+    { key: 'type', label: 'Type', get: (i) => TYPE_LABELS[i.instrument_type] ?? i.instrument_type },
+    { key: 'category', label: 'Category', get: (i) => categories.find((c) => c.id === i.asset_category)?.name },
+    {
+      key: 'sub_category', label: 'Sub-category',
+      get: (i) => (i.sub_category ? i.sub_category.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : null),
+    },
+    {
+      key: 'owner', label: 'Owner',
+      get: (i) => ownerships.filter((o) => o.instrument === i.id).map((o) => members.find((mb) => mb.id === o.member)?.label ?? `#${o.member}`),
+    },
+    { key: 'status', label: 'Status', get: (i) => (i.is_active ? 'Active' : 'Inactive') },
+    { key: 'account', label: 'Default account', get: (i) => accounts.find((a) => a.id === i.default_account)?.label },
+  ], [categories, ownerships, members, accounts])
+
+  const [instrumentFilters, setInstrumentFilters] = useFilterState('instruments')
+  const barFilteredInstruments = useMemo(
+    () => applyFilters(instruments, instrumentFilters, instrumentFilterAccessors),
+    [instruments, instrumentFilters, instrumentFilterAccessors],
+  )
+  const instrumentFilterFields = useMemo(
+    () => filterFieldsFrom(instruments, instrumentFilters, instrumentFilterAccessors),
+    [instruments, instrumentFilters, instrumentFilterAccessors],
+  )
+
   const filteredInstruments = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return instruments
-    return instruments.filter((inst) => {
+    if (!q) return barFilteredInstruments
+    return barFilteredInstruments.filter((inst) => {
       if (inst.name.toLowerCase().includes(q)) return true
       const children = investmentsByInstrument.get(inst.id)
       return children?.some((iv) => iv.name.toLowerCase().includes(q) || iv.folio_no.toLowerCase().includes(q)) ?? false
     })
-  }, [instruments, search, investmentsByInstrument])
+  }, [barFilteredInstruments, search, investmentsByInstrument])
 
   // Card view only — table view sorts/groups/searches via DataTable itself.
   const sortedInstruments = useMemo(
@@ -504,9 +533,6 @@ export function InstrumentsPage() {
     await assetCategoryApi.delete(id)
     await refreshCategories()
   }
-
-  const pillCls = (active: boolean) =>
-    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'}`
 
   const renderRow = (inst: Instrument) => {
     const cat = categories.find((c) => c.id === inst.asset_category)
@@ -685,21 +711,19 @@ export function InstrumentsPage() {
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         {viewMode === 'card' && (
-          <>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search instruments and funds…"
-              className={`${INP} w-full sm:w-64`}
-            />
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-[var(--text-muted)]">Group:</span>
-              {([['type', 'Type'], ['category', 'Category'], ['owner', 'Owner'], ['none', 'None']] as [GroupBy, string][]).map(([v, l]) => (
-                <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
-              ))}
-            </div>
-          </>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search instruments and funds…"
+            className={`${INP} w-full sm:w-64`}
+          />
         )}
+        <LabeledSelect
+          label="Group by"
+          value={groupBy}
+          options={[{ value: 'type', label: 'Type' }, { value: 'category', label: 'Category' }, { value: 'owner', label: 'Owner' }, { value: 'none', label: 'None' }]}
+          onChange={(v) => setGroupBy(v as GroupBy)}
+        />
 
         <div className="ml-auto flex items-center gap-2">
           {canWrite && (
@@ -734,23 +758,25 @@ export function InstrumentsPage() {
               </button>
             </>
           )}
-          <button
-            type="button"
-            role="switch"
-            aria-checked={viewMode === 'card'}
-            onClick={() => changeViewMode(viewMode === 'table' ? 'card' : 'table')}
-            title={viewMode === 'table' ? 'Switch to Card view' : 'Switch to Table view'}
-            className="flex items-center gap-2 rounded-full bg-[var(--surface-2)] px-1 py-1 text-xs font-medium text-[var(--text-muted)]"
-          >
-            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'table' ? 'bg-primary-600 text-white' : ''}`}>Table</span>
-            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'card' ? 'bg-primary-600 text-white' : ''}`}>Card</span>
-          </button>
+          <LabeledSelect
+            label="View"
+            value={viewMode}
+            options={[{ value: 'table', label: 'Table' }, { value: 'card', label: 'Card' }]}
+            onChange={(v) => changeViewMode(v as ViewMode)}
+          />
           <button type="button" onClick={() => setSheet({ type: 'instrument' })} disabled={!canWrite}
             className="shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
             + Add Instrument
           </button>
         </div>
       </div>
+
+      <FilterBar
+        fields={instrumentFilterFields}
+        value={instrumentFilters}
+        onChange={setInstrumentFilters}
+        resultLabel={Object.keys(instrumentFilters).length > 0 ? `Showing ${barFilteredInstruments.length} of ${instruments.length} instruments` : undefined}
+      />
 
       {canWrite && selectedInstrumentIds.size > 0 && (
         <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 dark:border-indigo-800/50 dark:bg-indigo-900/20">
@@ -799,13 +825,14 @@ export function InstrumentsPage() {
       ) : viewMode === 'table' ? (
         <DataTable
           columns={instrumentColumns}
-          rows={instruments}
+          rows={barFilteredInstruments}
           rowKey={(inst) => inst.id}
           defaultSortCol="name"
           defaultSortDir="asc"
           searchPlaceholder="Search instruments and funds…"
           groupBy={{
             options: [{ value: 'type', label: 'Type' }, { value: 'category', label: 'Category' }, { value: 'owner', label: 'Owner' }],
+            value: groupBy,
             getGroup: (inst, by) => {
               if (by === 'category') {
                 const cat = categories.find((c) => c.id === inst.asset_category)

@@ -6,7 +6,7 @@ from insurance.views import InsurancePolicyViewSet, InsuranceSummaryView, Missed
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
 from ingestion.views import CSVImportView, EpfPassbookApplyView, EpfPassbookPreviewView, FDAdviceApplyView, FDAdvicePreviewView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView, NpsApplyView, NpsPreviewView, PpfStatementApplyView, PpfStatementPreviewView, SBIStatementApplyView, SBIStatementPreviewView
-from insights.views import AllocationSuggestionView, AllocationView, CategoryBreakdownView, CashFlowView, DiversificationView, FundPerformanceView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, RebalancingView, SpendAnalyticsView, XIRRView
+from insights.views import AllocationSuggestionView, AllocationView, AttentionView, CategoryBreakdownView, CashFlowView, DiversificationView, FundPerformanceView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, RebalancingView, SpendAnalyticsView, XIRRView
 from reports.views import StatementExportView, StatementPreviewView
 from instruments.views import (
     AccountBalanceView,
@@ -71,7 +71,7 @@ from upstox_integration.views import (
     UpstoxUpdateMemberView,
 )
 from valuations.views import BulkSnapshotView, ValuationSnapshotViewSet
-from fund_data.views import ExternalFundViewSet, FundComparisonView, FundSearchView
+from fund_data.views import ExternalFundViewSet, FundComparisonView, FundLinkBulkView, FundMatchSuggestionsView, FundRefreshView, FundSearchView
 from ai_insights.views import ApplyClassificationsView, ClassifyAllFundsView, ClassifyFundView, CompareFundReturnsView, ExplainRebalancingView
 
 router = DefaultRouter()
@@ -122,6 +122,7 @@ urlpatterns = [
     path('holdings/history', HoldingsHistoryView.as_view(), name='holdings-history'),
     path('fund-performance', FundPerformanceView.as_view(), name='fund-performance'),
     path('household-accounts', HouseholdAccountsView.as_view(), name='household-accounts'),
+    path('attention', AttentionView.as_view(), name='attention'),
     path('networth', NetWorthView.as_view(), name='networth'),
     path('networth/history', NetWorthHistoryView.as_view(), name='networth-history'),
     path('cashflow', CashFlowView.as_view(), name='cashflow'),
@@ -133,6 +134,9 @@ urlpatterns = [
     path('diversification', DiversificationView.as_view(), name='diversification'),
     path('allocation-suggestion', AllocationSuggestionView.as_view(), name='allocation-suggestion'),
     path('fund-data/search', FundSearchView.as_view(), name='fund-data-search'),
+    path('fund-data/match-suggestions', FundMatchSuggestionsView.as_view(), name='fund-data-match-suggestions'),
+    path('fund-data/link-bulk', FundLinkBulkView.as_view(), name='fund-data-link-bulk'),
+    path('fund-data/refresh', FundRefreshView.as_view(), name='fund-data-refresh'),
     path('fund-comparison', FundComparisonView.as_view(), name='fund-comparison'),
     path('members-networth', MembersNetWorthView.as_view(), name='members-networth'),
     path('alerts/missed-sip', MissedSIPAlertsView.as_view(), name='missed-sip-alerts'),

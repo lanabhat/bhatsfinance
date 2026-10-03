@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useExpandable } from '../../hooks/useExpandable'
 import { useSortableColumn } from '../../hooks/useSortableColumn'
+import { LabeledSelect } from './LabeledSelect'
 import { SortableTh } from './SortableTh'
 
 export type DataTableColumn<T> = {
@@ -32,6 +33,9 @@ export type DataTableGroupBy<T> = {
   /** 'none' is reserved to mean "flat, no grouping" and is added automatically. */
   defaultValue?: string
   getGroup: (row: T, groupByValue: string) => { key: string; label: string; color?: string } | null
+  /** Pass to control grouping from the page (the table then shows no group control of its own).
+   *  'none' means ungrouped. */
+  value?: string
   aggregate?: (rows: T[]) => Record<string, ReactNode>
   /** Default true. */
   collapsible?: boolean
@@ -115,7 +119,10 @@ export function DataTable<T>({
   const expand = useExpandable<string | number>()
 
   const groupOptions = useMemo(() => groupBy ? [{ value: GROUP_NONE, label: 'None' }, ...groupBy.options] : [], [groupBy])
-  const [groupValue, setGroupValue] = useState(groupBy?.defaultValue ?? GROUP_NONE)
+  const [ownGroupValue, setGroupValue] = useState(groupBy?.defaultValue ?? GROUP_NONE)
+  // Controlled by the page (one "Group by" for table and card views) when `value` is passed.
+  const groupControlled = groupBy?.value !== undefined
+  const groupValue = groupControlled ? groupBy!.value! : ownGroupValue
 
   const searched = useMemo(() => {
     if (!showSearch || !search.trim()) return rows
@@ -204,7 +211,7 @@ export function DataTable<T>({
 
   return (
     <div className={className}>
-      {(showSearch || (groupBy && groupOptions.length > 0)) && (
+      {(showSearch || (groupBy && !groupControlled)) && (
         <div className="mb-2 flex flex-wrap items-center gap-2">
           {showSearch && (
             <input
@@ -214,20 +221,8 @@ export function DataTable<T>({
               className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-primary-500 sm:w-48"
             />
           )}
-          {groupBy && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-[var(--text-muted)]">Group:</span>
-              {groupOptions.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => setGroupValue(o.value)}
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${groupValue === o.value ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
+          {groupBy && !groupControlled && (
+            <LabeledSelect label="Group by" value={groupValue} options={groupOptions} onChange={setGroupValue} />
           )}
         </div>
       )}
@@ -257,7 +252,15 @@ export function DataTable<T>({
               <tr><td colSpan={columns.length} className="px-3 py-8 text-center text-sm text-[var(--text-muted)]">{emptyState ?? 'No data'}</td></tr>
             ) : groups ? (
               [...groups.entries()].map(([key, g]) => (
-                <GroupSection key={key} label={g.label} color={g.color} colSpan={columns.length} collapsible={groupBy!.collapsible ?? true}>
+                <GroupSection
+                  key={key}
+                  label={g.label}
+                  color={g.color}
+                  count={g.rows.length}
+                  columns={columns}
+                  totals={groupBy!.aggregate?.(g.rows)}
+                  collapsible={groupBy!.collapsible ?? true}
+                >
                   {g.rows.map(renderRow)}
                 </GroupSection>
               ))
@@ -271,31 +274,44 @@ export function DataTable<T>({
   )
 }
 
-function GroupSection({ label, color, colSpan, collapsible, children }: {
+function GroupSection<T>({ label, color, count, columns, totals, collapsible, children }: {
   label: string
   color?: string
-  colSpan: number
+  count: number
+  columns: DataTableColumn<T>[]
+  /** Per-column header values (keyed by column key) from groupBy.aggregate. */
+  totals?: Record<string, ReactNode>
   collapsible: boolean
   children: ReactNode
 }) {
   const [open, setOpen] = useState(true)
+  const labelCell = (
+    <span className="inline-flex items-center gap-1.5">
+      {collapsible && (
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className={`h-3 w-3 shrink-0 text-[var(--text-faint)] transition-transform ${open ? 'rotate-90' : ''}`}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 4l4 4-4 4" />
+        </svg>
+      )}
+      {color && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />}
+      {label}
+      <span className="rounded-full bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">{count}</span>
+    </span>
+  )
+  // The label spans every leading column that has no total, so totals stay aligned under their columns.
+  const firstTotalIdx = totals ? columns.findIndex((c) => totals[c.key] !== undefined) : -1
+  const labelSpan = firstTotalIdx === -1 ? columns.length : Math.max(firstTotalIdx, 1)
   return (
     <>
       <tr
         className={`border-t border-[var(--border)] bg-[var(--surface-2)] ${collapsible ? 'cursor-pointer' : ''}`}
         onClick={() => collapsible && setOpen((p) => !p)}
       >
-        <td colSpan={colSpan} className="px-3 py-1.5 text-xs font-semibold text-[var(--text-2)]">
-          <span className="inline-flex items-center gap-1.5">
-            {collapsible && (
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className={`h-3 w-3 shrink-0 text-[var(--text-faint)] transition-transform ${open ? 'rotate-90' : ''}`}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 4l4 4-4 4" />
-              </svg>
-            )}
-            {color && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />}
-            {label}
-          </span>
-        </td>
+        <td colSpan={labelSpan} className="px-3 py-1.5 text-xs font-semibold text-[var(--text-2)]">{labelCell}</td>
+        {totals && columns.slice(labelSpan).map((col) => (
+          <td key={col.key} className={`px-3 py-1.5 text-xs font-semibold text-[var(--text-2)] whitespace-nowrap ${col.align === 'right' ? 'text-right' : ''}`}>
+            {totals[col.key] ?? null}
+          </td>
+        ))}
       </tr>
       {open && children}
     </>

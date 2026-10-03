@@ -75,6 +75,26 @@ class TransactionViewSet(viewsets.ModelViewSet):
         instance.refresh_from_db()
         return Response(TransactionSerializer(instance).data)
 
+    @action(detail=False, methods=['get'], url_path='summary')
+    def summary(self, request, *args, **kwargs):
+        """Totals across every transaction matching the list filters, not just one page."""
+        from decimal import Decimal
+
+        from django.db.models import Count, Q, Sum
+
+        if not request.query_params.get('household'):
+            return Response({'detail': 'household is required.'}, status=400)
+        qs = self.filter_queryset(Transaction.objects.all())
+        agg = qs.aggregate(
+            count=Count('id'),
+            inflow=Sum('amount', filter=Q(direction=Transaction.Direction.INFLOW)),
+            outflow=Sum('amount', filter=Q(direction=Transaction.Direction.OUTFLOW)),
+        )
+        cents = Decimal('0.01')
+        inflow = Decimal(agg['inflow'] or 0).quantize(cents)
+        outflow = Decimal(agg['outflow'] or 0).quantize(cents)
+        return Response({'count': agg['count'], 'inflow': str(inflow), 'outflow': str(outflow), 'net': str(inflow - outflow)})
+
     @action(detail=False, methods=['post'], url_path='bulk-update')
     def bulk_update(self, request, *args, **kwargs):
         """Apply the same field values to a set of transactions by id.

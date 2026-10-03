@@ -6,6 +6,11 @@ import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
 import { valuationApi } from '../api/valuationApi'
 import { normalizeApiError } from '../hooks/errorUtils'
+import { applyFilters, filterFieldsFrom, useFilterState } from '../hooks/useFilters'
+import type { FilterAccessor } from '../hooks/useFilters'
+import { FilterBar } from '../components/ui/FilterBar'
+import { LabeledSelect } from '../components/ui/LabeledSelect'
+import { FundMatchSheet } from '../components/allocation/FundMatchSheet'
 import { CategorySection } from '../components/assets/CategorySection'
 import { InstrumentForm } from '../components/assets/InstrumentForm'
 import { InstrumentRow } from '../components/assets/InstrumentRow'
@@ -85,6 +90,7 @@ type SheetState =
   | { type: 'edit_instrument'; instrument: Instrument }
   | { type: 'edit_investment'; investment: Investment }
   | { type: 'category'; item?: AssetCategory }
+  | { type: 'fund-match' }
 
 type HoldingGroupBy = 'fund' | 'fund_category' | 'sub_category' | 'type' | 'category' | 'none'
 
@@ -225,12 +231,73 @@ export function HoldingsPage() {
   const afterSell = async () => { close(); await refreshDashboard(); await loadInstruments(); await loadInvestments(); await loadOwnerships() }
   const afterValuation = async () => { close(); await refreshDashboard() }
 
-  const activeHoldings = useMemo(() => {
+  // MF/SIP sub-category lives on MutualFundDetails (the shared MF shell's own
+  // sub_category is the same for every fund); other types use the instrument's.
+  const subCategoryOf = useCallback((h: DashboardHolding): string => {
+    if (MF_TYPES.has(h.instrument_type) && h.investment_id) {
+      const details = mfDetailsByInvestment.get(h.investment_id)
+      return details?.fund_sub_category || details?.fund_category || 'Uncategorised'
+    }
+    const inst = instruments.find((i) => i.id === h.instrument_id)
+    return inst?.sub_category ? (SUB_CATEGORY_LABELS[inst.sub_category] ?? inst.sub_category) : 'Uncategorised'
+  }, [mfDetailsByInvestment, instruments])
+
+  // "Fund Category" grouping key: a fund's sub-category, else the holding's type.
+  const fundGroupKeyOf = useCallback((h: DashboardHolding): string => {
+    if (MF_TYPES.has(h.instrument_type) && h.investment_id) {
+      const details = mfDetailsByInvestment.get(h.investment_id)
+      return details?.fund_sub_category || details?.fund_category || 'Uncategorised'
+    }
+    return TYPE_LABELS[h.instrument_type] ?? h.instrument_type
+  }, [mfDetailsByInvestment])
+
+  const ownerLabelsByInstrument = useMemo(() => {
+    const m = new Map<number, string[]>()
+    for (const o of ownerships) {
+      const label = members.find((mb) => mb.id === o.member)?.label ?? `#${o.member}`
+      m.set(o.instrument, [...(m.get(o.instrument) ?? []), label])
+    }
+    return m
+  }, [ownerships, members])
+
+  const holdingFilterAccessors = useMemo<FilterAccessor<DashboardHolding>[]>(() => [
+    { key: 'type', label: 'Type', get: (h) => TYPE_LABELS[h.instrument_type] ?? h.instrument_type },
+    { key: 'category', label: 'Category', get: (h) => categories.find((c) => c.id === h.asset_category)?.name },
+    {
+      key: 'fund_category', label: 'Fund category',
+      get: (h) => (h.investment_id ? mfDetailsByInvestment.get(h.investment_id)?.fund_category : null),
+    },
+    { key: 'sub_category', label: 'Sub-category', get: subCategoryOf },
+    {
+      key: 'owner', label: 'Owner',
+      get: (h) => {
+        if (h.investment_id) {
+          const label = investmentOwnerMap.get(h.investment_id)
+          return label ? [label] : []
+        }
+        return ownerLabelsByInstrument.get(h.instrument_id) ?? []
+      },
+    },
+  ], [categories, mfDetailsByInvestment, subCategoryOf, investmentOwnerMap, ownerLabelsByInstrument])
+
+  const [holdingFilters, setHoldingFilters] = useFilterState('holdings')
+
+  // Member pills (server-side, proportional share) and name search first; the filter bar narrows from there.
+  const baseHoldings = useMemo(() => {
     const all = activeMemberId !== null ? (memberHoldings ?? []) : dashboard.holdings
     const q = search.trim().toLowerCase()
     if (!q) return all
     return all.filter((h) => h.display_name.toLowerCase().includes(q))
   }, [activeMemberId, memberHoldings, dashboard.holdings, search])
+
+  const activeHoldings = useMemo(
+    () => applyFilters(baseHoldings, holdingFilters, holdingFilterAccessors),
+    [baseHoldings, holdingFilters, holdingFilterAccessors],
+  )
+  const holdingFilterFields = useMemo(
+    () => filterFieldsFrom(baseHoldings, holdingFilters, holdingFilterAccessors),
+    [baseHoldings, holdingFilters, holdingFilterAccessors],
+  )
 
   // A fully-sold position (quantity nets to 0) still comes back from the
   // holdings API — compute_holdings() never filters it out — so it has to
@@ -548,11 +615,7 @@ export function HoldingsPage() {
     if (groupBy === 'fund_category') {
       const groups = new Map<string, DashboardHolding[]>()
       for (const h of openHoldings) {
-        let key = TYPE_LABELS[h.instrument_type] ?? h.instrument_type
-        if (MF_TYPES.has(h.instrument_type) && h.investment_id) {
-          const details = mfDetailsByInvestment.get(h.investment_id)
-          key = details?.fund_sub_category || details?.fund_category || 'Uncategorised'
-        }
+        const key = fundGroupKeyOf(h)
         if (!groups.has(key)) groups.set(key, [])
         groups.get(key)!.push(h)
       }
@@ -574,19 +637,7 @@ export function HoldingsPage() {
     if (groupBy === 'sub_category') {
       const groups = new Map<string, DashboardHolding[]>()
       for (const h of openHoldings) {
-        let key: string
-        if (MF_TYPES.has(h.instrument_type) && h.investment_id) {
-          // MF/SIP holdings all share one "Mutual Fund" shell Instrument, so
-          // Instrument.sub_category is the same (blank) value for every fund
-          // in the household — useless for grouping. The real per-fund
-          // sub-category (Mid Cap/Small Cap/Debt/etc.) lives on
-          // MutualFundDetails instead, same join 'fund_category' uses below.
-          const details = mfDetailsByInvestment.get(h.investment_id)
-          key = details?.fund_sub_category || details?.fund_category || 'Uncategorised'
-        } else {
-          const inst = instruments.find((i) => i.id === h.instrument_id)
-          key = inst?.sub_category ? (SUB_CATEGORY_LABELS[inst.sub_category] ?? inst.sub_category) : 'Uncategorised'
-        }
+        const key = subCategoryOf(h)
         if (!groups.has(key)) groups.set(key, [])
         groups.get(key)!.push(h)
       }
@@ -636,7 +687,7 @@ export function HoldingsPage() {
       )
     }
     return sections
-  }, [openHoldings, categories, instruments, mfDetailsByInvestment, canWrite, groupBy, sortBy, householdId, cardExpand, refreshDashboard, loadInstruments, loadInvestments, resolveInstrument, maturityByInstrument, openEdit])
+  }, [openHoldings, categories, canWrite, groupBy, sortBy, householdId, cardExpand, refreshDashboard, loadInstruments, loadInvestments, resolveInstrument, maturityByInstrument, openEdit, fundGroupKeyOf, subCategoryOf])
 
   // ── Table view ──────────────────────────────────────────────────────────────
   // Under 'fund' grouping, a multi-folio fund isn't "a group header over N
@@ -843,36 +894,37 @@ export function HoldingsPage() {
       { value: 'category', label: 'Category' },
     ].filter((o) => o.value === groupBy),
     defaultValue: groupBy,
+    value: groupBy,
     getGroup: (r: DisplayRow) => {
       const h = r.kind === 'fund_rollup' ? r.folios[0] : r.holding
       if (groupBy === 'type') return { key: h.instrument_type, label: TYPE_LABELS[h.instrument_type] ?? h.instrument_type }
       if (groupBy === 'fund_category') {
-        let key = TYPE_LABELS[h.instrument_type] ?? h.instrument_type
-        if (MF_TYPES.has(h.instrument_type) && h.investment_id) {
-          const details = mfDetailsByInvestment.get(h.investment_id)
-          key = details?.fund_sub_category || details?.fund_category || 'Uncategorised'
-        }
+        const key = fundGroupKeyOf(h)
         return { key, label: key }
       }
       if (groupBy === 'sub_category') {
-        let key: string
-        if (MF_TYPES.has(h.instrument_type) && h.investment_id) {
-          const details = mfDetailsByInvestment.get(h.investment_id)
-          key = details?.fund_sub_category || details?.fund_category || 'Uncategorised'
-        } else {
-          const inst = instruments.find((i) => i.id === h.instrument_id)
-          key = inst?.sub_category ? (SUB_CATEGORY_LABELS[inst.sub_category] ?? inst.sub_category) : 'Uncategorised'
-        }
+        const key = subCategoryOf(h)
         return { key, label: key }
       }
       // category
       const cat = categories.find((c) => c.id === h.asset_category)
       return { key: cat ? String(cat.id) : 'uncat', label: cat?.name ?? 'Uncategorised', color: cat?.color }
     },
+    aggregate: (rows: DisplayRow[]) => {
+      const invested = rows.reduce((s, r) => s + (r.kind === 'fund_rollup' ? r.totalInvested : parseFloat(r.holding.net_invested)), 0)
+      const value = rows.reduce((s, r) => s + (r.kind === 'fund_rollup' ? r.totalValue : parseFloat(r.holding.market_value)), 0)
+      const { gain, gainPct } = computeGain(value, invested)
+      return {
+        invested: <Money value={invested} />,
+        value: <Money value={value} />,
+        gain: (
+          <span className={gain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+            {gain >= 0 ? '+' : ''}<Money value={gain} />{gainPct !== null ? ` (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)` : ''}
+          </span>
+        ),
+      }
+    },
   }
-
-  const pillCls = (active: boolean) =>
-    `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${active ? 'bg-primary-600 text-white' : 'bg-[var(--surface-2)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'}`
 
   return (
     <div className="grid gap-3">
@@ -884,44 +936,44 @@ export function HoldingsPage() {
           placeholder="Search holdings…"
           className={`${INP} w-full sm:w-56`}
         />
-        {/* member filter */}
         {members.length > 1 && (
-          <div className="flex flex-wrap gap-1.5">
-            <button type="button" onClick={() => setActiveMemberId(null)} className={pillCls(activeMemberId === null)}>All</button>
-            {members.map((m) => (
-              <button key={m.id} type="button" onClick={() => setActiveMemberId(m.id)} className={pillCls(activeMemberId === m.id)}>{m.label}</button>
-            ))}
-          </div>
+          <LabeledSelect
+            label="View as"
+            value={activeMemberId === null ? '' : String(activeMemberId)}
+            options={[{ value: '', label: 'Everyone' }, ...members.map((m) => ({ value: String(m.id), label: m.label }))]}
+            onChange={(v) => setActiveMemberId(v ? Number(v) : null)}
+          />
         )}
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 ml-auto">
-          {/* Group by */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-[var(--text-muted)]">Group:</span>
-            {([['fund', 'Fund'], ['fund_category', 'Fund Category'], ['sub_category', 'Sub-category'], ['type', 'Type'], ['category', 'Category'], ['none', 'None']] as [HoldingGroupBy, string][]).map(([v, l]) => (
-              <button key={v} type="button" onClick={() => setGroupBy(v)} className={pillCls(groupBy === v)}>{l}</button>
-            ))}
-          </div>
-          {/* Sort by — only needed in Card view; Table view sorts via clickable column headers instead */}
+          <LabeledSelect
+            label="Group by"
+            value={groupBy}
+            options={[
+              { value: 'fund', label: 'Fund' }, { value: 'fund_category', label: 'Fund category' },
+              { value: 'sub_category', label: 'Sub-category' }, { value: 'type', label: 'Type' },
+              { value: 'category', label: 'Category' }, { value: 'none', label: 'None' },
+            ]}
+            onChange={(v) => setGroupBy(v as HoldingGroupBy)}
+          />
+          {/* Card view only; table view sorts via its column headers. */}
           {viewMode === 'card' && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-[var(--text-muted)]">Sort:</span>
-              {([['value', 'Value'], ['gain', 'Gain ₹'], ['gainPct', 'Gain %'], ['invested', 'Invested'], ['name', 'Name']] as [HoldingSortBy, string][]).map(([v, l]) => (
-                <button key={v} type="button" onClick={() => setSortBy(v)} className={pillCls(sortBy === v)}>{l}</button>
-              ))}
-            </div>
+            <LabeledSelect
+              label="Sort by"
+              value={sortBy}
+              options={[
+                { value: 'value', label: 'Value' }, { value: 'gain', label: 'Gain ₹' }, { value: 'gainPct', label: 'Gain %' },
+                { value: 'invested', label: 'Invested' }, { value: 'name', label: 'Name' },
+              ]}
+              onChange={(v) => setSortBy(v as HoldingSortBy)}
+            />
           )}
-          <button
-            type="button"
-            role="switch"
-            aria-checked={viewMode === 'card'}
-            onClick={() => changeViewMode(viewMode === 'table' ? 'card' : 'table')}
-            title={viewMode === 'table' ? 'Switch to Card view' : 'Switch to Table view'}
-            className="flex items-center gap-2 rounded-full bg-[var(--surface-2)] px-1 py-1 text-xs font-medium text-[var(--text-muted)]"
-          >
-            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'table' ? 'bg-primary-600 text-white' : ''}`}>Table</span>
-            <span className={`rounded-full px-2 py-0.5 transition-colors ${viewMode === 'card' ? 'bg-primary-600 text-white' : ''}`}>Card</span>
-          </button>
+          <LabeledSelect
+            label="View"
+            value={viewMode}
+            options={[{ value: 'table', label: 'Table' }, { value: 'card', label: 'Card' }]}
+            onChange={(v) => changeViewMode(v as ViewMode)}
+          />
           <a
             href={`/api/instruments/export-mf-holdings/?household_id=${householdId}`}
             download="mutual_fund_holdings.csv"
@@ -930,12 +982,26 @@ export function HoldingsPage() {
           >
             Export MF CSV
           </a>
+          {canWrite && (
+            <button type="button" onClick={() => setSheet({ type: 'fund-match' })}
+              className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+              title="Match funds to their scheme so values update daily from NAV">
+              Link funds to NAV
+            </button>
+          )}
           <button type="button" onClick={() => { window.location.hash = '/holdings/add' }} disabled={!canWrite}
             className="shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
             + Add Holding
           </button>
         </div>
       </div>
+
+      <FilterBar
+        fields={holdingFilterFields}
+        value={holdingFilters}
+        onChange={setHoldingFilters}
+        resultLabel={Object.keys(holdingFilters).length > 0 ? `Showing ${activeHoldings.length} of ${baseHoldings.length} holdings` : undefined}
+      />
 
       {!holdingsLoading && duplicateGroups.length > 0 && (
         <details className="group rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/15">
@@ -1128,6 +1194,15 @@ export function HoldingsPage() {
       )}
 
       {/* sheets */}
+      {sheet.type === 'fund-match' && (
+        <Sheet title="Link funds to daily NAV" onClose={close} wide>
+          <FundMatchSheet
+            householdId={householdId}
+            onDone={async () => { close(); await refreshDashboard() }}
+            onCancel={close}
+          />
+        </Sheet>
+      )}
       {sheet.type === 'buy' && (
         <Sheet title="Record Buy" onClose={close} wide>
           <BuyForm householdId={householdId} instrumentId={sheet.instrumentId} investmentId={sheet.investmentId} onSave={afterBuy} onCancel={close} />

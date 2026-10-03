@@ -26,11 +26,50 @@ export type TransactionListParams = {
   tags?: number[]
   ordering?: string
   cashflowBucket?: 'income' | 'expense' | 'investment' | 'savings'
+  // "Any of" filters from the filter bar.
+  accountIn?: string[]
+  memberIn?: string[]
+  transactionTypeIn?: string[]
+  classificationIn?: string[]
+  spendCategoryIn?: string[]
 }
 
 export type PaginatedTransactions = {
   count: number
   results: Transaction[]
+}
+
+export type TransactionSummary = { count: number; inflow: string; outflow: string; net: string }
+
+const csv = (values?: string[]) => (values && values.length > 0 ? values.join(',') : undefined)
+
+/** Shared by the list and summary calls so both always apply identical filters. */
+function transactionQuery(params: TransactionListParams) {
+  return toQueryString({
+    household: params.householdId,
+    page: params.page,
+    page_size: params.pageSize,
+    search: params.search,
+    account: params.account,
+    member: params.member,
+    instrument: params.instrument,
+    investment: params.investment,
+    transaction_type: params.transactionType,
+    classification: params.classification,
+    spend_category: params.spendCategory,
+    tx_date_after: params.txDateAfter,
+    tx_date_before: params.txDateBefore,
+    amount_min: params.amountMin,
+    amount_max: params.amountMax,
+    tags: params.tags && params.tags.length > 0 ? params.tags.join(',') : undefined,
+    ordering: params.ordering,
+    cashflow_bucket: params.cashflowBucket,
+    account__in: csv(params.accountIn),
+    member__in: csv(params.memberIn),
+    transaction_type__in: csv(params.transactionTypeIn),
+    classification__in: csv(params.classificationIn),
+    spend_category__in: csv(params.spendCategoryIn),
+  })
 }
 
 export const ledgerApi = {
@@ -40,29 +79,13 @@ export const ledgerApi = {
     return unwrapList(data)
   },
   async listTransactionsPage(params: TransactionListParams): Promise<PaginatedTransactions> {
-    const q = toQueryString({
-      household: params.householdId,
-      page: params.page,
-      page_size: params.pageSize,
-      search: params.search,
-      account: params.account,
-      member: params.member,
-      instrument: params.instrument,
-      investment: params.investment,
-      transaction_type: params.transactionType,
-      classification: params.classification,
-      spend_category: params.spendCategory,
-      tx_date_after: params.txDateAfter,
-      tx_date_before: params.txDateBefore,
-      amount_min: params.amountMin,
-      amount_max: params.amountMax,
-      tags: params.tags && params.tags.length > 0 ? params.tags.join(',') : undefined,
-      ordering: params.ordering,
-      cashflow_bucket: params.cashflowBucket,
-    })
-    const data = await getJson<ApiListResponse<Transaction> & { count?: number }>(`/api/transactions/?${q}`)
+    const data = await getJson<ApiListResponse<Transaction> & { count?: number }>(`/api/transactions/?${transactionQuery(params)}`)
     if (Array.isArray(data)) return { count: data.length, results: data }
     return { count: data.count ?? data.results.length, results: data.results }
+  },
+  /** Totals across every transaction matching the filters (not just one page). */
+  summarizeTransactions(params: TransactionListParams): Promise<TransactionSummary> {
+    return getJson<TransactionSummary>(`/api/transactions/summary/?${transactionQuery({ ...params, page: undefined, pageSize: undefined })}`)
   },
   async listTransactionsForInstrument(householdId: number, instrumentId: number) {
     const q = toQueryString({ household: householdId, instrument: instrumentId })

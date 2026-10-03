@@ -4,7 +4,22 @@ from django.db.models import Q
 from ledger.models import Transaction
 
 
+class NumberInFilter(django_filters.BaseInFilter, django_filters.NumberFilter):
+    """Comma-separated ids, e.g. ?member__in=1,4 — matches ANY of them."""
+
+
+class CharInFilter(django_filters.BaseInFilter, django_filters.CharFilter):
+    """Comma-separated values, e.g. ?classification__in=spend,income."""
+
+
 class TransactionFilter(django_filters.FilterSet):
+    # "Any of" variants used by the filter bar; the single-value params in Meta.fields still work.
+    account__in = NumberInFilter(field_name='account', lookup_expr='in')
+    member__in = NumberInFilter(field_name='member', lookup_expr='in')
+    transaction_type__in = CharInFilter(field_name='transaction_type', lookup_expr='in')
+    classification__in = CharInFilter(field_name='classification', lookup_expr='in')
+    spend_category__in = CharInFilter(field_name='spend_category', lookup_expr='in')
+
     tx_date_after = django_filters.DateFilter(field_name='tx_date', lookup_expr='gte')
     tx_date_before = django_filters.DateFilter(field_name='tx_date', lookup_expr='lte')
     amount_min = django_filters.NumberFilter(field_name='amount', lookup_expr='gte')

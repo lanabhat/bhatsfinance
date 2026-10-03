@@ -661,9 +661,14 @@ def compute_holdings_history(household_id: int, instrument_type: str | None = No
     `d` increases — each snapshot/transaction row is visited at most once
     across the whole date series.
     """
+    # Holdings are keyed like compute_holdings(): ('investment', id) for a fund/stock
+    # under a shared shell instrument, else ('instrument', id). Keying by instrument
+    # alone would sum every fund's units under the Mutual Fund shell and price them
+    # all with whichever single fund's NAV was snapshotted last.
     qs = ValuationSnapshot.objects.filter(
         household_id=household_id,
         instrument__isnull=False,
+        instrument__is_active=True,
     )
     if instrument_type:
         qs = qs.filter(instrument__instrument_type=instrument_type)
@@ -676,84 +681,100 @@ def compute_holdings_history(household_id: int, instrument_type: str | None = No
     tx_qs = Transaction.objects.filter(
         household_id=household_id,
         instrument__isnull=False,
+        instrument__is_active=True,
     ).select_related('instrument').order_by('tx_date', 'id')
     if instrument_type:
         tx_qs = tx_qs.filter(instrument__instrument_type=instrument_type)
 
-    # Member allocation scaling
+    # Member allocation scaling — same two maps compute_holdings() consults.
     member_allocation: dict[int, Decimal] | None = None
+    member_investment_ids: set[int] | None = None
     household_instrument_share: dict[int, Decimal] | None = None
+    household_investment_share: dict[int, Decimal] | None = None
     if member_id is not None:
-        from instruments.models import InstrumentOwnership
+        from django.db.models import Q
+        from instruments.models import Investment, InstrumentOwnership
         ownerships = InstrumentOwnership.objects.filter(member_id=member_id).values('instrument_id', 'allocation_percent')
         member_allocation = {o['instrument_id']: Decimal(str(o['allocation_percent'])) / Decimal('100') for o in ownerships}
-        tx_qs = tx_qs.filter(instrument_id__in=member_allocation.keys())
+        member_investment_ids = set(Investment.objects.filter(member_id=member_id).values_list('id', flat=True))
+        tx_qs = tx_qs.filter(
+            Q(investment_id__in=member_investment_ids) | Q(investment__isnull=True, instrument_id__in=member_allocation.keys())
+        )
     else:
         household_instrument_share, _ = _household_share_maps(household_id)
+        household_investment_share = _household_investment_share_map(household_id)
+
+    def _key(row) -> tuple[str, int]:
+        return ('investment', row.investment_id) if row.investment_id else ('instrument', row.instrument_id)
+
+    def _factor(key: tuple[str, int]) -> Decimal:
+        kind, raw_id = key
+        if kind == 'investment':
+            if member_investment_ids is not None:
+                return Decimal('1') if raw_id in member_investment_ids else Decimal('0')
+            return household_investment_share.get(raw_id, Decimal('1'))
+        if member_allocation is not None:
+            return member_allocation.get(raw_id, Decimal('1'))
+        return household_instrument_share.get(raw_id, Decimal('1'))
 
     all_txs = list(tx_qs)
 
     # Pre-fetch every snapshot once (not just distinct dates), grouped per
     # instrument and sorted ascending so we can walk each instrument's list
     # forward in lockstep with the date series via a single cursor.
-    snap_qs = qs.order_by('instrument_id', 'valuation_date', 'id')
-    snaps_by_instrument: dict[int, list[ValuationSnapshot]] = {}
+    snap_qs = qs.order_by('instrument_id', 'investment_id', 'valuation_date', 'id')
+    snaps_by_key: dict[tuple[str, int], list[ValuationSnapshot]] = {}
     for snap in snap_qs:
-        snaps_by_instrument.setdefault(snap.instrument_id, []).append(snap)
-    snap_cursor: dict[int, int] = {inst_id: 0 for inst_id in snaps_by_instrument}
-    latest_snap: dict[int, ValuationSnapshot] = {}
+        snaps_by_key.setdefault(_key(snap), []).append(snap)
+    snap_cursor: dict[tuple[str, int], int] = {k: 0 for k in snaps_by_key}
+    latest_snap: dict[tuple[str, int], ValuationSnapshot] = {}
 
-    # Running per-instrument quantity/net-invested, updated as the transaction cursor advances.
+    # Running per-holding quantity/net-invested, updated as the transaction cursor advances.
     tx_cursor = 0
-    running_qty: dict[int, Decimal] = {}
-    running_invested: dict[int, Decimal] = {}
+    running_qty: dict[tuple[str, int], Decimal] = {}
+    running_invested: dict[tuple[str, int], Decimal] = {}
     net_invested = ZERO
-    instrument_ids_seen: set[int] = set()
+    keys_seen: set[tuple[str, int]] = set()
 
     result = []
     for d in dates:
         while tx_cursor < len(all_txs) and all_txs[tx_cursor].tx_date <= d:
             tx = all_txs[tx_cursor]
-            net_invested += -_signed_amount(tx)
-            instrument_ids_seen.add(tx.instrument_id)
-            running_qty[tx.instrument_id] = running_qty.get(tx.instrument_id, ZERO) + _signed_quantity(tx)
-            running_invested[tx.instrument_id] = running_invested.get(tx.instrument_id, ZERO) + -_signed_amount(tx)
+            key = _key(tx)
+            net_invested += -_signed_amount(tx) * _factor(key)
+            keys_seen.add(key)
+            running_qty[key] = running_qty.get(key, ZERO) + _signed_quantity(tx)
+            running_invested[key] = running_invested.get(key, ZERO) + -_signed_amount(tx)
             tx_cursor += 1
 
-        for inst_id, i in list(snap_cursor.items()):
-            snaps = snaps_by_instrument[inst_id]
+        for key, i in list(snap_cursor.items()):
+            snaps = snaps_by_key[key]
             n = len(snaps)
             if i >= n:
                 continue
             while i < n and snaps[i].valuation_date <= d:
-                latest_snap[inst_id] = snaps[i]
+                latest_snap[key] = snaps[i]
                 i += 1
-            snap_cursor[inst_id] = i
+            snap_cursor[key] = i
 
         current = ZERO
-        for inst_id in instrument_ids_seen:
-            snap = latest_snap.get(inst_id)
+        for key in keys_seen:
+            snap = latest_snap.get(key)
             if snap is None:
-                # No valuation snapshot recorded for this instrument (e.g. EPF,
+                # No valuation snapshot recorded for this holding (e.g. EPF,
                 # PPF, a personal loan given, gratuity) — mirror compute_holdings()'s
                 # fallback of treating cost basis as current value, rather than
-                # silently dropping it to 0. Otherwise these instruments' full
-                # invested amount still counts on the "invested" side while
-                # contributing nothing to "current", fabricating a paper loss.
-                val = running_invested.get(inst_id, ZERO)
+                # silently dropping it to 0. Otherwise its full invested amount
+                # still counts on the "invested" side while contributing nothing
+                # to "current", fabricating a paper loss.
+                val = running_invested.get(key, ZERO)
             elif snap.unit_price is not None:
-                val = running_qty.get(inst_id, ZERO) * snap.unit_price
+                val = running_qty.get(key, ZERO) * snap.unit_price
             elif snap.market_value is not None:
                 val = snap.market_value
             else:
-                val = running_invested.get(inst_id, ZERO)
-
-            factor = Decimal('1')
-            if member_allocation is not None:
-                factor = member_allocation.get(inst_id, Decimal('1'))
-            elif household_instrument_share is not None:
-                factor = household_instrument_share.get(inst_id, Decimal('1'))
-            current += val * factor
+                val = running_invested.get(key, ZERO)
+            current += val * _factor(key)
 
         result.append({
             'date': d.isoformat(),
@@ -1265,3 +1286,70 @@ def compute_fund_performance(household_id: int, as_of: date) -> list[dict]:
         })
     rows.sort(key=lambda r: r['market_value'], reverse=True)
     return rows
+
+
+_DUP_FILLER_WORDS = {'fund', 'plan', 'option', 'the', 'ltd', 'limited', 'scheme'}
+QUANTITY_TRACKED_TYPES = {'equity', 'mutual_fund', 'sip', 'bond'}
+STALE_AFTER_DAYS = 30
+
+
+def _normalise_holding_name(name: str) -> str:
+    import re
+    words = re.split(r'[^a-z0-9]+', name.lower().replace('&', ' and '))
+    return ''.join(w for w in words if w and w not in _DUP_FILLER_WORDS)
+
+
+def compute_attention(household_id: int, as_of: date) -> dict:
+    """Counts of things that need the user, for the Home "Needs attention" card."""
+    from django.db.models import Max
+
+    from gmail_ingestion.models import GmailProcessedMessage
+    from instruments.models import Instrument, Investment
+    from sms_ingestion.models import SmsMessage
+
+    holdings = [
+        h for h in compute_holdings(household_id, as_of)
+        if not (h['instrument_type'] in QUANTITY_TRACKED_TYPES and h['quantity'] == 0)
+    ]
+
+    latest_by_investment = dict(
+        ValuationSnapshot.objects.filter(household_id=household_id, investment__isnull=False)
+        .values_list('investment_id').annotate(m=Max('valuation_date'))
+    )
+    latest_by_instrument = dict(
+        ValuationSnapshot.objects.filter(household_id=household_id, instrument__isnull=False, investment__isnull=True)
+        .values_list('instrument_id').annotate(m=Max('valuation_date'))
+    )
+    stale_cutoff = as_of - timedelta(days=STALE_AFTER_DAYS)
+    stale = never = 0
+    for h in holdings:
+        last = latest_by_investment.get(h['investment_id']) if h['investment_id'] else latest_by_instrument.get(h['instrument_id'])
+        if last is None:
+            never += 1
+        elif last < stale_cutoff:
+            stale += 1
+
+    mf_types = [Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP]
+    unlinked_funds = Investment.objects.filter(
+        instrument__household_id=household_id, instrument__instrument_type__in=mf_types,
+        instrument__is_active=True, external_fund__isnull=True,
+    ).count()
+
+    groups: dict[tuple, list[str]] = {}
+    for inv in Investment.objects.filter(instrument__household_id=household_id, instrument__is_active=True).select_related('instrument'):
+        key = (inv.instrument.instrument_type, inv.member_id, _normalise_holding_name(inv.name))
+        groups.setdefault(key, []).append(inv.folio_no)
+    duplicate_groups = sum(
+        1 for folios in groups.values()
+        if len(folios) > 1 and not (all(folios) and len(set(folios)) == len(folios))
+    )
+
+    return {
+        'stale_holdings': stale,
+        'never_valued': never,
+        'unlinked_funds': unlinked_funds,
+        'uncategorised': sum(1 for h in holdings if not h['asset_category']),
+        'duplicate_groups': duplicate_groups,
+        'pending_sms': SmsMessage.objects.filter(household_id=household_id, status=SmsMessage.STATUS_PENDING).count(),
+        'pending_gmail': GmailProcessedMessage.objects.filter(household_id=household_id, status=GmailProcessedMessage.STATUS_PENDING).count(),
+    }

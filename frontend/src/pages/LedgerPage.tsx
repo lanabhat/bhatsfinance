@@ -8,7 +8,13 @@ import { TX_TYPES, TxFormFields, blankTxForm, txFormFromTransaction, type TxForm
 import { useAuth } from '../context/AuthContext'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { normalizeApiError } from '../hooks/errorUtils'
-import type { Account, OptionItem, Tag, Transaction } from '../types/domain'
+import type { Account, ExpenseCategory, OptionItem, Tag, Transaction } from '../types/domain'
+import { expenseApi } from '../api/expenseApi'
+import type { TransactionSummary } from '../api/ledgerApi'
+import { useFilterState } from '../hooks/useFilters'
+import type { FilterField } from '../hooks/useFilters'
+import { FilterBar } from '../components/ui/FilterBar'
+import { Money } from '../components/common/Money'
 
 type Props = {
   householdId: number
@@ -116,10 +122,11 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
   // Search / filter / sort / group / pagination state
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [filterAccount, setFilterAccount] = useState('')
-  const [filterMember, setFilterMember] = useState('')
-  const [filterType, setFilterType] = useState('')
-  const [filterClassification, setFilterClassification] = useState('')
+  // Account / member / type / classification live in the filter bar (several values each).
+  const [ledgerFilters, setLedgerFilters] = useFilterState('ledger')
+  const filtersKey = JSON.stringify(ledgerFilters)
+  const [summary, setSummary] = useState<TransactionSummary | null>(null)
+  const [spendCategories, setSpendCategories] = useState<ExpenseCategory[]>([])
   const [dateAfter, setDateAfter] = useState('')
   const [dateBefore, setDateBefore] = useState('')
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
@@ -151,7 +158,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
   // Reset to page 1 whenever a filter/search/group/order changes
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, filterAccount, filterMember, filterType, filterClassification, dateAfter, dateBefore, groupBy, ordering])
+  }, [debouncedSearch, filtersKey, dateAfter, dateBefore, groupBy, ordering])
 
   // Clear selection whenever the filtered set or page changes, so a bulk
   // action can never silently apply to rows the user can no longer see.
@@ -160,7 +167,21 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
     setSelectAllMatching(false)
     setBulkError('')
     setBulkMessage('')
-  }, [page, debouncedSearch, filterAccount, filterMember, filterType, filterClassification, dateAfter, dateBefore, groupBy, ordering])
+  }, [page, debouncedSearch, filtersKey, dateAfter, dateBefore, groupBy, ordering])
+
+  // One source of truth for the list, "select all matching" and the summary,
+  // so a bulk action can never target a different set than the one shown.
+  const filterParams = () => ({
+    householdId,
+    search: debouncedSearch || undefined,
+    accountIn: ledgerFilters.account,
+    memberIn: ledgerFilters.member,
+    transactionTypeIn: ledgerFilters.type,
+    classificationIn: ledgerFilters.classification,
+    spendCategoryIn: ledgerFilters.category,
+    txDateAfter: dateAfter || undefined,
+    txDateBefore: dateBefore || undefined,
+  })
 
   const loadAccounts = async () => {
     try {
@@ -199,16 +220,9 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
     try {
       const effectiveOrdering = groupBy !== 'none' ? groupBy : ordering
       const res = await ledgerApi.listTransactionsPage({
-        householdId,
+        ...filterParams(),
         page,
         pageSize: PAGE_SIZE,
-        search: debouncedSearch || undefined,
-        account: filterAccount ? Number(filterAccount) : undefined,
-        member: filterMember ? Number(filterMember) : undefined,
-        transactionType: filterType || undefined,
-        classification: filterClassification || undefined,
-        txDateAfter: dateAfter || undefined,
-        txDateBefore: dateBefore || undefined,
         ordering: effectiveOrdering,
       })
       setTransactions(res.results)
@@ -224,27 +238,42 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
   useEffect(() => {
     void loadAccounts()
     void loadTags()
+    expenseApi.listCategories(householdId).then(setSpendCategories).catch(() => { /* filter just lacks categories */ })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [householdId])
 
   useEffect(() => {
     void loadTransactions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [householdId, page, debouncedSearch, filterAccount, filterMember, filterType, filterClassification, dateAfter, dateBefore, groupBy, ordering])
+  }, [householdId, page, debouncedSearch, filtersKey, dateAfter, dateBefore, groupBy, ordering])
+
+  useEffect(() => {
+    let active = true
+    ledgerApi.summarizeTransactions(filterParams())
+      .then((s) => { if (active) setSummary(s) })
+      .catch(() => { if (active) setSummary(null) })
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [householdId, debouncedSearch, filtersKey, dateAfter, dateBefore])
 
   const resetFilters = () => {
     setSearch('')
-    setFilterAccount('')
-    setFilterMember('')
-    setFilterType('')
-    setFilterClassification('')
+    setLedgerFilters({})
     setDateAfter('')
     setDateBefore('')
     setGroupBy('none')
     setOrdering('-tx_date')
   }
 
-  const hasActiveFilters = !!(search || filterAccount || filterMember || filterType || filterClassification || dateAfter || dateBefore || groupBy !== 'none')
+  const hasActiveFilters = !!(search || Object.keys(ledgerFilters).length > 0 || dateAfter || dateBefore || groupBy !== 'none')
+
+  const ledgerFilterFields: FilterField[] = [
+    { key: 'account', label: 'Account', options: accountOptions.map(a => ({ value: String(a.id), label: a.label })) },
+    { key: 'member', label: 'Member', options: memberOptions.map(m => ({ value: String(m.id), label: m.label })) },
+    { key: 'type', label: 'Type', options: TX_TYPES.map(t => ({ value: t.label, label: TX_TYPE_LABELS[t.label] ?? t.label })) },
+    { key: 'classification', label: 'Classification', options: CLASSIFICATION_OPTIONS.map(c => ({ value: c.label, label: c.label.replace('_', ' ') })) },
+    { key: 'category', label: 'Category', options: spendCategories.map(c => ({ value: c.key, label: c.label })) },
+  ]
 
   const saveTransaction = async () => {
     try {
@@ -318,16 +347,9 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
     let fetchPage = 1
     while (ids.length < BULK_LIMIT) {
       const res = await ledgerApi.listTransactionsPage({
-        householdId,
+        ...filterParams(),
         page: fetchPage,
         pageSize: MAX_PAGE_SIZE,
-        search: debouncedSearch || undefined,
-        account: filterAccount ? Number(filterAccount) : undefined,
-        member: filterMember ? Number(filterMember) : undefined,
-        transactionType: filterType || undefined,
-        classification: filterClassification || undefined,
-        txDateAfter: dateAfter || undefined,
-        txDateBefore: dateBefore || undefined,
       })
       ids.push(...res.results.map(t => t.id))
       if (res.results.length < MAX_PAGE_SIZE || ids.length >= res.count) break
@@ -472,35 +494,16 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                 onChange={e => setSearch(e.target.value)}
                 className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)]"
               />
+              <FilterBar fields={ledgerFilterFields} value={ledgerFilters} onChange={setLedgerFilters} />
+              {summary && (
+                <p className="text-xs text-[var(--text-muted)]">
+                  {summary.count.toLocaleString('en-IN')} transaction{summary.count === 1 ? '' : 's'}{hasActiveFilters ? ' matching' : ''}
+                  {' · '}in <Money value={summary.inflow} className="text-emerald-600 dark:text-emerald-400" />
+                  {' · '}out <Money value={summary.outflow} className="text-rose-600 dark:text-rose-400" />
+                  {' · '}net <Money value={summary.net} className="font-semibold text-[var(--text)]" />
+                </p>
+              )}
               <div className="flex flex-wrap items-end gap-2">
-                <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-                  Account
-                  <select value={filterAccount} onChange={e => setFilterAccount(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]">
-                    <option value="">All</option>
-                    {accountOptions.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-                  </select>
-                </label>
-                <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-                  Member
-                  <select value={filterMember} onChange={e => setFilterMember(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]">
-                    <option value="">All</option>
-                    {memberOptions.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                  </select>
-                </label>
-                <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-                  Type
-                  <select value={filterType} onChange={e => setFilterType(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]">
-                    <option value="">All</option>
-                    {TX_TYPES.map(t => <option key={t.id} value={t.label}>{TX_TYPE_LABELS[t.label] ?? t.label}</option>)}
-                  </select>
-                </label>
-                <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-                  Classification
-                  <select value={filterClassification} onChange={e => setFilterClassification(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]">
-                    <option value="">All</option>
-                    {CLASSIFICATION_OPTIONS.map(c => <option key={c.id} value={c.label}>{c.label.replace('_', ' ')}</option>)}
-                  </select>
-                </label>
                 <label className="grid gap-1 text-xs text-[var(--text-muted)]">
                   From
                   <input type="date" value={dateAfter} onChange={e => setDateAfter(e.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]" />

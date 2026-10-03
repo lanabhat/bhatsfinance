@@ -184,3 +184,43 @@ class TransactionSellRealizedGainTests(TestCase):
         # server-computed value.
         tx = Transaction.objects.get(id=response.data['id'])
         self.assertEqual(tx.realized_gain, Decimal('2000.00'))
+
+
+class TransactionMultiValueFilterTests(TestCase):
+    def setUp(self):
+        self.household = Household.objects.create(name='Pai Family')
+        self.client = _approved_client(self.household)
+        self.a = Member.objects.create(household=self.household, full_name='A')
+        self.b = Member.objects.create(household=self.household, full_name='B')
+        self.c = Member.objects.create(household=self.household, full_name='C')
+        self.bank = Account.objects.create(household=self.household, name='Bank', account_type=Account.AccountType.BANK)
+        for member, cat, amount, day in ((self.a, 'food', '100', 5), (self.b, 'travel', '200', 15), (self.c, 'food', '400', 25)):
+            Transaction.objects.create(
+                household=self.household, member=member, account=self.bank, tx_date=date(2026, 9, day),
+                amount=Decimal(amount), direction=Transaction.Direction.OUTFLOW,
+                transaction_type=Transaction.TransactionType.OTHER, classification='spend', spend_category=cat,
+            )
+        Transaction.objects.create(
+            household=self.household, member=self.a, account=self.bank, tx_date=date(2026, 9, 1),
+            amount=Decimal('1000'), direction=Transaction.Direction.INFLOW,
+            transaction_type=Transaction.TransactionType.OTHER, classification='income',
+        )
+
+    def _amounts(self, query):
+        response = self.client.get(f'/api/transactions/?household={self.household.id}&{query}')
+        self.assertEqual(response.status_code, 200, response.content)
+        return sorted(r['amount'] for r in response.json()['results'])
+
+    def test_member_in_is_union(self):
+        self.assertEqual(self._amounts(f'member__in={self.b.id},{self.c.id}'), ['200.00', '400.00'])
+
+    def test_spend_category_in_combines_with_date(self):
+        self.assertEqual(self._amounts('spend_category__in=food,travel&tx_date_after=2026-09-10'), ['200.00', '400.00'])
+
+    def test_summary_covers_all_filtered_rows(self):
+        response = self.client.get(f'/api/transactions/summary/?household={self.household.id}&member__in={self.a.id},{self.c.id}')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json(), {'count': 3, 'inflow': '1000.00', 'outflow': '500.00', 'net': '500.00'})
+
+    def test_summary_requires_household(self):
+        self.assertEqual(self.client.get('/api/transactions/summary/').status_code, 400)

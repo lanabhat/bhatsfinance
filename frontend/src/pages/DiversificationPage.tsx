@@ -3,7 +3,7 @@ import { aiInsightsApi } from '../api/aiInsightsApi'
 import { diversificationApi } from '../api/diversificationApi'
 import { fundDataApi } from '../api/fundDataApi'
 import { portfolioApi } from '../api/portfolioApi'
-import { LinkFundSheet } from '../components/allocation/LinkFundSheet'
+import { FundMatchSheet } from '../components/allocation/FundMatchSheet'
 import { OverlapTable } from '../components/allocation/OverlapTable'
 import { TopHoldingsTable } from '../components/allocation/TopHoldingsTable'
 import { UploadHoldingsSheet } from '../components/allocation/UploadHoldingsSheet'
@@ -195,10 +195,10 @@ export function DiversificationPage() {
       )}
 
       {sheet.type === 'link' && (
-        <Sheet title="Link fund to NAV data" onClose={() => setSheet({ type: 'none' })}>
-          <LinkFundSheet
-            instruments={mfInstruments}
-            onSave={async () => { setSheet({ type: 'none' }); await load() }}
+        <Sheet title="Link funds to daily NAV" onClose={() => setSheet({ type: 'none' })}>
+          <FundMatchSheet
+            householdId={householdId}
+            onDone={async () => { setSheet({ type: 'none' }); await load() }}
             onCancel={() => setSheet({ type: 'none' })}
           />
         </Sheet>

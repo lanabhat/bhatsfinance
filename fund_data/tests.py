@@ -189,3 +189,105 @@ class ComputeBenchmarkComparisonTests(TestCase):
         self.assertTrue(result['available'])
         self.assertTrue(result['underperforming'])
         self.assertLess(result['periods']['3Y']['gap_percent'], -UNDERPERFORMANCE_THRESHOLD_PERCENT)
+
+
+_AXIS_RESULTS = [
+    {'schemeCode': 149936, 'schemeName': 'Axis Nifty Midcap 50 Index Fund - Direct Plan - Growth Option'},
+    {'schemeCode': 120505, 'schemeName': 'Axis Midcap Fund - Direct Plan - Growth Option'},
+    {'schemeCode': 120504, 'schemeName': 'Axis Midcap Fund - Direct Plan - IDCW Option'},
+    {'schemeCode': 114564, 'schemeName': 'Axis Midcap Fund - Regular Plan - Growth Option'},
+]
+
+
+class SuggestSchemeTests(TestCase):
+    def test_picks_matching_plan_and_option(self):
+        from fund_data.matching import suggest_scheme
+        result = suggest_scheme('Axis Midcap Direct Plan Growth', search=lambda q: _AXIS_RESULTS)
+        self.assertEqual(result['best']['scheme_code'], '120505')
+        self.assertEqual(result['confidence'], 'high')
+
+    def test_regular_and_idcw_are_not_confused(self):
+        from fund_data.matching import suggest_scheme
+        self.assertEqual(suggest_scheme('Axis Midcap Regular Growth', search=lambda q: _AXIS_RESULTS)['best']['scheme_code'], '114564')
+        self.assertEqual(suggest_scheme('Axis Midcap Direct IDCW', search=lambda q: _AXIS_RESULTS)['best']['scheme_code'], '120504')
+
+    def test_partial_name_match_is_never_high_confidence(self):
+        # Real case: "Short Term" vs "Ultra Short Term" are different schemes.
+        from fund_data.matching import suggest_scheme
+        results = [{'schemeCode': 1, 'schemeName': 'Nippon India Ultra Short Term Fund - Direct Plan - Growth Option'}]
+        result = suggest_scheme('Nippon India Short Term Fund Direct Growth', search=lambda q: results)
+        self.assertEqual(result['confidence'], 'low')
+
+    def test_no_results_means_no_suggestion(self):
+        from fund_data.matching import suggest_scheme
+        self.assertEqual(suggest_scheme('Unknown Fund Direct Growth', search=lambda q: [])['confidence'], 'none')
+
+
+class WriteNavSnapshotsTests(TestCase):
+    def setUp(self):
+        from ledger.models import Transaction
+        self.household = Household.objects.create(name='Iyer Family')
+        self.shell = get_or_create_mf_shell(self.household)
+        self.inv = Investment.objects.create(instrument=self.shell, name='Axis Midcap Direct Plan Growth')
+        Transaction.objects.create(
+            household=self.household, instrument=self.shell, investment=self.inv, tx_date=date(2026, 1, 5),
+            amount=Decimal('1000'), quantity=Decimal('10'), direction='outflow', transaction_type='buy',
+        )
+        self.fund = ExternalFund.objects.create(investment=self.inv, mfapi_scheme_code='120505', scheme_name='Axis Midcap')
+        ExternalFundNav.objects.create(fund=self.fund, nav_date=date(2026, 9, 30), nav=Decimal('123.45'))
+
+    def test_values_fund_at_latest_nav(self):
+        from fund_data.navs import write_nav_snapshots
+        from insights.services import compute_holdings
+        result = write_nav_snapshots(self.household.id, as_of=date(2026, 10, 1))
+        self.assertEqual(result['written'], 1)
+        holding = next(h for h in compute_holdings(self.household.id, date(2026, 10, 1)) if h['investment_id'] == self.inv.id)
+        self.assertEqual(holding['market_value'], Decimal('1234.50'))
+
+    def test_fund_without_units_is_skipped(self):
+        from fund_data.navs import write_nav_snapshots
+        from ledger.models import Transaction
+        Transaction.objects.filter(investment=self.inv).delete()
+        result = write_nav_snapshots(self.household.id, as_of=date(2026, 10, 1))
+        self.assertEqual((result['written'], result['skipped_no_units']), (0, 1))
+
+    def test_same_scheme_in_two_folios_can_both_link(self):
+        other = Investment.objects.create(instrument=self.shell, name='Axis Midcap Direct Plan Growth', folio_no='999')
+        ExternalFund.objects.create(investment=other, mfapi_scheme_code='120505', scheme_name='Axis Midcap')
+        self.assertEqual(ExternalFund.objects.filter(mfapi_scheme_code='120505').count(), 2)
+
+    def test_sync_fetches_each_scheme_once(self):
+        from unittest.mock import patch
+        from fund_data.navs import sync_navs
+        other = Investment.objects.create(instrument=self.shell, name='Axis Midcap Direct Plan Growth', folio_no='999')
+        ExternalFund.objects.create(investment=other, mfapi_scheme_code='120505', scheme_name='Axis Midcap')
+        history = {'meta': {}, 'history': [{'date': date(2026, 10, 1), 'nav': Decimal('125')}]}
+        with patch('fund_data.navs.fetch_scheme_nav_history', return_value=history) as fetch:
+            sync_navs(self.household.id, include_benchmarks=False, log=lambda *_: None)
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(ExternalFundNav.objects.filter(nav_date=date(2026, 10, 1)).count(), 2)
+
+    def test_fund_with_out_of_date_units_keeps_uploaded_value(self):
+        # Real case: SIP units bought after the import weren't recorded, so the
+        # uploaded value implies ~3x the ledger's units. NAV x units would understate it.
+        from fund_data.navs import write_nav_snapshots
+        from valuations.models import ValuationSnapshot
+        ExternalFundNav.objects.create(fund=self.fund, nav_date=date(2026, 9, 20), nav=Decimal('120'))
+        ValuationSnapshot.objects.create(
+            household=self.household, instrument=self.shell, investment=self.inv,
+            valuation_date=date(2026, 9, 20), market_value=Decimal('3600'), source='csv',
+        )
+        result = write_nav_snapshots(self.household.id, as_of=date(2026, 10, 1))
+        self.assertEqual(result['written'], 0)
+        self.assertEqual(result['units_out_of_date'], [self.inv.name])
+
+    def test_consistent_units_are_valued_from_nav(self):
+        from fund_data.navs import write_nav_snapshots
+        from valuations.models import ValuationSnapshot
+        ExternalFundNav.objects.create(fund=self.fund, nav_date=date(2026, 9, 20), nav=Decimal('120'))
+        ValuationSnapshot.objects.create(
+            household=self.household, instrument=self.shell, investment=self.inv,
+            valuation_date=date(2026, 9, 20), market_value=Decimal('1201'), source='csv',
+        )
+        result = write_nav_snapshots(self.household.id, as_of=date(2026, 10, 1))
+        self.assertEqual((result['written'], result['units_out_of_date']), (1, []))

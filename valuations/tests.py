@@ -35,6 +35,32 @@ class ValuationInvestmentFilterTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['investment'], self.fund_a.id)
 
+    def test_bulk_snapshot_values_each_fund_not_the_shell(self):
+        from valuations.services import bulk_snapshot
+        bulk_snapshot(self.household.id, date(2026, 9, 10))
+        today = ValuationSnapshot.objects.filter(valuation_date=date(2026, 9, 10))
+        self.assertFalse(today.filter(instrument=self.shell, investment__isnull=True).exists())
+        self.assertEqual(today.get(investment=self.fund_a).unit_price, Decimal('10.5'))
+        self.assertEqual(today.get(investment=self.fund_b).unit_price, Decimal('42.0'))
+
+    def test_bulk_snapshot_rerun_is_idempotent(self):
+        from valuations.services import bulk_snapshot
+        bulk_snapshot(self.household.id, date(2026, 9, 10))
+        before = ValuationSnapshot.objects.count()
+        bulk_snapshot(self.household.id, date(2026, 9, 10))
+        self.assertEqual(ValuationSnapshot.objects.count(), before)
+
+    def test_bulk_snapshot_keeps_users_same_day_value(self):
+        from valuations.services import bulk_snapshot
+        ValuationSnapshot.objects.create(
+            household=self.household, instrument=self.shell, investment=self.fund_a,
+            valuation_date=date(2026, 9, 10), unit_price=Decimal('11.0'), source='manual',
+        )
+        bulk_snapshot(self.household.id, date(2026, 9, 10))
+        rows = ValuationSnapshot.objects.filter(investment=self.fund_a, valuation_date=date(2026, 9, 10))
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.get().unit_price, Decimal('11.0'))
+
     def test_create_with_investment_is_attributed_to_fund(self):
         response = self.client.post('/api/valuations/', {
             'household': self.household.id, 'instrument': self.shell.id, 'investment': self.fund_b.id,

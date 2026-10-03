@@ -822,7 +822,7 @@ export type DiversificationPayload = {
 
 export type ExternalFund = {
   id: number
-  instrument: number
+  investment: number | null
   mfapi_scheme_code: string
   scheme_name: string
   fund_house: string
@@ -832,6 +832,38 @@ export type ExternalFund = {
 export type MfApiSearchResult = {
   schemeCode: number
   schemeName: string
+}
+
+export type FundSchemeCandidate = { scheme_code: string; scheme_name: string; score: number }
+
+export type FundMatchSuggestion = {
+  investment_id: number
+  name: string
+  folio_no: string
+  member_name: string | null
+  best: FundSchemeCandidate | null
+  confidence: 'high' | 'low' | 'none'
+  candidates: FundSchemeCandidate[]
+}
+
+export type FundRefreshResult = {
+  schemes: number
+  nav_points_added: number
+  failed: number
+  written: number
+  skipped_no_nav: number
+  skipped_no_units: number
+  units_out_of_date: string[]
+}
+
+export type AttentionCounts = {
+  stale_holdings: number
+  never_valued: number
+  unlinked_funds: number
+  uncategorised: number
+  duplicate_groups: number
+  pending_sms: number
+  pending_gmail: number
 }
 
 export type FundRiskMetrics = {

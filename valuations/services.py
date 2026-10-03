@@ -58,6 +58,22 @@ def _compute_bond_value(bond, as_of: date) -> Decimal:
     return principal.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
+def _upsert_auto_snapshot(lookup: dict, values: dict) -> bool:
+    """Write one auto-generated snapshot per (holding, date), so re-running is idempotent.
+    Never overwrites a manual/CSV snapshot already recorded for that date — the
+    user's own value wins. Returns False when an existing user value was kept."""
+    existing = ValuationSnapshot.objects.filter(**lookup).order_by('-id').first()
+    if existing is None:
+        ValuationSnapshot.objects.create(**lookup, **values)
+        return True
+    if existing.source != ValuationSnapshot.SourceType.API:
+        return False
+    for field, value in values.items():
+        setattr(existing, field, value)
+    existing.save(update_fields=list(values))
+    return True
+
+
 def bulk_snapshot(household_id: int, as_of: date) -> dict:
     """
     Create ValuationSnapshot records for all active instruments and accounts
@@ -75,11 +91,35 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
     # --- Instruments ---
     instruments = Instrument.objects.filter(
         household_id=household_id, is_active=True
-    ).prefetch_related('fd_details', 'bond_details')
+    ).prefetch_related('fd_details', 'bond_details', 'investments')
 
     for instrument in instruments:
         value = None
         method = None
+
+        # Shared shell (Mutual Fund / Equity): value each fund/stock on its own.
+        # A shell-level snapshot would copy one fund's price onto the whole shell.
+        investments = [inv for inv in instrument.investments.all() if inv.is_active]
+        if investments:
+            for inv in investments:
+                last = (
+                    ValuationSnapshot.objects
+                    .filter(investment=inv, valuation_date__lte=as_of)
+                    .order_by('-valuation_date', '-id')
+                    .first()
+                )
+                if last is None:
+                    needs_manual.append({'name': inv.name, 'type': instrument.instrument_type})
+                    continue
+                if last.valuation_date < as_of:
+                    _upsert_auto_snapshot(
+                        {'household_id': household_id, 'instrument': instrument, 'investment': inv, 'valuation_date': as_of},
+                        {'unit_price': last.unit_price, 'market_value': last.market_value,
+                         'source': ValuationSnapshot.SourceType.API, 'notes': f'Carried forward from {last.valuation_date}'},
+                    )
+                carried_forward.append({'name': inv.name, 'type': instrument.instrument_type,
+                                        'value': float(last.market_value or last.unit_price or 0)})
+            continue
 
         # Try FD auto-compute — an instrument can now hold several FD
         # investments (e.g. multiple deposits under one "HDFC Bank FD"
@@ -105,37 +145,20 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
         if value is None:
             last = (
                 ValuationSnapshot.objects
-                .filter(instrument=instrument, valuation_date__lte=as_of)
+                .filter(instrument=instrument, investment__isnull=True, valuation_date__lte=as_of)
                 .order_by('-valuation_date', '-id')
                 .first()
             )
-            if last is not None:
-                if last.unit_price is not None:
-                    # Reuse unit_price; quantity handled separately
-                    value = last.unit_price
-                    ValuationSnapshot.objects.create(
-                        household_id=household_id,
-                        instrument=instrument,
-                        valuation_date=as_of,
-                        unit_price=last.unit_price,
-                        market_value=last.market_value,
-                        source=ValuationSnapshot.SourceType.API,
-                        notes=f'Carried forward from {last.valuation_date}',
+            if last is not None and (last.unit_price is not None or last.market_value is not None):
+                if last.valuation_date < as_of:
+                    _upsert_auto_snapshot(
+                        {'household_id': household_id, 'instrument': instrument, 'investment': None, 'valuation_date': as_of},
+                        {'unit_price': last.unit_price, 'market_value': last.market_value,
+                         'source': ValuationSnapshot.SourceType.API, 'notes': f'Carried forward from {last.valuation_date}'},
                     )
-                    carried_forward.append({'name': instrument.name, 'type': instrument.instrument_type, 'value': float(last.market_value or last.unit_price)})
-                    continue
-                elif last.market_value is not None:
-                    value = last.market_value
-                    ValuationSnapshot.objects.create(
-                        household_id=household_id,
-                        instrument=instrument,
-                        valuation_date=as_of,
-                        market_value=last.market_value,
-                        source=ValuationSnapshot.SourceType.API,
-                        notes=f'Carried forward from {last.valuation_date}',
-                    )
-                    carried_forward.append({'name': instrument.name, 'type': instrument.instrument_type, 'value': float(last.market_value)})
-                    continue
+                carried_forward.append({'name': instrument.name, 'type': instrument.instrument_type,
+                                        'value': float(last.market_value if last.market_value is not None else last.unit_price)})
+                continue
 
         # Fall back to net invested from transactions
         if value is None:
@@ -150,13 +173,10 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
                 method = 'transactions'
 
         if value is not None:
-            ValuationSnapshot.objects.create(
-                household_id=household_id,
-                instrument=instrument,
-                valuation_date=as_of,
-                market_value=value,
-                source=ValuationSnapshot.SourceType.API,
-                notes='Auto-computed' if method == 'formula' else ('Net invested from transactions' if method == 'transactions' else ''),
+            _upsert_auto_snapshot(
+                {'household_id': household_id, 'instrument': instrument, 'investment': None, 'valuation_date': as_of},
+                {'market_value': value, 'source': ValuationSnapshot.SourceType.API,
+                 'notes': 'Auto-computed' if method == 'formula' else ('Net invested from transactions' if method == 'transactions' else '')},
             )
             (auto_computed if method == 'formula' else carried_forward).append(
                 {'name': instrument.name, 'type': instrument.instrument_type, 'value': float(value)}
@@ -176,6 +196,9 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
             .order_by('-valuation_date', '-id')
             .first()
         )
+        if last is not None and last.valuation_date == as_of:
+            carried_forward.append({'name': account.name, 'type': account.account_type, 'value': float(last.balance)})
+            continue
         if last is not None:
             balance = last.balance
             note = f'Carried forward from {last.valuation_date}'
@@ -192,13 +215,9 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
             note = 'Computed from opening balance + transactions'
             bucket = auto_computed
 
-        ValuationSnapshot.objects.create(
-            household_id=household_id,
-            account=account,
-            valuation_date=as_of,
-            balance=balance,
-            source=ValuationSnapshot.SourceType.API,
-            notes=note,
+        _upsert_auto_snapshot(
+            {'household_id': household_id, 'account': account, 'valuation_date': as_of},
+            {'balance': balance, 'source': ValuationSnapshot.SourceType.API, 'notes': note},
         )
         bucket.append({'name': account.name, 'type': account.account_type, 'value': float(balance)})
 

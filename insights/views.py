@@ -29,6 +29,18 @@ class HoldingsView(APIView):
         return Response({'as_of': as_of, 'holdings': holdings, 'accounts': accounts})
 
 
+class AttentionView(APIView):
+    """Counts behind the Home "Needs attention" card."""
+
+    def get(self, request):
+        from insights.services import compute_attention
+
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(compute_attention(int(household_id), date.today()))
+
+
 class NetWorthView(APIView):
     def get(self, request):
         household_id = request.query_params.get('household_id')
