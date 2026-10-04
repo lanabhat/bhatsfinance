@@ -545,3 +545,96 @@ class PurgeTests(TestCase):
         self.assertEqual(response.status_code, 400, response.content)
         self.assertTrue(Instrument.objects.filter(id=self.shell.id).exists())
         self.assertEqual(Transaction.objects.filter(instrument=self.shell).count(), 2)
+
+
+class HoldingClassificationTests(TestCase):
+    def test_mutual_fund_isin_excludes_etfs(self):
+        from instruments.services import is_mutual_fund_isin
+        self.assertTrue(is_mutual_fund_isin('INF109K012K1', 'ICICI VFD DP GR'))
+        self.assertTrue(is_mutual_fund_isin('INF174KA1HV3', 'KOTAK MTCF D-GROW'))
+        self.assertFalse(is_mutual_fund_isin('INF109KC1NS5', 'ICICI NIFTY NXT50ETF'))
+        self.assertFalse(is_mutual_fund_isin('INF732E01037', 'NIP ETNF1D RTLIQBEES'))
+        self.assertFalse(is_mutual_fund_isin('INE154A01025', 'ITC LTD'))
+
+    def test_bond_isin_from_structure(self):
+        from instruments.services import is_bond_isin
+        self.assertTrue(is_bond_isin('IN3920260020'))   # state development loan
+        self.assertTrue(is_bond_isin('INE658F08565'))   # KIIFB debenture
+        self.assertFalse(is_bond_isin('INE154A01025'))  # equity share
+        self.assertFalse(is_bond_isin('INF109K012K1'))  # fund unit
+        self.assertFalse(is_bond_isin(''))
+
+
+class ReclassifyHoldingTests(TestCase):
+    def setUp(self):
+        from datetime import date
+        from ledger.models import Transaction
+        from valuations.models import ValuationSnapshot
+        self.household = Household.objects.create(name='Pillai Family')
+        self.member = Member.objects.create(household=self.household, full_name='Anu Pillai')
+        self.equity = get_or_create_equity_shell(self.household)
+        self.date = date(2026, 10, 2)
+
+        def holding(name, isin, units, amount):
+            inv = Investment.objects.create(instrument=self.equity, name=name, member=self.member, symbol=isin)
+            Transaction.objects.create(
+                household=self.household, instrument=self.equity, investment=inv, member=self.member, tx_date=self.date,
+                amount=Decimal(amount), quantity=Decimal(units), direction='outflow', transaction_type='buy',
+            )
+            ValuationSnapshot.objects.create(
+                household=self.household, instrument=self.equity, investment=inv, valuation_date=self.date,
+                market_value=Decimal(amount), source='csv',
+            )
+            return inv
+        self.holding = holding
+
+    def _bond(self, name, isin, quantity):
+        from datetime import date
+        from instruments.models import BondDetails
+        inst = Instrument.objects.create(household=self.household, name=name, instrument_type='bond')
+        BondDetails.objects.create(
+            instrument=inst, isin=isin, face_value=Decimal('100'), quantity=quantity, coupon_rate=Decimal('7.75'),
+            investment_date=date(2024, 1, 1), maturity_date=date(2041, 6, 24),
+        )
+        return inst
+
+    def test_move_to_mf_shell_carries_ledger(self):
+        from instruments.services import move_investment_to_shell
+        from ledger.models import Transaction
+        inv = self.holding('KOTAK MTCF D-GROW', 'INF174KA1HV3', '471.52', '9946.67')
+        mf = get_or_create_mf_shell(self.household)
+        moved = move_investment_to_shell(inv, mf)
+        self.assertEqual((moved.pk, moved.instrument_id, moved.isin), (inv.pk, mf.id, 'INF174KA1HV3'))
+        self.assertEqual(Transaction.objects.get(investment=inv).instrument_id, mf.id)
+
+    def test_move_merges_into_existing_same_isin(self):
+        from instruments.services import move_investment_to_shell
+        from ledger.models import Transaction
+        mf = get_or_create_mf_shell(self.household)
+        existing = Investment.objects.create(instrument=mf, name='Kotak Multi Cap', member=self.member, isin='INF174KA1HV3')
+        inv = self.holding('KOTAK MTCF D-GROW', 'INF174KA1HV3', '10', '500')
+        survivor = move_investment_to_shell(inv, mf)
+        self.assertEqual(survivor.pk, existing.pk)
+        self.assertFalse(Investment.objects.filter(pk=inv.pk).exists())
+        self.assertEqual(Transaction.objects.filter(investment=existing).count(), 1)
+
+    def test_duplicate_of_tracked_bonds_is_removed(self):
+        from instruments.services import reclassify_bond_investment
+        from ledger.models import Transaction
+        self._bond('KIIFB A', 'INE658F08565', 2)
+        self._bond('KIIFB B', 'INE658F08565', 1)
+        inv = self.holding('KIIFB 9.30 21012032', 'INE658F08565', '3', '311400')
+        self.assertEqual(reclassify_bond_investment(inv), 'removed_duplicate')
+        self.assertFalse(Investment.objects.filter(pk=inv.pk).exists())
+        self.assertFalse(Transaction.objects.filter(amount=Decimal('311400')).exists())
+
+    def test_bond_with_different_units_is_converted_not_deleted(self):
+        from instruments.services import reclassify_bond_investment
+        from ledger.models import Transaction
+        self._bond('Delhi SDL', 'IN3920260020', 500)
+        inv = self.holding('DEL 37608 7.75 2041', 'IN3920260020', '1000', '99120')
+        self.assertEqual(reclassify_bond_investment(inv), 'converted')
+        bond = Instrument.objects.get(symbol='IN3920260020', instrument_type='bond')
+        tx = Transaction.objects.get(amount=Decimal('99120'))
+        self.assertEqual((tx.instrument_id, tx.investment_id), (bond.id, None))
+        self.assertTrue(InstrumentOwnership.objects.filter(instrument=bond, member=self.member).exists())

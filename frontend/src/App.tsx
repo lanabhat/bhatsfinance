@@ -12,6 +12,7 @@ import { DiversificationPage } from './pages/DiversificationPage'
 import { FundPerformancePage } from './pages/FundPerformancePage'
 import { HoldingsPage } from './pages/HoldingsPage'
 import { AddHoldingPage } from './pages/AddHoldingPage'
+import { SmsReviewPage } from './pages/SmsReviewPage'
 import { AccountsPage } from './pages/AccountsPage'
 import { InstrumentsPage } from './pages/InstrumentsPage'
 import { InstrumentDetailPage } from './pages/InstrumentDetailPage'
@@ -51,10 +52,10 @@ function routeFromHash(): RouteKey {
   return VALID_ROUTES.has(value as RouteKey) ? (value as RouteKey) : 'home'
 }
 
-// Two sub-routes exist today: the literal 'add' under 'holdings'
-// (#/holdings/add, the full-page "Add Holding" flow) and a numeric
-// instrument id under 'instruments' (#/instruments/<id>, the drill-down
-// page). Not a general sub-routing scheme — each caller interprets the
+// Sub-routes: the literal 'add' under 'holdings' (#/holdings/add, the
+// full-page "Add Holding" flow), a numeric instrument id under
+// 'instruments' (#/instruments/<id>, the drill-down page) and a numeric
+// SMS id under 'sms' (#/sms/<id>, the full-page SMS review). Not a general sub-routing scheme — each caller interprets the
 // segment itself; extend the same way if another page needs one.
 function subRouteFromHash(): string | null {
   const parts = window.location.hash.replace('#/', '').split('/')
@@ -93,6 +94,7 @@ function AppInner() {
     }
     if (route === 'holdings' && subRoute === 'add') return <AddHoldingPage onDone={() => navigate('holdings')} />
     if (route === 'instruments' && subRoute) return <InstrumentDetailPage instrumentId={Number(subRoute)} onDone={() => navigate('instruments')} />
+    if (route === 'sms' && subRoute && householdId) return <SmsReviewPage householdId={householdId} messageId={Number(subRoute)} memberOptions={members} instrumentOptions={instrumentsFull} onDone={() => navigate('sms')} />
     switch (route) {
       case 'home': return <HomePage onNavigate={navigate} />
       case 'holdings': return <HoldingsPage />
@@ -141,7 +143,7 @@ function AppInner() {
       case 'import': return <ImportPage householdId={householdId} memberOptions={members} accountOptions={accounts} instrumentOptions={instruments} />
       case 'maintenance': return <MaintenancePage />
       case 'gmail': return <GmailPage householdId={householdId} accountOptions={accounts} instrumentOptions={instruments} memberOptions={members} />
-      case 'sms': return <SmsPage householdId={householdId} canDelete={canDelete} accountOptions={accounts} memberOptions={members} instrumentOptions={instrumentsFull} />
+      case 'sms': return <SmsPage householdId={householdId} canDelete={canDelete} accountOptions={accounts} memberOptions={members} />
       case 'admin': return user.authenticated && user.role === 'super_admin' ? <AdminPage /> : <HomePage onNavigate={navigate} />
       default: return <HomePage onNavigate={navigate} />
     }
@@ -151,7 +153,9 @@ function AppInner() {
     ? { parentLabel: 'Investments', current: 'Add Holding', onBack: () => navigate('holdings') }
     : route === 'instruments' && subRoute
       ? { parentLabel: 'Instruments', current: instrumentsFull.find((i) => i.id === Number(subRoute))?.label ?? 'Instrument', onBack: () => navigate('instruments') }
-      : undefined
+      : route === 'sms' && subRoute
+        ? { parentLabel: 'SMS', current: 'Review SMS', onBack: () => navigate('sms') }
+        : undefined
 
   return (
     <AppLayout

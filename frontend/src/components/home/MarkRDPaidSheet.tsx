@@ -15,7 +15,7 @@ export function MarkRDPaidSheet({ alert, accountOptions, onClose, onPaid }: Prop
   const [paidOn, setPaidOn] = useState(new Date().toISOString().slice(0, 10))
   const [accountId, setAccountId] = useState<number>(alert.account_id)
   const [amount, setAmount] = useState(alert.expected_amount)
-  const [deduct, setDeduct] = useState(true)
+  const [deduct, setDeduct] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -73,7 +73,7 @@ export function MarkRDPaidSheet({ alert, accountOptions, onClose, onPaid }: Prop
           )}
           {!deduct && (
             <p className="rounded-lg bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--text-muted)]">
-              The alert will clear without recording a transaction. No effect on net worth or account balances.
+              The instalment is added to the RD without changing any account balance.
             </p>
           )}
           {error && <p className="text-xs text-red-600">{error}</p>}

@@ -135,3 +135,42 @@ class RDAlertTests(TestCase):
         due_dates = [m['due_date'] for m in missed]
         self.assertNotIn('2025-01-05', due_dates)
         self.assertIn('2025-02-05', due_dates)
+
+
+class RDMarkPaidTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        from core.models import UserProfile
+        from insights.services import compute_household_accounts
+        self.compute_accounts = compute_household_accounts
+        self.household = Household.objects.create(name='Bhat Family')
+        user = get_user_model().objects.create_user(username='rd-tester', password='x')
+        UserProfile.objects.create(user=user, household=self.household, role='admin', status='approved')
+        self.client = APIClient()
+        self.client.force_authenticate(user=user)
+        self.savings = Account.objects.create(household=self.household, name='SBI 5898', account_type='bank', opening_balance=Decimal('50000'))
+        self.rd = Instrument.objects.create(household=self.household, name='SBI RD', instrument_type='rd')
+        self.mandate = RDMandate.objects.create(
+            household=self.household, account=self.savings, instrument=self.rd, installment_amount=Decimal('10000'),
+            due_day=19, start_date=date(2026, 8, 19), tenure_months=12,
+        )
+
+    def _balance(self):
+        return next(a['balance'] for a in self.compute_accounts(self.household.id, date(2026, 10, 1)) if a['account_id'] == self.savings.id)
+
+    def test_without_deduct_the_instalment_still_goes_into_the_rd(self):
+        response = self.client.post(f'/api/rd-mandates/{self.mandate.id}/mark-paid/', {
+            'due_date': '2026-08-19', 'paid_on': '2026-08-19', 'deduct': False,
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        tx = Transaction.objects.get(instrument=self.rd)
+        self.assertEqual((tx.amount, tx.affects_balance), (Decimal('10000.00'), False))
+        self.assertEqual(self._balance(), '50000.00')
+        self.assertEqual(generate_missed_rd_installments(self.household.id, date(2026, 8, 30)), [])
+
+    def test_with_deduct_the_account_goes_down(self):
+        self.client.post('/api/rd-mandates/mark-all-paid/', {
+            'items': [{'mandate_id': self.mandate.id, 'due_date': '2026-08-19'}], 'paid_on': '2026-08-19', 'deduct': True,
+        }, format='json')
+        self.assertEqual(self._balance(), '40000.00')

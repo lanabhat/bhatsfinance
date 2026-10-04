@@ -360,11 +360,11 @@ def compute_networth(household_id: int, as_of: date, member_id: int | None = Non
         if snapshot:
             anchor_balance = snapshot.balance
             anchor_date = snapshot.valuation_date
-            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date, tx_date__lte=as_of)
+            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date, tx_date__lte=as_of, affects_balance=True)
         else:
             anchor_balance = account.opening_balance
             anchor_date = None
-            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of)
+            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of, affects_balance=True)
 
         inflow = txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
         outflow = txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
@@ -407,11 +407,11 @@ def compute_member_accounts(household_id: int, as_of: date, member_id: int) -> l
         if snapshot:
             anchor_balance = Decimal(str(snapshot.balance))
             anchor_date = snapshot.valuation_date
-            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date, tx_date__lte=as_of)
+            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date, tx_date__lte=as_of, affects_balance=True)
         else:
             anchor_balance = account.opening_balance
             anchor_date = None
-            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of)
+            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of, affects_balance=True)
 
         inflow = Decimal(str(txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO))
         outflow = Decimal(str(txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or ZERO))
@@ -450,11 +450,11 @@ def compute_household_accounts(household_id: int, as_of: date) -> list[dict]:
         if snapshot:
             anchor_balance = Decimal(str(snapshot.balance))
             anchor_date = snapshot.valuation_date
-            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date, tx_date__lte=as_of)
+            txs = Transaction.objects.filter(account=account, tx_date__gt=anchor_date, tx_date__lte=as_of, affects_balance=True)
         else:
             anchor_balance = account.opening_balance
             anchor_date = None
-            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of)
+            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of, affects_balance=True)
 
         inflow = Decimal(str(txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO))
         outflow = Decimal(str(txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or ZERO))

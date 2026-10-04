@@ -302,7 +302,10 @@ export function GrowwImportWizard({ householdId }: Props) {
   }
 
   // result step — handle both Groww (stocks_created/mf_created) and Upstox (holdings_created)
-  type ExtendedResult = GrowwFileResult & { source?: string; holdings_created?: number; holdings_updated?: number; stocks_parsed?: number; mf_parsed?: number }
+  type ExtendedResult = GrowwFileResult & {
+    source?: string; holdings_created?: number; holdings_updated?: number; stocks_parsed?: number; mf_parsed?: number
+    reclassified?: number; units_adjusted?: number; bonds_created?: string[]; bond_quantity_mismatch?: string[]
+  }
   const totalErrors = results.reduce((s, r) => s + (r.errors?.length ?? 0) + (r.error ? 1 : 0), 0)
 
   return (
@@ -339,6 +342,16 @@ export function GrowwImportWizard({ householdId }: Props) {
                     <p className="text-[var(--text-muted)]">Updated</p>
                     <p className="text-lg font-bold text-[var(--text)]">{er.holdings_updated ?? 0}</p>
                   </div>
+                  {((er.reclassified ?? 0) > 0 || (er.units_adjusted ?? 0) > 0 || (er.bonds_created?.length ?? 0) > 0 || (er.bond_quantity_mismatch?.length ?? 0) > 0) && (
+                    <ul className="col-span-2 grid gap-1 text-[var(--text-muted)]">
+                      {(er.reclassified ?? 0) > 0 && <li>{er.reclassified} holding{er.reclassified === 1 ? '' : 's'} moved to the right type (mutual fund / bond).</li>}
+                      {(er.units_adjusted ?? 0) > 0 && <li>{er.units_adjusted} holding{er.units_adjusted === 1 ? '' : 's'} changed quantity — recorded as a buy/sell at the statement price.</li>}
+                      {(er.bonds_created?.length ?? 0) > 0 && <li>New bond{er.bonds_created!.length === 1 ? '' : 's'}: {er.bonds_created!.join(', ')} — add coupon and maturity on the Instruments page to track accrual.</li>}
+                      {(er.bond_quantity_mismatch?.length ?? 0) > 0 && (
+                        <li className="text-amber-600 dark:text-amber-400">Quantity differs from the bond already recorded: {er.bond_quantity_mismatch!.join(', ')}. Check it on the Instruments page.</li>
+                      )}
+                    </ul>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-2 text-xs">

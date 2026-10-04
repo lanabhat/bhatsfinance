@@ -1,6 +1,7 @@
 """Keep NAV history current and turn it into holding valuations.
 
-sync_navs() pulls mfapi.in history once per scheme (several folios can share one).
+sync_navs() pulls NAV history once per scheme (several folios can share one) —
+from mfapi.in, or AMFI's SIF file for SIFs (see nav_sources).
 write_nav_snapshots() values each linked fund at its latest NAV, so fund values
 update without the user re-uploading statements.
 """
@@ -11,7 +12,8 @@ from datetime import date
 
 from django.utils import timezone
 
-from fund_data.mfapi_client import MfApiError, fetch_scheme_nav_history
+from fund_data.mfapi_client import MfApiError
+from fund_data.nav_sources import fetch_scheme_nav_history, source_label
 from fund_data.models import BenchmarkFund, BenchmarkFundNav, ExternalFund, ExternalFundNav
 
 
@@ -65,11 +67,19 @@ def sync_navs(household_id: int | None = None, include_benchmarks: bool = True, 
 UNITS_MISMATCH_TOLERANCE = 0.05
 
 
+def ledger_units_as_of(as_of: date, investment=None, instrument=None):
+    """Units the ledger says were held on as_of, for an Investment (or a standalone Instrument)."""
+    from insights.services import _signed_quantity
+    from ledger.models import Transaction
+
+    txs = Transaction.objects.filter(tx_date__lte=as_of)
+    txs = txs.filter(investment=investment) if investment is not None else txs.filter(instrument=instrument, investment__isnull=True)
+    return sum((_signed_quantity(tx) for tx in txs), start=0)
+
+
 def _units_out_of_date(fund, inv) -> bool:
     """True when the units recorded as of the user's latest uploaded/entered valuation
     can't explain that valuation at that day's NAV."""
-    from insights.services import _signed_quantity
-    from ledger.models import Transaction
     from valuations.models import ValuationSnapshot
 
     reference = (
@@ -84,10 +94,7 @@ def _units_out_of_date(fund, inv) -> bool:
     nav_then = ExternalFundNav.objects.filter(fund=fund, nav_date__lte=reference.valuation_date).order_by('-nav_date').first()
     if nav_then is None:
         return False
-    units_then = sum(
-        (_signed_quantity(tx) for tx in Transaction.objects.filter(investment=inv, tx_date__lte=reference.valuation_date)),
-        start=0,
-    )
+    units_then = ledger_units_as_of(reference.valuation_date, investment=inv)
     if not units_then:
         return False
     implied = units_then * nav_then.nav
@@ -135,7 +142,7 @@ def write_nav_snapshots(household_id: int | None = None, as_of: date | None = No
         if _upsert_auto_snapshot(
             {'household_id': hh, 'instrument': inv.instrument, 'investment': inv, 'valuation_date': latest.nav_date},
             {'unit_price': latest.nav, 'market_value': None, 'source': ValuationSnapshot.SourceType.API,
-             'notes': f'NAV from mfapi.in (scheme {fund.mfapi_scheme_code})'},
+             'notes': f'NAV from {source_label(fund.mfapi_scheme_code)} (scheme {fund.mfapi_scheme_code})'},
         ):
             written += 1
     return {

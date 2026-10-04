@@ -356,6 +356,10 @@ export type SbiConfirmedSavingsAccount = SbiSavingsAccountPreview & {
 
 export type SbiConfirmedDeposit = SbiDepositPreview & {
   member_id: number | null
+  // rd_statement-only: the savings account instalments are paid from —
+  // 'acct:<id>' (an existing account) or 'num:<account number>' (a savings
+  // account in this same statement, resolved through the account mapping).
+  paid_from?: string
   // rd_statement-only, required before apply
   tenure_months?: number
 }

@@ -18,7 +18,7 @@ const ACCOUNT_MODE = {
 
 export function MarkAllSipsPaidSheet({ alerts, accountOptions, onClose, onPaid }: Props) {
   const [paidOn, setPaidOn] = useState(new Date().toISOString().slice(0, 10))
-  const [deduct, setDeduct] = useState(true)
+  const [deduct, setDeduct] = useState(false)
   const [updateHolding, setUpdateHolding] = useState(true)
   const [accountChoice, setAccountChoice] = useState<string>(ACCOUNT_MODE.PER_MANDATE)
   const [saving, setSaving] = useState(false)

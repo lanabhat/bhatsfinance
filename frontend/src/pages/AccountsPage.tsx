@@ -74,6 +74,7 @@ function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
     name: account?.name ?? '',
     account_type: account?.account_type ?? 'bank',
     institution_name: account?.institution_name ?? '',
+    sms_identifiers: account?.sms_identifiers ?? '',
     primary_member: account?.primary_member ?? null,
     opening_balance: account?.opening_balance ?? '0',
     credit_limit: account?.credit_limit ?? null,
@@ -122,6 +123,13 @@ function AccountForm({ householdId, account, onSave, onCancel, onDelete }: {
         </select></div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Institution</label>
         <input className={INP} value={form.institution_name} onChange={(e) => setForm((p) => ({ ...p, institution_name: e.target.value }))} /></div>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">SMS identifiers</label>
+        <input className={INP} value={form.sms_identifiers ?? ''} placeholder="e.g. 7799, 2133"
+          onChange={(e) => setForm((p) => ({ ...p, sms_identifiers: e.target.value }))} />
+        <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+          Last digits of this account and its cards as bank SMS show them. Bank SMS mentioning them are matched to this account,
+          and the balance they report is recorded. Learned automatically when you approve an SMS.
+        </p></div>
       {form.account_type !== 'credit_card' && (
         <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Opening Balance (₹)</label>
           <input type="number" className={INP} value={form.opening_balance} onChange={(e) => setForm((p) => ({ ...p, opening_balance: e.target.value }))} /></div>

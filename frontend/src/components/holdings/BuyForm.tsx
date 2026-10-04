@@ -105,7 +105,7 @@ export function BuyForm({ householdId, instrumentId: initId, investmentId: initI
   const [amount, setAmount] = useState('')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [accountId, setAccountId] = useState('')
-  const [affectsBalance, setAffectsBalance] = useState(true)
+  const [affectsBalance, setAffectsBalance] = useState(false)
   const [fdFields, setFdFields] = useState<FDFields>(EMPTY_FD_FIELDS)
   const [bondFields, setBondFields] = useState<BondFields>(EMPTY_BOND_FIELDS)
   const [bondQuantity, setBondQuantity] = useState('1')

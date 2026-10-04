@@ -139,14 +139,12 @@ export function SBIStatementImportWizard({ householdId }: Props) {
     if (unlocked.length === 0) { setError('No files are ready — unlock at least one file first.'); return }
     setError('')
 
-    // Only savings accounts and RD deposits need a real Account mapping —
-    // apply_fd_advice_import has no account parameter, so FD account numbers
-    // would otherwise force the user through a pointless mapping step for
-    // every individual FD (this file can have dozens).
-    const accountNumbers = Array.from(new Set(unlocked.flatMap(r => [
-      ...r.preview!.savings_accounts.map(a => a.account_number),
-      ...r.preview!.deposits.filter(d => d.doc_type === 'rd_statement').map(d => d.account_number),
-    ])))
+    // Only savings accounts need a real Account mapping. FDs and RDs are
+    // investments, never accounts — an RD instead picks the savings account its
+    // instalments are paid from (confirm step), so its own number isn't mapped.
+    const accountNumbers = Array.from(new Set(unlocked.flatMap(r =>
+      r.preview!.savings_accounts.map(a => a.account_number),
+    )))
     setMappingRows(accountNumbers.map(accountNumber => {
       const existingMatch = existingAccounts.find(a => a.name.includes(accountNumber.slice(-4)))
       return {
@@ -189,10 +187,19 @@ export function SBIStatementImportWizard({ householdId }: Props) {
       ...a,
       member_id: memberFor(a.account_number),
     }))))
+    const statementSavings = unlocked.flatMap(r => r.preview!.savings_accounts.map(a => a.account_number))
+    // Default payer: the RD owner's savings account in this statement, else the only one.
+    const defaultPaidFrom = (memberId: number | null): string | undefined => {
+      const owned = statementSavings.filter(n => memberId !== null && memberFor(n) === memberId)
+      if (owned.length === 1) return `num:${owned[0]}`
+      return statementSavings.length === 1 ? `num:${statementSavings[0]}` : undefined
+    }
     setDepositItems(unlocked.flatMap(r => r.preview!.deposits.map(d => {
       const existing = existingDepositsByAccountNumber.get(d.account_number)
+      const memberId = existing?.member_id ?? memberFor(d.account_number)
       return {
         ...d,
+        paid_from: d.doc_type === 'rd_statement' ? defaultPaidFrom(memberId) : undefined,
         // A matching existing FD/RD's recorded owner/compounding pre-fills
         // here instead of asking again — the freshly parsed statement still
         // wins for every other field (it's the current, authoritative source).
@@ -229,6 +236,8 @@ export function SBIStatementImportWizard({ householdId }: Props) {
     if (rdMissingTenure) { setError('Enter tenure (months) for every RD deposit before importing.'); return }
     const rdMissingInstallment = depositItems.some(i => i.doc_type === 'rd_statement' && !i.installment_amount)
     if (rdMissingInstallment) { setError('Enter the installment amount for every RD deposit before importing.'); return }
+    const rdMissingPayer = depositItems.some(i => i.doc_type === 'rd_statement' && !i.paid_from)
+    if (rdMissingPayer) { setError('Choose the savings account each RD is paid from before importing.'); return }
     setError('')
     setLoading(true)
     try {
@@ -608,6 +617,7 @@ export function SBIStatementImportWizard({ householdId }: Props) {
                     <th className={th}>Tenure (mo) *</th>
                     <th className={th}>Compounding</th>
                     <th className={th}>Owner</th>
+                    <th className={th}>Paid from *</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -628,11 +638,25 @@ export function SBIStatementImportWizard({ householdId }: Props) {
                         <td className={td}><input type="number" min={1} className={cellInput} value={item.tenure_months ?? ''} onChange={e => updateDepositItem(index, { tenure_months: e.target.value ? Number(e.target.value) : undefined })} /></td>
                         <td className={td}>{compoundingSelect(item.compounding, v => updateDepositItem(index, { compounding: v as SbiConfirmedDeposit['compounding'] }))}</td>
                         <td className={td}>{memberSelect(item.member_id, v => updateDepositItem(index, { member_id: v }))}</td>
+                        <td className={td}>
+                          <select className={cellInput} value={item.paid_from ?? ''} onChange={e => updateDepositItem(index, { paid_from: e.target.value || undefined })}>
+                            <option value="">— select —</option>
+                            {savingsItems.map(a => (
+                              <option key={`num:${a.account_number}`} value={`num:${a.account_number}`}>SBI •••{a.account_number.slice(-4)} (this statement)</option>
+                            ))}
+                            {existingAccounts
+                              .filter(a => !mappingRows.some(m => m.mode === 'existing' && m.accountId === a.id))
+                              .map(a => <option key={`acct:${a.id}`} value={`acct:${a.id}`}>{a.name}</option>)}
+                          </select>
+                        </td>
                       </tr>
                     ))}
                 </tbody>
               </table>
             </div>
+            <p className="text-xs text-[var(--text-muted)]">
+              Paid from: the savings account instalments are debited from. The RD itself is tracked under investments, not as an account.
+            </p>
             <p className="text-xs text-[var(--text-muted)]">
               * Auto-calculated from the statement's Principal Amount and Tenor (installment = principal ÷ tenure months) — review and correct if it looks off.
             </p>

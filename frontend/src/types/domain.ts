@@ -46,6 +46,8 @@ export type Account = {
   name: string
   account_type: 'bank' | 'broker' | 'pf' | 'loan' | 'credit_card' | 'insurance' | 'cash' | 'other'
   institution_name: string
+  /** Trailing digits of the account and its cards as they appear in bank SMS, comma-separated. */
+  sms_identifiers?: string
   primary_member: number | null
   opening_balance: string
   credit_limit: string | null
@@ -73,6 +75,15 @@ export type SmsApiKey = {
 }
 
 export type ParsedSmsTransaction = {
+  /** What the SMS is, as read from its text: debit, credit, card_spend, card_refund, cc_payment,
+   *  cc_bill_paid, mf_purchase, investment_debit, balance, otp, failed, reminder, promotion, unknown. */
+  kind?: string
+  /** Trailing digits of the account/card the SMS mentions. */
+  account_hint?: string
+  /** Balance after the transaction, when the SMS states it (recorded as a reading automatically). */
+  balance?: string
+  balance_date?: string
+  sender?: string
   account?: string
   member?: string
   amount?: string
@@ -854,6 +865,19 @@ export type FundRefreshResult = {
   skipped_no_nav: number
   skipped_no_units: number
   units_out_of_date: string[]
+}
+
+export type MarketPriceRefreshResult = {
+  funds_linked: string[]
+  funds: FundRefreshResult
+  equities: {
+    price_date: string
+    written: number
+    skipped_no_units: number
+    units_out_of_date: string[]
+    not_priced: string[]
+  } | null
+  errors: string[]
 }
 
 export type AttentionCounts = {

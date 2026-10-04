@@ -25,6 +25,7 @@ class AccountSerializer(serializers.ModelSerializer):
             'name',
             'account_type',
             'institution_name',
+            'sms_identifiers',
             'primary_member',
             'opening_balance',
             'credit_limit',

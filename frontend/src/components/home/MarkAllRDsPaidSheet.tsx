@@ -18,7 +18,7 @@ const ACCOUNT_MODE = {
 
 export function MarkAllRDsPaidSheet({ alerts, accountOptions, onClose, onPaid }: Props) {
   const [paidOn, setPaidOn] = useState(new Date().toISOString().slice(0, 10))
-  const [deduct, setDeduct] = useState(true)
+  const [deduct, setDeduct] = useState(false)
   const [accountChoice, setAccountChoice] = useState<string>(ACCOUNT_MODE.PER_MANDATE)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -88,7 +88,7 @@ export function MarkAllRDsPaidSheet({ alerts, accountOptions, onClose, onPaid }:
           )}
           {!deduct && (
             <p className="rounded-lg bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--text-muted)]">
-              All selected installments will be acknowledged without any transactions. No effect on net worth or account balances.
+              The selected instalments are added to their RDs without changing any account balance.
             </p>
           )}
 

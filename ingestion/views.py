@@ -789,9 +789,17 @@ class SBIStatementApplyView(APIView):
             member = resolve_member(item.get('member_id'))
             try:
                 if item.get('doc_type') == 'rd_statement':
-                    account = resolve_account(account_number)
+                    # The RD's mandate debits the savings account it's paid from — never an
+                    # Account named after the RD itself (that put RDs into account balances).
+                    paid_from = str(item.get('paid_from') or '')
+                    if paid_from.startswith('acct:'):
+                        account = Account.objects.filter(pk=int(paid_from[5:]), household=household).first()
+                    elif paid_from.startswith('num:'):
+                        account = resolve_account(paid_from[4:])
+                    else:
+                        raise ValueError('Choose the savings account this RD is paid from.')
                     if account is None:
-                        raise ValueError(account_errors.get(account_number, 'Could not resolve account'))
+                        raise ValueError(f'Could not resolve the account this RD is paid from ({paid_from}).')
                     if not item.get('tenure_months'):
                         raise ValueError('tenure_months is required for RD deposits (enter it in the confirm step).')
                     if not item.get('installment_amount'):

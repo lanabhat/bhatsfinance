@@ -9,34 +9,10 @@ from sms_ingestion.authentication import SmsApiKeyAuthentication
 from sms_ingestion.categorization import CATEGORY_PATTERNS
 from sms_ingestion.models import SmsApiKey, SmsMessage, SmsRule, SmsRuleSuggestion
 from sms_ingestion.permissions import HasSmsApiKey
-from sms_ingestion.rule_engine import apply_rule, find_matching_rule, test_rule_extractions
+from sms_ingestion.rule_engine import find_matching_rule, test_rule_extractions
 from sms_ingestion.serializers import SmsApiKeySerializer, SmsIngestSerializer, SmsMessageSerializer, SmsRuleSerializer, SmsRuleSuggestionSerializer
+from sms_ingestion.autofill import process_message
 from sms_ingestion.suggestions import record_observation
-
-
-def _enrich_parsed_tx(parsed_tx: dict, body: str, sender: str, received_at) -> dict:
-    """
-    Always populate the raw fields that come directly from the SMS itself —
-    tx_date (extracted from body, falling back to received_at) and sender.
-    These do not depend on any rule matching.
-    """
-    from sms_ingestion.templates import extract_date
-    from datetime import date
-
-    if not parsed_tx.get('tx_date'):
-        if received_at is not None:
-            fallback = received_at.date() if hasattr(received_at, 'date') else received_at
-        else:
-            fallback = date.today()
-        parsed_tx['tx_date'] = extract_date(body, fallback).isoformat()
-
-    if not parsed_tx.get('currency'):
-        parsed_tx['currency'] = 'INR'
-
-    if not parsed_tx.get('sender'):
-        parsed_tx['sender'] = sender
-
-    return parsed_tx
 
 
 class SmsApiKeyViewSet(viewsets.ModelViewSet):
@@ -257,25 +233,20 @@ class SmsMessageViewSet(viewsets.ModelViewSet):
                 continue
 
             data = ser.validated_data
-            raw_payload = {'sender': data['sender'], 'body': data['body'], 'parsed_tx': {}}
-            matched_rule = find_matching_rule(rules, data['sender'], data['body'])
-            if matched_rule:
-                raw_payload['parsed_tx'] = apply_rule(matched_rule, {}, data['body'], data['timestamp'])
-                raw_payload['matched_rule_id'] = matched_rule.id
-                raw_payload['matched_rule_name'] = matched_rule.name
-            _enrich_parsed_tx(raw_payload['parsed_tx'], data['body'], data['sender'], data['timestamp'])
-
-            _, was_created = SmsMessage.objects.get_or_create(
+            msg, was_created = SmsMessage.objects.get_or_create(
                 household=household,
                 sender=data['sender'],
                 received_at=data['timestamp'],
                 body=data['body'],
                 defaults={
-                    'raw_payload': raw_payload,
+                    'raw_payload': {'sender': data['sender'], 'body': data['body'], 'parsed_tx': {}},
                     'template_key': '',
                     'confidence': None,
                 },
             )
+            if was_created:
+                process_message(msg, rules)
+                msg.save(update_fields=['raw_payload', 'template_key', 'confidence'])
             if was_created:
                 created_count += 1
             else:
@@ -294,41 +265,33 @@ class SmsMessageViewSet(viewsets.ModelViewSet):
         Returns: { "updated": N, "results": [ {id, matched_rule_name, parsed_tx}, ... ] }
         """
         ids = request.data.get('ids')
-        if not ids or not isinstance(ids, list):
-            return Response({'detail': '"ids" must be a non-empty list of integers.'}, status=status.HTTP_400_BAD_REQUEST)
+        all_pending = bool(request.data.get('all_pending'))
+        if not all_pending and (not ids or not isinstance(ids, list)):
+            return Response({'detail': '"ids" must be a non-empty list of integers, or set "all_pending".'}, status=status.HTTP_400_BAD_REQUEST)
 
         profile = getattr(request.user, 'profile', None)
         hid = profile.household_id if profile else None
         if not hid:
             return Response({'detail': 'No household.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        messages = SmsMessage.objects.filter(id__in=ids, household_id=hid).exclude(status=SmsMessage.STATUS_APPROVED)
+        messages = SmsMessage.objects.filter(household_id=hid)
+        messages = messages.filter(status=SmsMessage.STATUS_PENDING) if all_pending else messages.filter(id__in=ids).exclude(status=SmsMessage.STATUS_APPROVED)
+        # Oldest first, so a later SMS's balance supersedes an earlier one on the same day.
+        messages = list(messages.order_by('received_at', 'id'))
         rules = list(SmsRule.objects.filter(household_id=hid, is_active=True))
 
         results = []
         for msg in messages:
-            matched_rule = find_matching_rule(rules, msg.sender, msg.body)
-            raw_payload = dict(msg.raw_payload or {})
-            if matched_rule:
-                raw_payload['parsed_tx'] = apply_rule(matched_rule, {}, msg.body, msg.received_at)
-                raw_payload['matched_rule_id'] = matched_rule.id
-                raw_payload['matched_rule_name'] = matched_rule.name
-            else:
-                raw_payload['parsed_tx'] = {}
-                raw_payload.pop('matched_rule_id', None)
-                raw_payload.pop('matched_rule_name', None)
-            _enrich_parsed_tx(raw_payload['parsed_tx'], msg.body, msg.sender, msg.received_at)
-            msg.raw_payload = raw_payload
-            msg.template_key = ''
-            msg.confidence = None
+            parsed = process_message(msg, rules)
             results.append({
                 'id': msg.id,
-                'matched_rule_name': matched_rule.name if matched_rule else None,
-                'parsed_tx': raw_payload['parsed_tx'],
+                'matched_rule_name': msg.raw_payload.get('matched_rule_name'),
+                'parsed_tx': parsed,
             })
 
-        SmsMessage.objects.bulk_update(messages, ['raw_payload', 'template_key', 'confidence'])
-        return Response({'updated': len(results), 'results': results})
+        SmsMessage.objects.bulk_update(messages, ['raw_payload', 'template_key', 'confidence'], batch_size=200)
+        ready = sum(1 for m in messages if m.confidence == 1.0)
+        return Response({'updated': len(results), 'ready': ready, 'results': results if not all_pending else []})
 
 
 class SmsIngestView(APIView):
@@ -355,17 +318,6 @@ class SmsIngestView(APIView):
         raw_payload = dict(request.data)
         raw_payload['parsed_tx'] = {}
 
-        # Apply user-defined rules — rules map the SMS to ledger fields
-        rules = list(SmsRule.objects.filter(household=api_key.household, is_active=True))
-        matched_rule = find_matching_rule(rules, data['sender'], data['body'])
-        if matched_rule:
-            raw_payload['parsed_tx'] = apply_rule(matched_rule, {}, data['body'], data['timestamp'])
-            raw_payload['matched_rule_id'] = matched_rule.id
-            raw_payload['matched_rule_name'] = matched_rule.name
-
-        # Always set date/currency/sender from raw SMS fields regardless of rule match
-        _enrich_parsed_tx(raw_payload['parsed_tx'], data['body'], data['sender'], data['timestamp'])
-
         msg, created = SmsMessage.objects.get_or_create(
             household=api_key.household,
             sender=data['sender'],
@@ -379,6 +331,11 @@ class SmsIngestView(APIView):
                 'confidence': None,
             },
         )
+        if created:
+            # Read amount/direction/account/balance from the text, then the user's rules on top.
+            rules = list(SmsRule.objects.filter(household=api_key.household, is_active=True))
+            process_message(msg, rules)
+            msg.save(update_fields=['raw_payload', 'template_key', 'confidence'])
 
         return Response(
             SmsMessageSerializer(msg).data,
@@ -555,6 +512,13 @@ class SmsStagedActionView(APIView):
             msg.save(update_fields=['status', 'imported_transaction_id', 'owner'])
         else:
             msg.save(update_fields=['status', 'imported_transaction_id'])
+
+        # Remember the account digits this SMS used, so the next one matches on its own.
+        try:
+            from sms_ingestion.autofill import remember_identifier
+            remember_identifier(acc, (msg.raw_payload.get('parsed_tx') or {}).get('account_hint', ''))
+        except Exception:
+            pass
 
         # Record this approval as an observation for the auto-suggestion engine
         try:
@@ -809,7 +773,8 @@ class SmsRuleViewSet(viewsets.ModelViewSet):
         rules = list(SmsRule.objects.filter(household_id=hid, is_active=True))
         matched_rule = find_matching_rule(rules, sender, body)
         from django.utils import timezone
-        parsed_tx = apply_rule(matched_rule, {}, body, timezone.now()) if matched_rule else {}
+        preview = SmsMessage(household_id=int(hid), sender=sender, body=body, received_at=timezone.now())
+        parsed_tx = process_message(preview, rules, record_balance=False)
 
         return Response({
             'matched_rule': {'id': matched_rule.id, 'name': matched_rule.name} if matched_rule else None,

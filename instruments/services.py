@@ -80,6 +80,131 @@ def get_or_create_equity_shell(household):
     return shell
 
 
+def is_mutual_fund_isin(isin: str, name: str = '') -> bool:
+    """True for a mutual fund unit held in demat (e.g. via an Upstox statement).
+    INF ISINs are fund units — but ETFs are INF too and trade like stocks, and
+    their scrip names always say so ("…ETF", "…BEES")."""
+    upper_name = (name or '').upper()
+    return (isin or '').upper().startswith('INF') and 'ETF' not in upper_name and 'BEES' not in upper_name
+
+
+def is_bond_isin(isin: str) -> bool:
+    """True for a bond/debenture ISIN, read from the ISIN's structure: a digit
+    as the 3rd character marks a government security (G-sec/SDL, e.g.
+    IN3920260020); for company ISINs (INE…), characters 8-9 give the security
+    type — 07/08 are debentures/bonds, 01 is equity shares."""
+    isin = (isin or '').upper()
+    if len(isin) != 12 or not isin.startswith('IN'):
+        return False
+    return isin[2].isdigit() or (isin[2] == 'E' and isin[7:9] in ('07', '08'))
+
+
+def holding_isin(obj) -> str:
+    """The ISIN of an Investment/Instrument: `isin` when set, else `symbol` when it looks like one
+    (imports have historically stored equity ISINs in `symbol`)."""
+    isin = (getattr(obj, 'isin', '') or '').strip().upper()
+    if isin:
+        return isin
+    symbol = (obj.symbol or '').strip().upper()
+    return symbol if len(symbol) == 12 and symbol.startswith('IN') and symbol.isalnum() else ''
+
+
+def find_bond_instruments(household, isin: str):
+    from instruments.models import Instrument
+    return Instrument.objects.filter(
+        household=household, instrument_type=Instrument.InstrumentType.BOND, bond_details__isin=isin,
+    ).distinct()
+
+
+def _ledger_units(investment) -> Decimal:
+    from insights.services import _signed_quantity
+    from ledger.models import Transaction
+    return sum((_signed_quantity(tx) for tx in Transaction.objects.filter(investment=investment)), start=Decimal('0'))
+
+
+def move_investment_to_shell(investment, shell):
+    """Move a holding (with its transactions and valuations) under another shell,
+    e.g. a demat mutual fund an import filed under "Equity". If the target shell
+    already holds the same member's same-ISIN investment, merge into that one
+    instead so the move never creates a duplicate. Returns the surviving Investment."""
+    from django.db import transaction as db_transaction
+    from instruments.models import Investment
+    from ledger.models import Transaction
+    from valuations.models import ValuationSnapshot
+
+    isin = holding_isin(investment)
+    target = None
+    if isin:
+        target = next((
+            inv for inv in Investment.objects.filter(instrument=shell, member=investment.member).exclude(pk=investment.pk)
+            if holding_isin(inv) == isin
+        ), None)
+
+    with db_transaction.atomic():
+        if target is None:
+            Transaction.objects.filter(investment=investment).update(instrument=shell)
+            ValuationSnapshot.objects.filter(investment=investment).update(instrument=shell)
+            investment.instrument = shell
+            if isin and not investment.isin:
+                investment.isin = isin
+            investment.save(update_fields=['instrument', 'isin', 'updated_at'])
+            return investment
+
+        Transaction.objects.filter(investment=investment).update(instrument=shell, investment=target)
+        ValuationSnapshot.objects.filter(investment=investment).update(instrument=shell, investment=target)
+        if not hasattr(target, 'external_fund') and hasattr(investment, 'external_fund'):
+            fund = investment.external_fund
+            fund.investment = target
+            fund.save(update_fields=['investment', 'updated_at'])
+        investment.delete()
+        return target
+
+
+def create_bond_instrument(household, member, name: str, isin: str):
+    """A bond Instrument for a holding with no BondDetails yet: it keeps its imported
+    value until coupon/maturity are added (which switches it to formula valuation)."""
+    from instruments.models import Instrument, InstrumentOwnership
+
+    base = name.strip() or isin
+    candidate, n = base, 2
+    while Instrument.objects.filter(household=household, name=candidate).exists():
+        candidate, n = f'{base} ({n})', n + 1
+    instrument = Instrument.objects.create(
+        household=household, name=candidate, instrument_type=Instrument.InstrumentType.BOND,
+        sub_category=Instrument.SubCategory.DEBT, symbol=isin,
+    )
+    if member:
+        InstrumentOwnership.objects.create(instrument=instrument, member=member, allocation_percent=Decimal('100'))
+    return instrument
+
+
+def reclassify_bond_investment(investment) -> str:
+    """Take a bond out of the Equity shell. Returns 'removed_duplicate' when bond
+    Instruments with the same ISIN already hold exactly these units (the row was
+    double-counting them), else 'converted' after moving it into a new bond Instrument."""
+    from django.db import transaction as db_transaction
+    from ledger.models import Transaction
+    from valuations.models import ValuationSnapshot
+
+    household = investment.instrument.household
+    isin = holding_isin(investment)
+    existing = list(find_bond_instruments(household, isin))
+    existing_units = sum((bd.quantity for inst in existing for bd in inst.bond_details.all() if bd.isin == isin), start=0)
+
+    with db_transaction.atomic():
+        if existing and Decimal(existing_units) == _ledger_units(investment):
+            Transaction.objects.filter(investment=investment).delete()
+            ValuationSnapshot.objects.filter(investment=investment).delete()
+            investment.delete()
+            return 'removed_duplicate'
+
+        bond = create_bond_instrument(household, investment.member, investment.name, isin)
+        Transaction.objects.filter(investment=investment).update(instrument=bond, investment=None)
+        ValuationSnapshot.objects.filter(investment=investment).update(instrument=bond, investment=None)
+        investment.delete()
+        return 'converted'
+
+
 _COUPON_PERIODS_PER_YEAR = {
     'monthly': 12,
     'quarterly': 4,

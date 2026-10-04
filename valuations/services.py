@@ -205,7 +205,7 @@ def bulk_snapshot(household_id: int, as_of: date) -> dict:
             bucket = carried_forward
         else:
             # Compute from opening balance + all transactions up to as_of
-            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of)
+            txs = Transaction.objects.filter(account=account, tx_date__lte=as_of, affects_balance=True)
             inflow = txs.filter(direction=Transaction.Direction.INFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
             outflow = txs.filter(direction=Transaction.Direction.OUTFLOW).aggregate(s=Sum('amount'))['s'] or ZERO
             if account.account_type == 'credit_card':

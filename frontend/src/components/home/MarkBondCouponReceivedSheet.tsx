@@ -15,7 +15,7 @@ export function MarkBondCouponReceivedSheet({ alert, accountOptions, onClose, on
   const [receivedOn, setReceivedOn] = useState(new Date().toISOString().slice(0, 10))
   const [accountId, setAccountId] = useState<string>('')
   const [amount, setAmount] = useState(alert.coupon_amount)
-  const [deduct, setDeduct] = useState(true)
+  const [deduct, setDeduct] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 

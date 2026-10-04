@@ -15,7 +15,7 @@ export function MarkSipPaidSheet({ alert, accountOptions, onClose, onPaid }: Pro
   const [paidOn, setPaidOn] = useState(new Date().toISOString().slice(0, 10))
   const [accountId, setAccountId] = useState<number>(alert.account_id)
   const [amount, setAmount] = useState(alert.expected_amount)
-  const [deduct, setDeduct] = useState(true)
+  const [deduct, setDeduct] = useState(false)
   const [updateHolding, setUpdateHolding] = useState(true)
   const [quantity, setQuantity] = useState('')
   const [saving, setSaving] = useState(false)

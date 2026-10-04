@@ -928,3 +928,126 @@ class SBIDepositsParserRDDerivationTests(TestCase):
         self.assertEqual(item['principal'], '100000')
         self.assertEqual(item['maturity_value'], '107000')
         self.assertNotIn('installment_amount', item)
+
+
+class UpstoxImportTests(TestCase):
+    def setUp(self):
+        self.household = Household.objects.create(name='Lal Family')
+        self.member = Member.objects.create(household=self.household, full_name='Anushree L')
+
+    def _import(self, *rows, value_date='2026-10-02'):
+        from ingestion.universal_importer import apply_upstox_import
+        holdings = [
+            {'isin': isin, 'name': name, 'quantity': qty, 'rate': rate,
+             'valuation': str(Decimal(qty) * Decimal(rate)), 'value_date': value_date}
+            for isin, name, qty, rate in rows
+        ]
+        return apply_upstox_import(self.household, self.member, {'valuation_date': date.fromisoformat(value_date), 'holdings': holdings})
+
+    def _units(self, inv):
+        from instruments.services import _ledger_units
+        return _ledger_units(inv)
+
+    def test_rows_are_filed_by_isin_type(self):
+        self._import(
+            ('INE154A01025', 'ITC LTD', '10', '257'),
+            ('INF109KC1NS5', 'ICICI NIFTY NXT50ETF', '5', '70'),
+            ('INF174KA1HV3', 'KOTAK MTCF D-GROW', '471.52', '21.09'),
+        )
+        types = dict(Investment.objects.values_list('name', 'instrument__instrument_type'))
+        self.assertEqual(types, {'ITC LTD': 'equity', 'ICICI NIFTY NXT50ETF': 'equity', 'KOTAK MTCF D-GROW': 'mutual_fund'})
+        self.assertEqual(Investment.objects.get(name='KOTAK MTCF D-GROW').isin, 'INF174KA1HV3')
+
+    def test_reimport_matches_by_isin_and_adjusts_units(self):
+        self._import(('INE154A01025', 'ITC LTD', '10', '250'))
+        result = self._import(('INE154A01025', 'ITC LIMITED', '15', '260'), value_date='2026-11-02')
+        inv = Investment.objects.get()
+        self.assertEqual((inv.name, self._units(inv)), ('ITC LTD', Decimal('15')))
+        self.assertEqual((result['holdings_updated'], result['units_adjusted']), (1, 1))
+        adj = Transaction.objects.get(external_reference='Quantity change on Upstox re-import')
+        self.assertEqual((adj.transaction_type, adj.quantity, adj.amount), ('buy', Decimal('5'), Decimal('1300.00')))
+
+    def test_reduced_quantity_records_a_sell_with_gain(self):
+        self._import(('INE154A01025', 'ITC LTD', '10', '200'))
+        self._import(('INE154A01025', 'ITC LTD', '4', '250'), value_date='2026-11-02')
+        sell = Transaction.objects.get(transaction_type='sell')
+        self.assertEqual((sell.quantity, sell.amount, sell.realized_gain), (Decimal('6'), Decimal('1500.00'), Decimal('300.00')))
+
+    def test_same_file_twice_adds_nothing(self):
+        self._import(('INE154A01025', 'ITC LTD', '10', '257'))
+        result = self._import(('INE154A01025', 'ITC LTD', '10', '257'))
+        self.assertEqual(result['units_adjusted'], 0)
+        self.assertEqual(Transaction.objects.count(), 1)
+
+    def test_misfiled_fund_is_moved_on_reimport(self):
+        from instruments.services import get_or_create_equity_shell
+        equity = get_or_create_equity_shell(self.household)
+        inv = Investment.objects.create(instrument=equity, name='KOTAK MTCF D-GROW', member=self.member, symbol='INF174KA1HV3')
+        result = self._import(('INF174KA1HV3', 'KOTAK MTCF D-GROW', '471.52', '21.09'))
+        inv.refresh_from_db()
+        self.assertEqual(inv.instrument.instrument_type, 'mutual_fund')
+        self.assertEqual(result['reclassified'], 1)
+        self.assertEqual(Investment.objects.count(), 1)
+
+    def test_bond_already_tracked_is_not_double_counted(self):
+        from instruments.models import BondDetails
+        bond = Instrument.objects.create(household=self.household, name='DELHI GOVERNMENT', instrument_type='bond')
+        BondDetails.objects.create(
+            instrument=bond, isin='IN3920260020', face_value=Decimal('100'), quantity=1000, coupon_rate=Decimal('7.75'),
+            investment_date=date(2024, 1, 1), maturity_date=date(2041, 6, 24),
+        )
+        result = self._import(('IN3920260020', 'DEL 37608 7.75 2041', '1000', '99.12'))
+        self.assertFalse(Investment.objects.exists())
+        self.assertFalse(Transaction.objects.exists())
+        self.assertEqual(result['bond_quantity_mismatch'], [])
+        mismatch = self._import(('IN3920260020', 'DEL 37608 7.75 2041', '1200', '99.12'))
+        self.assertEqual(mismatch['bond_quantity_mismatch'], ['DEL 37608 7.75 2041'])
+
+    def test_unknown_bond_becomes_bond_instrument(self):
+        result = self._import(('INE658F08565', 'KIIFB 9.30 21012032', '3', '103800'))
+        bond = Instrument.objects.get(instrument_type='bond')
+        self.assertEqual((bond.symbol, bond.sub_category), ('INE658F08565', 'debt'))
+        self.assertEqual(result['bonds_created'], ['KIIFB 9.30 21012032'])
+        self.assertFalse(Investment.objects.exists())
+        again = self._import(('INE658F08565', 'KIIFB 9.30 21012032', '3', '103900'))
+        self.assertEqual((again['bonds_created'], Instrument.objects.filter(instrument_type='bond').count()), ([], 1))
+
+
+class SBIStatementRDPaidFromTests(TestCase):
+    def setUp(self):
+        self.household = Household.objects.create(name='Kamath Family')
+        self.member = Member.objects.create(household=self.household, full_name='Anu Kamath')
+        user = get_user_model().objects.create_user(username='sbi-rd', password='x')
+        UserProfile.objects.create(user=user, household=self.household, role='admin', status='approved')
+        self.client = APIClient()
+        self.client.force_authenticate(user=user)
+
+    def _apply(self, paid_from):
+        rd = {
+            'doc_type': 'rd_statement', 'account_number': '43455163752', 'deposit_type': 'Recurring Deposits',
+            'bank_name': 'State Bank of India', 'branch': '', 'mode_of_operation': '', 'currency': 'INR',
+            'annual_rate': '6.5', 'investment_date': '2024-10-19', 'compounding': 'quarterly',
+            'installment_amount': '10000', 'tenure_months': 36, 'current_balance': '230000', 'member_id': self.member.id,
+        }
+        if paid_from:
+            rd['paid_from'] = paid_from
+        return self.client.post('/api/imports/sbi-statement-apply', {
+            'household_id': self.household.id,
+            'account_mapping': {'11105898': {'name': 'SBI 5898 Anu', 'member_id': self.member.id}},
+            'savings_accounts': [{'account_number': '11105898', 'available_balance': '4638.88', 'statement_date': '2026-10-04', 'member_id': self.member.id}],
+            'deposits': [rd],
+        }, format='json')
+
+    def test_rd_mandate_debits_the_savings_account_not_an_rd_account(self):
+        from alerts.models import RDMandate
+        response = self._apply('num:11105898')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertNotIn('error', response.data['deposits'][0], response.data)
+        self.assertEqual(list(Account.objects.values_list('name', flat=True)), ['SBI 5898 Anu'])
+        mandate = RDMandate.objects.get()
+        self.assertEqual((mandate.account.name, mandate.instrument.instrument_type), ('SBI 5898 Anu', 'rd'))
+
+    def test_rd_without_payer_is_rejected(self):
+        response = self._apply(None)
+        self.assertIn('paid from', response.data['deposits'][0]['error'])
+        self.assertFalse(Instrument.objects.filter(instrument_type='rd').exists())

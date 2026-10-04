@@ -20,6 +20,7 @@ export function FundMatchSheet({ householdId, onDone, onCancel }: Props) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<FundRefreshResult | null>(null)
+  const [linkedCount, setLinkedCount] = useState(0)
   const [searchFor, setSearchFor] = useState<number | null>(null)
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<FundSchemeCandidate[]>([])
@@ -52,6 +53,10 @@ export function FundMatchSheet({ householdId, onDone, onCancel }: Props) {
       await fundDataApi.linkBulk(householdId, selected.map((r) => ({
         investment: r.investment_id, scheme_code: r.chosen!.scheme_code, scheme_name: r.chosen!.scheme_name,
       })))
+      // Linked funds leave the list; the rest stay so they can be linked next.
+      const linkedIds = new Set(selected.map((r) => r.investment_id))
+      setRows((prev) => prev && prev.filter((r) => !linkedIds.has(r.investment_id)))
+      setLinkedCount((n) => n + linkedIds.size)
       setResult(await fundDataApi.refresh(householdId))
     } catch (e) {
       setError(normalizeApiError(e))
@@ -60,12 +65,16 @@ export function FundMatchSheet({ householdId, onDone, onCancel }: Props) {
     }
   }
 
-  if (result) {
-    return (
-      <div className="grid gap-3">
-        <p className="text-sm text-[var(--text)]">
-          Linked {selected.length} fund{selected.length === 1 ? '' : 's'}. {result.written} now valued at the latest NAV.
-        </p>
+  const close = () => void (linkedCount > 0 ? onDone() : onCancel())
+
+  const banner = linkedCount > 0 && (
+    <div className="grid gap-2">
+      <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-sm text-emerald-800 dark:border-emerald-800/50 dark:bg-emerald-900/15 dark:text-emerald-300">
+        Linked {linkedCount} fund{linkedCount === 1 ? '' : 's'}.
+        {result ? ` ${result.written} now valued at the latest NAV.` : ''}
+      </p>
+      {result && (
+        <>
         {result.units_out_of_date.length > 0 && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-800/50 dark:bg-amber-900/15 dark:text-amber-300">
             <p className="font-medium">
@@ -84,23 +93,30 @@ export function FundMatchSheet({ householdId, onDone, onCancel }: Props) {
             {result.failed > 0 && `${result.failed} scheme${result.failed === 1 ? '' : 's'} couldn't be fetched — they'll retry in the daily refresh.`}
           </p>
         )}
-        <button type="button" onClick={() => void onDone()} className="rounded-lg bg-primary-600 py-2 text-sm font-medium text-white hover:bg-primary-700">Done</button>
-      </div>
-    )
-  }
+        </>
+      )}
+    </div>
+  )
 
   return (
     <div className="grid gap-3">
-      <p className="text-xs text-[var(--text-muted)]">
-        Confirm which scheme each fund is, and its value will update automatically from the daily NAV — no more
-        re-uploading statements. Exact matches are pre-ticked; check the rest, since a wrong scheme means a wrong value.
-      </p>
+      {banner}
+      {(rows === null || rows.length > 0) && (
+        <p className="text-xs text-[var(--text-muted)]">
+          {linkedCount > 0
+            ? 'These funds are still not linked. Confirm their schemes to keep them updated from the daily NAV too.'
+            : `Confirm which scheme each fund is, and its value will update automatically from the daily NAV — no more
+               re-uploading statements. Exact matches are pre-ticked; check the rest, since a wrong scheme means a wrong value.`}
+        </p>
+      )}
       {error && <p className="text-xs text-red-500">{error}</p>}
       {rows === null && !error && (
         <p className="py-6 text-center text-xs text-[var(--text-muted)]">Finding matching schemes… this can take up to a minute.</p>
       )}
       {rows !== null && rows.length === 0 && (
-        <p className="py-6 text-center text-sm text-[var(--text-muted)]">All funds are already linked.</p>
+        <p className="py-6 text-center text-sm text-[var(--text-muted)]">
+          {linkedCount > 0 ? 'All funds are now linked.' : 'All funds are already linked.'}
+        </p>
       )}
       {rows !== null && rows.length > 0 && (
         <div className="grid max-h-[60vh] gap-2 overflow-y-auto pr-1">
@@ -169,11 +185,15 @@ export function FundMatchSheet({ householdId, onDone, onCancel }: Props) {
         </div>
       )}
       <div className="flex gap-2 border-t border-[var(--border)] pt-3">
-        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">Cancel</button>
-        <button type="button" disabled={saving || selected.length === 0} onClick={() => void linkAndValue()}
-          className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
-          {saving ? 'Linking & fetching NAVs…' : `Link ${selected.length} & update values`}
+        <button type="button" onClick={close} className="flex-1 rounded-lg border border-[var(--border)] py-2 text-sm text-[var(--text-2)] hover:bg-[var(--surface-2)]">
+          {linkedCount > 0 ? 'Done' : 'Cancel'}
         </button>
+        {rows !== null && rows.length > 0 && (
+          <button type="button" disabled={saving || selected.length === 0} onClick={() => void linkAndValue()}
+            className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            {saving ? 'Linking & fetching NAVs…' : `Link ${selected.length} & update values`}
+          </button>
+        )}
       </div>
     </div>
   )

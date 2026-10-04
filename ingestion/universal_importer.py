@@ -1592,16 +1592,33 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
 def apply_upstox_import(household, member, parsed: dict) -> dict:
     """
     Import a parsed Upstox holdings Excel file for a specific household member.
-    Creates per-member equity Investments under the shared "Equity" shell
-    Instrument, ValuationSnapshots, and initial buy Transactions if none exist.
+
+    Each row is filed by what its ISIN says it is: stocks/ETFs as per-member
+    Investments under the shared "Equity" shell, demat mutual funds under the
+    "Mutual Fund" shell, bonds as bond Instruments (or matched to the bond
+    Instruments already tracking them, so they aren't counted twice).
+
+    Re-imports match existing holdings by ISIN first (scrip names drift), move
+    a holding that an earlier import misfiled, and record any change in units
+    as a buy/sell at the file's rate — the file has no cost data, so a bonus
+    or split shows up as a purchase at market price.
     """
-    from instruments.models import Investment
-    from instruments.services import get_or_create_equity_shell
+    from instruments.models import Instrument, Investment
+    from instruments.services import (
+        _ledger_units, create_bond_instrument, find_bond_instruments, get_or_create_equity_shell,
+        get_or_create_mf_shell, holding_isin, is_bond_isin, is_mutual_fund_isin, move_investment_to_shell,
+        reclassify_bond_investment,
+    )
+    from insights.services import compute_holding_cost_basis
     from valuations.models import ValuationSnapshot
     from ledger.models import Transaction
 
     created = 0
     updated = 0
+    reclassified = 0
+    units_adjusted = 0
+    bonds_created: list[str] = []
+    bond_quantity_mismatch: list[str] = []
     errors = []
 
     member_label = member.full_name if member else None
@@ -1624,6 +1641,14 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
             update_fields.append('asset_category')
         if update_fields:
             equity_shell.save(update_fields=update_fields)
+    mf_shell = None
+
+    def buy(instrument, investment, tx_date, units, rate, amount, reference=''):
+        Transaction.objects.create(
+            household=household, instrument=instrument, investment=investment, account=upstox_account,
+            member=member, tx_date=tx_date, amount=amount, quantity=units, price_per_unit=rate or None,
+            direction='outflow', transaction_type='buy', currency='INR', source='csv', external_reference=reference,
+        )
 
     for i, h in enumerate(parsed.get('holdings', []), start=1):
         try:
@@ -1631,41 +1656,107 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                 name = h['name'].strip()
                 if not name:
                     continue
+                isin = (h.get('isin') or '').strip().upper()
 
                 vd = _to_date(h.get('value_date') or str(parsed['valuation_date']))
                 quantity = _to_decimal(h.get('quantity') or '0').quantize(Decimal('0.0001'))
-                rate = _money(h.get('rate') or '0')
-                valuation = _money(h.get('valuation') or '0')
+                rate = _money(h.get('rate') or '0') or Decimal('0')
+                valuation = _money(h.get('valuation') or '0') or Decimal('0')
 
-                instrument = equity_shell
-                investment, inv_created = Investment.objects.get_or_create(
-                    instrument=instrument,
-                    name=name,
-                    member=member,
-                    defaults={'symbol': h.get('isin', '')},
-                )
-                if not inv_created and not investment.symbol and h.get('isin'):
-                    investment.symbol = h['isin']
-                    investment.save(update_fields=['symbol'])
+                # Investments of this member already holding this ISIN, under any shell.
+                same_isin = [
+                    inv for inv in Investment.objects.filter(
+                        instrument__household=household, member=member,
+                        instrument__instrument_type__in=[Instrument.InstrumentType.EQUITY, Instrument.InstrumentType.MUTUAL_FUND],
+                    ).select_related('instrument')
+                    if isin and holding_isin(inv) == isin
+                ]
 
-                # Create initial buy transaction only if none exists yet for this Investment
+                if is_bond_isin(isin):
+                    for inv in same_isin:
+                        reclassify_bond_investment(inv)
+                        reclassified += 1
+                    bonds = list(find_bond_instruments(household, isin))
+                    if bonds:
+                        tracked = sum((bd.quantity for b in bonds for bd in b.bond_details.all() if bd.isin == isin), start=0)
+                        if Decimal(tracked) != quantity:
+                            bond_quantity_mismatch.append(name)
+                        # Split across several Instruments (e.g. bought in two lots) — no single place to put
+                        # the file's value, so they keep their formula valuation.
+                        if len(bonds) == 1 and valuation:
+                            ValuationSnapshot.objects.update_or_create(
+                                household=household, instrument=bonds[0], investment=None, account=None, valuation_date=vd,
+                                defaults={'unit_price': rate or None, 'market_value': valuation, 'source': 'csv'},
+                            )
+                        updated += 1
+                        continue
+                    # No BondDetails yet: a bond Instrument an earlier import created (ISIN in symbol), else a new one.
+                    bond = Instrument.objects.filter(
+                        household=household, instrument_type=Instrument.InstrumentType.BOND, symbol=isin,
+                    ).first()
+                    if bond is None:
+                        bond = create_bond_instrument(household, member, name, isin)
+                        if quantity > 0 and valuation > 0:
+                            buy(bond, None, vd, quantity, rate, valuation)
+                        bonds_created.append(name)
+                        created += 1
+                    else:
+                        updated += 1
+                    ValuationSnapshot.objects.update_or_create(
+                        household=household, instrument=bond, investment=None, account=None, valuation_date=vd,
+                        defaults={'unit_price': rate or None, 'market_value': valuation or None, 'source': 'csv'},
+                    )
+                    continue
+
+                if is_mutual_fund_isin(isin, name):
+                    mf_shell = mf_shell or get_or_create_mf_shell(household)
+                    instrument = mf_shell
+                else:
+                    instrument = equity_shell
+
+                investment = next((inv for inv in same_isin if inv.instrument_id == instrument.id), None) \
+                    or (same_isin[0] if same_isin else None) \
+                    or Investment.objects.filter(instrument=instrument, name=name, member=member).first()
+                inv_created = investment is None
+                if inv_created:
+                    investment = Investment.objects.create(
+                        instrument=instrument, name=name, member=member, isin=isin,
+                        symbol='' if instrument != equity_shell else isin,
+                    )
+                else:
+                    if investment.instrument_id != instrument.id:
+                        investment = move_investment_to_shell(investment, instrument)
+                        reclassified += 1
+                    fields = []
+                    if isin and not investment.isin:
+                        investment.isin = isin
+                        fields.append('isin')
+                    if instrument == equity_shell and isin and not investment.symbol:
+                        investment.symbol = isin
+                        fields.append('symbol')
+                    if fields:
+                        investment.save(update_fields=fields)
+
                 if not Transaction.objects.filter(investment=investment, household=household).exists():
                     if quantity > 0 and valuation > 0:
-                        Transaction.objects.create(
-                            household=household,
-                            instrument=instrument,
-                            investment=investment,
-                            account=upstox_account,
-                            member=member,
-                            tx_date=vd,
-                            amount=valuation,
-                            quantity=quantity,
-                            price_per_unit=rate,
-                            direction='outflow',
-                            transaction_type='buy',
-                            currency='INR',
-                            source='csv',
-                        )
+                        buy(instrument, investment, vd, quantity, rate, valuation)
+                else:
+                    delta = quantity - _ledger_units(investment)
+                    amount = _money(abs(delta) * rate) if delta != 0 and rate > 0 else None
+                    if amount:
+                        if delta > 0:
+                            buy(instrument, investment, vd, delta, rate, amount, 'Quantity change on Upstox re-import')
+                        else:
+                            # Same average-cost realized gain as ledger.serializers.TransactionSerializer.validate.
+                            held, net_invested = compute_holding_cost_basis(household.id, instrument.id, investment.id, vd)
+                            realized_gain = (amount - net_invested / held * -delta).quantize(Decimal('0.01')) if held > 0 else None
+                            Transaction.objects.create(
+                                household=household, instrument=instrument, investment=investment, account=upstox_account,
+                                member=member, tx_date=vd, amount=amount, quantity=-delta, price_per_unit=rate,
+                                direction='inflow', transaction_type='sell', currency='INR', source='csv',
+                                external_reference='Quantity change on Upstox re-import', realized_gain=realized_gain,
+                            )
+                        units_adjusted += 1
 
                 ValuationSnapshot.objects.update_or_create(
                     household=household,
@@ -1674,8 +1765,8 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                     account=None,
                     valuation_date=vd,
                     defaults={
-                        'unit_price': rate,
-                        'market_value': valuation,
+                        'unit_price': rate or None,
+                        'market_value': valuation or None,
                         'source': 'csv',
                     },
                 )
@@ -1691,6 +1782,10 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
     return {
         'holdings_created': created,
         'holdings_updated': updated,
+        'reclassified': reclassified,
+        'units_adjusted': units_adjusted,
+        'bonds_created': bonds_created,
+        'bond_quantity_mismatch': bond_quantity_mismatch,
         'errors': errors,
     }
 

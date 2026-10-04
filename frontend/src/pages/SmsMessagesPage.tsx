@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
-import type { InstrumentOption, OptionItem, SmsMessage } from '../types/domain'
+import type { SmsMessage } from '../types/domain'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { smsApi } from '../api/smsApi'
 import { Tabs } from '../components/ui/Tabs'
@@ -9,15 +9,11 @@ import { Button } from '../components/ui/Button'
 import { Drawer } from '../components/ui/Drawer'
 import { DeleteButton } from '../components/common/DeleteButton'
 import { normalizeApiError } from '../hooks/errorUtils'
-import { SmsApprovalForm } from '../components/sms/SmsApprovalForm'
-import { useApp } from '../context/AppContext'
+import { openReview } from '../components/sms/reviewQueue'
 
 type Props = {
   householdId: number
   canDelete: (e: DeleteEntity) => boolean
-  accountOptions: OptionItem[]
-  memberOptions: OptionItem[]
-  instrumentOptions: InstrumentOption[]
 }
 
 type CategoryFilter = 'all' | 'transaction' | 'otp' | 'sip_reminder' | 'promotion' | 'alert'
@@ -67,8 +63,7 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-export function SmsMessagesPage({ householdId, canDelete, accountOptions, memberOptions, instrumentOptions }: Props) {
-  const { refreshAll } = useApp()
+export function SmsMessagesPage({ householdId, canDelete }: Props) {
   const [messages, setMessages] = useState<SmsMessage[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -86,7 +81,6 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [selected, setSelected] = useState<SmsMessage | null>(null)
-  const [approving, setApproving] = useState<SmsMessage | null>(null)
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false)
   const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false)
@@ -197,26 +191,11 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
     }
   }
 
-  // ── Approval queue navigation ──
-  // Messages on the current page that can still be approved (not already approved).
-  const approvableQueue = messages.filter((m) => m.status !== 'approved')
-  const approvingIndex = approving ? approvableQueue.findIndex((m) => m.id === approving.id) : -1
-
-  // Advance to the next approvable message after an action; close if none left.
-  const goToNextApprovable = (afterId: number) => {
-    const remaining = approvableQueue.filter((m) => m.id !== afterId)
-    const fromIdx = approvableQueue.findIndex((m) => m.id === afterId)
-    // Prefer the message that was *after* the acted-on one
-    const next = approvableQueue.slice(fromIdx + 1).find((m) => m.id !== afterId) ?? remaining[0] ?? null
-    setApproving(next)
-    if (!next) setSelected(null)
-  }
-
-  const navApproving = (dir: 1 | -1) => {
-    if (approvingIndex < 0) return
-    const target = approvingIndex + dir
-    if (target >= 0 && target < approvableQueue.length) setApproving(approvableQueue[target])
-  }
+  // ── Review (full page, #/sms/<id>) ──
+  // The pending/rejected messages on this page, in display order, become the
+  // review queue so Previous/Next and "approve & next" follow the list.
+  const startReview = (msg: SmsMessage) =>
+    openReview(msg.id, messages.filter((m) => m.status !== 'approved').map((m) => m.id))
 
   // ── Detail viewer navigation (browse all messages on the page) ──
   const selectedIndex = selected ? messages.findIndex((m) => m.id === selected.id) : -1
@@ -224,22 +203,6 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
     if (selectedIndex < 0) return
     const target = selectedIndex + dir
     if (target >= 0 && target < messages.length) setSelected(messages[target])
-  }
-
-  const rejectFromApproval = async (id: number) => {
-    setError('')
-    try {
-      await smsApi.rejectStaged(id)
-      if (statusFilter === 'all' || statusFilter === 'rejected') {
-        setMessages((prev) => prev.map((m) => m.id === id ? { ...m, status: 'rejected' as const } : m))
-      } else {
-        setMessages((prev) => prev.filter((m) => m.id !== id))
-        setCount((c) => Math.max(0, c - 1))
-      }
-      goToNextApprovable(id)
-    } catch (e) {
-      setError(normalizeApiError(e))
-    }
   }
 
   const deleteOne = async (id: number) => {
@@ -301,6 +264,20 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
       const res = await smsApi.reapplyRules(Array.from(checked))
       setReapplyResult(`Updated ${res.updated} message${res.updated === 1 ? '' : 's'}`)
       setChecked(new Set())
+      load()
+    } catch (e) {
+      setError(normalizeApiError(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const rereadAllPending = async () => {
+    setReapplyResult('')
+    setBulkBusy(true)
+    try {
+      const res = await smsApi.rereadAllPending()
+      setReapplyResult(`Re-read ${res.updated} pending message${res.updated === 1 ? '' : 's'} — ${res.ready} ready to approve`)
       load()
     } catch (e) {
       setError(normalizeApiError(e))
@@ -477,6 +454,11 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
             {count === 0 ? 'No messages' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, count)} of ${count}`}
           </p>
           <div className="flex items-center gap-2">
+            {checked.size === 0 && reapplyResult && <span className="text-xs text-emerald-600 dark:text-emerald-400">{reapplyResult}</span>}
+            <Button size="sm" variant="secondary" loading={bulkBusy} onClick={() => void rereadAllPending()}
+              title="Read amount, debit/credit, account and balance from every pending message again">
+              Re-read all pending
+            </Button>
             <Button size="sm" variant="secondary" onClick={exportMessages}>
               {checked.size > 0 ? `Export (${checked.size})` : 'Export'}
             </Button>
@@ -594,7 +576,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
                       <div className="flex flex-wrap items-center gap-1">
                         {msg.status !== 'approved' && (
                           <>
-                            <Button size="sm" onClick={() => setApproving(msg)}>Approve</Button>
+                            <Button size="sm" onClick={() => startReview(msg)}>Approve</Button>
                             {msg.status !== 'rejected' && (
                               <Button size="sm" variant="secondary" onClick={() => rejectOne(msg.id)}>Reject</Button>
                             )}
@@ -667,7 +649,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
                   </div>
                   {msg.status !== 'approved' && (
                     <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
-                      <Button size="sm" onClick={() => setApproving(msg)}>Approve</Button>
+                      <Button size="sm" onClick={() => startReview(msg)}>Approve</Button>
                       {msg.status !== 'rejected' && (
                         <Button size="sm" variant="secondary" onClick={() => rejectOne(msg.id)}>Reject</Button>
                       )}
@@ -770,7 +752,7 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
             </div>
             {selected.status !== 'approved' && (
               <div className="flex gap-2">
-                <Button onClick={() => { const m = selected; setSelected(null); setApproving(m) }}>Approve…</Button>
+                <Button onClick={() => { const m = selected; setSelected(null); if (m) startReview(m) }}>Approve…</Button>
                 {selected.status !== 'rejected' && (
                   <Button variant="secondary" onClick={() => rejectOne(selected.id)}>Reject</Button>
                 )}
@@ -802,27 +784,6 @@ export function SmsMessagesPage({ householdId, canDelete, accountOptions, member
         )}
       </Drawer>
 
-      {approving && (
-        <SmsApprovalForm
-          key={approving.id}
-          message={approving}
-          accountOptions={accountOptions}
-          memberOptions={memberOptions}
-          instrumentOptions={instrumentOptions}
-          position={approvingIndex >= 0 ? { current: approvingIndex + 1, total: approvableQueue.length } : undefined}
-          hasPrev={approvingIndex > 0}
-          hasNext={approvingIndex >= 0 && approvingIndex < approvableQueue.length - 1}
-          onPrev={() => navApproving(-1)}
-          onNext={() => navApproving(1)}
-          onReject={() => rejectFromApproval(approving.id)}
-          onApproved={() => {
-            goToNextApprovable(approving.id)
-            load()
-            void refreshAll()
-          }}
-          onCancel={() => setApproving(null)}
-        />
-      )}
     </div>
   )
 }

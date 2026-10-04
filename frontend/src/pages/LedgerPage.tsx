@@ -145,6 +145,7 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [selectAllMatching, setSelectAllMatching] = useState(false)
   const [bulkClassification, setBulkClassification] = useState('')
+  const [bulkDeduct, setBulkDeduct] = useState<'' | 'yes' | 'no'>('')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkError, setBulkError] = useState('')
   const [bulkMessage, setBulkMessage] = useState('')
@@ -386,17 +387,21 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
   const selectionCount = selectAllMatching ? Math.min(totalCount, BULK_LIMIT) : selectedIds.size
 
   const applyBulkClassification = async () => {
-    if (!bulkClassification || selectionCount === 0) return
+    if ((!bulkClassification && !bulkDeduct) || selectionCount === 0) return
     setBulkBusy(true)
     setBulkError('')
     setBulkMessage('')
     try {
       const ids = selectAllMatching ? await fetchAllMatchingIds() : Array.from(selectedIds)
-      const res = await ledgerApi.bulkUpdateTransactions(householdId, ids, { classification: bulkClassification as Transaction['classification'] })
+      const fields: Parameters<typeof ledgerApi.bulkUpdateTransactions>[2] = {}
+      if (bulkClassification) fields.classification = bulkClassification as Transaction['classification']
+      if (bulkDeduct) fields.affects_balance = bulkDeduct === 'yes'
+      const res = await ledgerApi.bulkUpdateTransactions(householdId, ids, fields)
       setBulkMessage(`Updated ${res.updated} transaction${res.updated === 1 ? '' : 's'}.`)
       setSelectedIds(new Set())
       setSelectAllMatching(false)
       setBulkClassification('')
+      setBulkDeduct('')
       await loadTransactions()
       await onRefreshDashboard()
     } catch (e) {
@@ -543,7 +548,17 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
                   <option value="">Set classification…</option>
                   {CLASSIFICATION_OPTIONS.map(c => <option key={c.id} value={c.label}>{c.label.replace('_', ' ')}</option>)}
                 </select>
-                <button type="button" disabled={!bulkClassification || bulkBusy} onClick={applyBulkClassification} className="primary-btn" style={{ fontSize: '0.8rem', padding: '4px 12px' }}>
+                <select
+                  value={bulkDeduct}
+                  onChange={e => setBulkDeduct(e.target.value as '' | 'yes' | 'no')}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-sm text-[var(--text)]"
+                  title="Whether these transactions change their account's balance. Choose 'Don't deduct' when the money never actually left (or entered) that account."
+                >
+                  <option value="">Account balance…</option>
+                  <option value="yes">Deduct from account</option>
+                  <option value="no">Don't deduct from account</option>
+                </select>
+                <button type="button" disabled={(!bulkClassification && !bulkDeduct) || bulkBusy} onClick={applyBulkClassification} className="primary-btn" style={{ fontSize: '0.8rem', padding: '4px 12px' }}>
                   {bulkBusy ? 'Applying…' : 'Apply'}
                 </button>
                 <button type="button" onClick={() => { setSelectedIds(new Set()); setSelectAllMatching(false) }} className="secondary-btn" style={{ fontSize: '0.8rem', padding: '4px 12px' }}>

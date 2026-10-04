@@ -161,7 +161,7 @@ export const ledgerApi = {
     })
   },
   async deleteTransaction(id: number) { return deleteJson(`/api/transactions/${id}/`) },
-  async bulkUpdateTransactions(householdId: number, ids: number[], fields: Partial<Pick<Transaction, 'classification' | 'spend_category'>>) {
+  async bulkUpdateTransactions(householdId: number, ids: number[], fields: Partial<Pick<Transaction, 'classification' | 'spend_category' | 'affects_balance'>>) {
     return postJson<{ updated: number }>('/api/transactions/bulk-update/', { household: householdId, ids, fields })
   },
   async fetchDashboard(householdId: number, asOf: string): Promise<DashboardPayload> {

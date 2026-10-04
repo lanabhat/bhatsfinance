@@ -4,7 +4,7 @@ import { SmsRulesPage } from './SmsRulesPage'
 import { SmsDevicesPage } from './SmsDevicesPage'
 import { SmsTestPage } from './SmsTestPage'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
-import type { InstrumentOption, OptionItem } from '../types/domain'
+import type { OptionItem } from '../types/domain'
 
 type Tab = 'messages' | 'rules' | 'devices' | 'test'
 
@@ -13,10 +13,9 @@ type Props = {
   canDelete: (e: DeleteEntity) => boolean
   accountOptions: OptionItem[]
   memberOptions: OptionItem[]
-  instrumentOptions: InstrumentOption[]
 }
 
-export function SmsPage({ householdId, canDelete, accountOptions, memberOptions, instrumentOptions }: Props) {
+export function SmsPage({ householdId, canDelete, accountOptions, memberOptions }: Props) {
   const [tab, setTab] = useState<Tab>('messages')
 
   const tabCls = (t: Tab) =>
@@ -35,9 +34,6 @@ export function SmsPage({ householdId, canDelete, accountOptions, memberOptions,
         <SmsMessagesPage
           householdId={householdId}
           canDelete={canDelete}
-          accountOptions={accountOptions}
-          memberOptions={memberOptions}
-          instrumentOptions={instrumentOptions}
         />
       )}
 

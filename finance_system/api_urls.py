@@ -71,7 +71,7 @@ from upstox_integration.views import (
     UpstoxUpdateMemberView,
 )
 from valuations.views import BulkSnapshotView, ValuationSnapshotViewSet
-from fund_data.views import ExternalFundViewSet, FundComparisonView, FundLinkBulkView, FundMatchSuggestionsView, FundRefreshView, FundSearchView
+from fund_data.views import ExternalFundViewSet, FundComparisonView, FundLinkBulkView, FundMatchSuggestionsView, FundRefreshView, FundSearchView, MarketPriceRefreshView
 from ai_insights.views import ApplyClassificationsView, ClassifyAllFundsView, ClassifyFundView, CompareFundReturnsView, ExplainRebalancingView
 
 router = DefaultRouter()
@@ -137,6 +137,7 @@ urlpatterns = [
     path('fund-data/match-suggestions', FundMatchSuggestionsView.as_view(), name='fund-data-match-suggestions'),
     path('fund-data/link-bulk', FundLinkBulkView.as_view(), name='fund-data-link-bulk'),
     path('fund-data/refresh', FundRefreshView.as_view(), name='fund-data-refresh'),
+    path('fund-data/refresh-prices', MarketPriceRefreshView.as_view(), name='fund-data-refresh-prices'),
     path('fund-comparison', FundComparisonView.as_view(), name='fund-comparison'),
     path('members-networth', MembersNetWorthView.as_view(), name='members-networth'),
     path('alerts/missed-sip', MissedSIPAlertsView.as_view(), name='missed-sip-alerts'),

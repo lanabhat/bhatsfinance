@@ -4,7 +4,8 @@ from rest_framework import status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from fund_data.mfapi_client import MfApiError, search_schemes
+from fund_data.mfapi_client import MfApiError
+from fund_data.nav_sources import search_schemes
 from fund_data.models import ExternalFund
 from fund_data.serializers import ExternalFundSerializer
 from fund_data.services import compute_benchmark_comparison, compute_fund_risk_metrics
@@ -17,7 +18,7 @@ class ExternalFundViewSet(viewsets.ModelViewSet):
 
 
 class FundSearchView(APIView):
-    """Server-side proxy to mfapi.in's scheme search, so the external dependency
+    """Server-side proxy to scheme search (mfapi.in + AMFI SIFs), so the external dependency
     stays server-side (no CORS/rate-limit exposure to the browser)."""
 
     def get(self, request):
@@ -119,6 +120,42 @@ class FundRefreshView(APIView):
         synced = sync_navs(household_id=int(household_id), include_benchmarks=False, log=lambda *_: None)
         valued = write_nav_snapshots(household_id=int(household_id))
         return Response({**synced, **valued})
+
+
+class MarketPriceRefreshView(APIView):
+    """Bring a household's market-priced holdings up to date now — the on-demand
+    version of daily_refresh's price steps: link demat funds by ISIN, fetch NAVs and
+    value linked funds, then value listed equities at the latest NSE close.
+    A failing source is reported in `errors` without blocking the others."""
+
+    def post(self, request):
+        from fund_data.equity_prices import link_funds_by_isin, write_equity_snapshots
+        from fund_data.navs import sync_navs, write_nav_snapshots
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        household_id = int(household_id)
+
+        errors: list[str] = []
+        linked: list[str] = []
+        try:
+            linked = link_funds_by_isin(household_id)['linked']
+        except MfApiError as exc:
+            errors.append(str(exc))
+        synced = sync_navs(household_id=household_id, include_benchmarks=False, log=lambda *_: None)
+        funds = write_nav_snapshots(household_id=household_id)
+        equities = None
+        try:
+            equities = write_equity_snapshots(household_id=household_id)
+        except MfApiError as exc:
+            errors.append(str(exc))
+        return Response({
+            'funds_linked': linked,
+            'funds': {**synced, **funds},
+            'equities': equities,
+            'errors': errors,
+        })
 
 
 class FundComparisonView(APIView):

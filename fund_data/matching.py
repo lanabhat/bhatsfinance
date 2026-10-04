@@ -12,7 +12,8 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-from fund_data.mfapi_client import MfApiError, search_schemes
+from fund_data.mfapi_client import MfApiError
+from fund_data.nav_sources import search_schemes
 
 _PLAN_WORDS = {'direct': 'direct', 'dir': 'direct', 'regular': 'regular', 'reg': 'regular'}
 _OPTION_WORDS = {

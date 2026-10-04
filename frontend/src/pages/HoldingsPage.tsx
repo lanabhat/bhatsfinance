@@ -11,6 +11,8 @@ import type { FilterAccessor } from '../hooks/useFilters'
 import { FilterBar } from '../components/ui/FilterBar'
 import { LabeledSelect } from '../components/ui/LabeledSelect'
 import { FundMatchSheet } from '../components/allocation/FundMatchSheet'
+import { fundDataApi } from '../api/fundDataApi'
+import { useToast } from '../components/ui/Toast'
 import { CategorySection } from '../components/assets/CategorySection'
 import { InstrumentForm } from '../components/assets/InstrumentForm'
 import { InstrumentRow } from '../components/assets/InstrumentRow'
@@ -227,6 +229,30 @@ export function HoldingsPage() {
   }, [activeMemberId, householdId, asOf])
 
   const close = () => setSheet({ type: 'none' })
+  const toast = useToast()
+  const [updatingPrices, setUpdatingPrices] = useState(false)
+  const updatePrices = async () => {
+    setUpdatingPrices(true)
+    try {
+      const r = await fundDataApi.refreshPrices(householdId)
+      const parts = []
+      if (r.equities) {
+        const day = new Date(r.equities.price_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+        parts.push(`${r.equities.written} stock${r.equities.written === 1 ? '' : 's'} at NSE close of ${day}`)
+      }
+      parts.push(`${r.funds.written} fund${r.funds.written === 1 ? '' : 's'} at latest NAV`)
+      if (r.funds_linked.length) parts.push(`${r.funds_linked.length} fund${r.funds_linked.length === 1 ? '' : 's'} newly linked`)
+      const kept = [...(r.equities?.units_out_of_date ?? []), ...r.funds.units_out_of_date]
+      if (kept.length) parts.push(`${kept.length} kept uploaded value (units out of date)`)
+      toast.success(`Updated ${parts.join(' · ')}`)
+      r.errors.forEach((e) => toast.error(e))
+      await refreshDashboard(); await loadInstruments(); await loadInvestments()
+    } catch (e) {
+      toast.error(normalizeApiError(e))
+    } finally {
+      setUpdatingPrices(false)
+    }
+  }
   const afterBuy = async () => { close(); await refreshDashboard(); await loadInstruments(); await loadInvestments(); await loadOwnerships() }
   const afterSell = async () => { close(); await refreshDashboard(); await loadInstruments(); await loadInvestments(); await loadOwnerships() }
   const afterValuation = async () => { close(); await refreshDashboard() }
@@ -983,11 +1009,18 @@ export function HoldingsPage() {
             Export MF CSV
           </a>
           {canWrite && (
+            <>
             <button type="button" onClick={() => setSheet({ type: 'fund-match' })}
               className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
               title="Match funds to their scheme so values update daily from NAV">
               Link funds to NAV
             </button>
+            <button type="button" onClick={() => void updatePrices()} disabled={updatingPrices}
+              className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)] disabled:opacity-50"
+              title="Value stocks at the latest NSE close and funds at the latest NAV">
+              {updatingPrices ? 'Updating…' : 'Update prices'}
+            </button>
+            </>
           )}
           <button type="button" onClick={() => { window.location.hash = '/holdings/add' }} disabled={!canWrite}
             className="shrink-0 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">

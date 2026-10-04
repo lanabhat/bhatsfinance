@@ -10,11 +10,13 @@ from ledger.serializers import TagSerializer, TransactionSerializer
 
 
 MUTABLE_FIELDS = {'tx_date', 'member', 'spend_category', 'description', 'notes', 'classification', 'tags'}
-# Bulk edits only ever need to touch classification (the primary use case: mass
-# reclassifying imported rows as internal_transfer/tracking/etc.) — narrower than
-# single-row edits so a bad filter can't accidentally overwrite dates/notes for
-# hundreds of rows at once.
-BULK_MUTABLE_FIELDS = {'classification', 'spend_category'}
+# Bulk edits only ever need to touch how rows are interpreted — classification
+# (mass reclassifying imported rows as internal_transfer/tracking/etc.) and
+# affects_balance (e.g. instalments wrongly deducted from an account that never
+# held the money) — narrower than single-row edits so a bad filter can't
+# accidentally overwrite dates/notes for hundreds of rows at once. Amounts,
+# dates and direction stay immutable.
+BULK_MUTABLE_FIELDS = {'classification', 'spend_category', 'affects_balance'}
 BULK_UPDATE_LIMIT = 500
 
 
@@ -119,6 +121,9 @@ class TransactionViewSet(viewsets.ModelViewSet):
         unknown = set(fields.keys()) - BULK_MUTABLE_FIELDS
         if unknown:
             return Response({'detail': f'Fields not editable in bulk: {", ".join(sorted(unknown))}'}, status=400)
+
+        if 'affects_balance' in fields and not isinstance(fields['affects_balance'], bool):
+            return Response({'detail': 'affects_balance must be true or false.'}, status=400)
 
         qs = Transaction.objects.filter(household_id=household_id, pk__in=ids)
         matched_ids = set(qs.values_list('pk', flat=True))

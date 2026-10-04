@@ -224,3 +224,40 @@ class TransactionMultiValueFilterTests(TestCase):
 
     def test_summary_requires_household(self):
         self.assertEqual(self.client.get('/api/transactions/summary/').status_code, 400)
+
+
+class TransactionBulkUpdateTests(TestCase):
+    def setUp(self):
+        from insights.services import compute_household_accounts
+        self.compute_accounts = compute_household_accounts
+        self.household = Household.objects.create(name='Shetty Family')
+        self.client = _approved_client(self.household)
+        self.account = Account.objects.create(household=self.household, name='SBI RD 3752', account_type='bank')
+        self.rd = Instrument.objects.create(household=self.household, name='SBI RD', instrument_type='rd')
+        self.txs = [
+            Transaction.objects.create(
+                household=self.household, account=self.account, instrument=self.rd, tx_date=date(2026, 8, 19),
+                amount=Decimal('10000'), direction='outflow', transaction_type='deposit',
+            )
+            for _ in range(3)
+        ]
+
+    def _balance(self):
+        return next(a['balance'] for a in self.compute_accounts(self.household.id, date(2026, 10, 1)) if a['account_id'] == self.account.id)
+
+    def test_stop_deducting_restores_account_balance(self):
+        self.assertEqual(self._balance(), '-30000.00')
+        response = self.client.post('/api/transactions/bulk-update/', {
+            'household': self.household.id, 'ids': [t.id for t in self.txs], 'fields': {'affects_balance': False},
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['updated'], 3)
+        self.assertEqual(self._balance(), '0.00')
+        # Amounts are untouched — the RD still shows the money as invested.
+        self.assertEqual(sum(t.amount for t in Transaction.objects.filter(instrument=self.rd)), Decimal('30000'))
+
+    def test_affects_balance_must_be_boolean(self):
+        response = self.client.post('/api/transactions/bulk-update/', {
+            'household': self.household.id, 'ids': [self.txs[0].id], 'fields': {'affects_balance': 'no'},
+        }, format='json')
+        self.assertEqual(response.status_code, 400)

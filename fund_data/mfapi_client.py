@@ -26,6 +26,25 @@ def search_schemes(query: str) -> list[dict]:
     return resp.json()
 
 
+def fetch_schemes_by_isin() -> dict[str, dict]:
+    """{isin: {'scheme_code', 'scheme_name'}} for every scheme, from /mf/latest (~11 MB),
+    keyed on both the growth and the dividend-reinvestment ISIN."""
+    try:
+        resp = requests.get(f'{BASE_URL}/mf/latest', timeout=60)
+    except requests.RequestException as exc:
+        raise MfApiError(f'mfapi.in scheme list failed: {exc}') from exc
+    if not resp.ok:
+        raise MfApiError(f'mfapi.in scheme list failed: HTTP {resp.status_code}')
+    by_isin: dict[str, dict] = {}
+    for row in resp.json():
+        scheme = {'scheme_code': str(row.get('schemeCode')), 'scheme_name': str(row.get('schemeName') or '')}
+        for key in ('isinGrowth', 'isinDivReinvestment'):
+            isin = (row.get(key) or '').strip().upper()
+            if isin:
+                by_isin[isin] = scheme
+    return by_isin
+
+
 def fetch_scheme_nav_history(scheme_code: str) -> dict:
     """Returns {'meta': {...}, 'history': [{'date': date, 'nav': Decimal}, ...]} sorted ascending by date."""
     resp = requests.get(f'{BASE_URL}/mf/{scheme_code}', timeout=TIMEOUT_SECONDS)

@@ -29,7 +29,7 @@ function sortedCategories(categories: ExpenseCategory[]) {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function MemberChip({ name, selected, onClick }: { name: string; selected: boolean; onClick: () => void }) {
+export function MemberChip({ name, selected, onClick }: { name: string; selected: boolean; onClick: () => void }) {
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   return (
     <button
@@ -51,12 +51,13 @@ function MemberChip({ name, selected, onClick }: { name: string; selected: boole
   )
 }
 
-function NewCategoryInline({ householdId, onCreated, onCancel }: {
+function NewCategoryInline({ householdId, initialLabel = '', onCreated, onCancel }: {
   householdId: number
+  initialLabel?: string
   onCreated: (cat: ExpenseCategory) => void
   onCancel: () => void
 }) {
-  const [label, setLabel] = useState('')
+  const [label, setLabel] = useState(initialLabel)
   const [icon, setIcon] = useState('📌')
   const [showPicker, setShowPicker] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -109,7 +110,7 @@ function NewCategoryInline({ householdId, onCreated, onCancel }: {
   )
 }
 
-function CategoryGrid({ value, onChange, categories, householdId, onCategoryCreated }: {
+export function CategoryGrid({ value, onChange, categories, householdId, onCategoryCreated }: {
   value: CategoryKey
   onChange: (k: CategoryKey) => void
   categories: ExpenseCategory[]
@@ -118,20 +119,52 @@ function CategoryGrid({ value, onChange, categories, householdId, onCategoryCrea
 }) {
   const cats = useMemo(() => sortedCategories(categories), [categories])
   const [addingNew, setAddingNew] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const q = query.trim().toLowerCase()
+  // Name matches first (starts-with before contains), so Enter picks the obvious one.
+  const shown = q
+    ? cats
+      .filter(c => c.label.toLowerCase().includes(q) || c.key.toLowerCase().includes(q))
+      .sort((a, b) => Number(!a.label.toLowerCase().startsWith(q)) - Number(!b.label.toLowerCase().startsWith(q)))
+    : cats
 
   if (addingNew) {
     return (
       <NewCategoryInline
         householdId={householdId}
-        onCreated={(cat) => { onCategoryCreated(cat); onChange(cat.key); setAddingNew(false) }}
+        initialLabel={query.trim()}
+        onCreated={(cat) => { onCategoryCreated(cat); onChange(cat.key); setAddingNew(false); setQuery('') }}
         onCancel={() => setAddingNew(false)}
       />
     )
   }
 
   return (
+    <div className="space-y-2">
+    <input
+      type="search"
+      value={query}
+      onChange={e => setQuery(e.target.value)}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          if (shown.length > 0) { onChange(shown[0].key); setQuery('') }
+          else if (q) setAddingNew(true)
+        }
+        if (e.key === 'Escape') setQuery('')
+      }}
+      placeholder="Type to find a category…"
+      className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-2 focus:ring-primary-500"
+    />
+    {q && shown.length === 0 && (
+      <button type="button" onClick={() => setAddingNew(true)}
+        className="w-full rounded-lg border border-dashed border-[var(--border)] px-3 py-2 text-left text-xs text-[var(--text-muted)] hover:border-primary-400 hover:text-primary-600">
+        No category matches “{query.trim()}” — press Enter or click to create it
+      </button>
+    )}
     <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-5">
-      {cats.map(cat => (
+      {shown.map(cat => (
         <button
           key={cat.key}
           type="button"
@@ -154,6 +187,7 @@ function CategoryGrid({ value, onChange, categories, householdId, onCategoryCrea
         <span className="text-xl leading-none">＋</span>
         <span className="text-[10px] font-medium leading-tight">New</span>
       </button>
+    </div>
     </div>
   )
 }
@@ -282,7 +316,7 @@ export function QuickExpenseForm({
     member: null,
     for_members: [],
     account: null,
-    affects_balance: true,
+    affects_balance: false,
     tags: [],
     notes: '',
   }))
@@ -326,7 +360,7 @@ export function QuickExpenseForm({
   }
 
   function selectAccount(id: number) {
-    setForm(p => ({ ...p, account: id, affects_balance: true }))
+    setForm(p => ({ ...p, account: id, affects_balance: false }))
     setStep(3)
     setTimeout(() => amountRef.current?.focus(), 120)
   }

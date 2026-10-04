@@ -18,6 +18,12 @@ class Account(TimeStampedModel):
     name = models.CharField(max_length=150)
     account_type = models.CharField(max_length=30, choices=AccountType.choices)
     institution_name = models.CharField(max_length=150, blank=True)
+    sms_identifiers = models.CharField(
+        max_length=200, blank=True,
+        help_text='Trailing digits of this account and its cards as they appear in bank SMS, '
+                  'comma-separated (e.g. "3422, 2133"). Used to match SMS alerts to this account; '
+                  'learned automatically when you approve an SMS.',
+    )
     primary_member = models.ForeignKey(
         'core.Member',
         on_delete=models.SET_NULL,

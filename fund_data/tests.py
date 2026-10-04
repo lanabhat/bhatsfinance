@@ -291,3 +291,203 @@ class WriteNavSnapshotsTests(TestCase):
         )
         result = write_nav_snapshots(self.household.id, as_of=date(2026, 10, 1))
         self.assertEqual((result['written'], result['units_out_of_date']), (1, []))
+
+
+_SIF_FILE = """Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+ 
+Open Ended Schemes(Equity Oriented Investment Strategies - Equity Ex-Top 100 Long-Short Fund)
+ 
+qsif SIF
+SIF-23;INF966L30159;-;qsif Equity Ex-Top 100 Long-Short Fund;Direct Plan;Growth Option;11.3619;01-Oct-2026
+SIF-24;INF966L30167;INF966L30175;qsif Equity Ex-Top 100 Long-Short Fund;Direct Plan;IDCW Option;11.3619;01-Oct-2026
+SIF-25;INF966L30183;-;qsif Equity Ex-Top 100 Long-Short Fund;Regular Plan;Growth Option;11.2218;01-Oct-2026
+SIF-1;INF966L30019;-;qsif Equity Long-Short Fund;Direct Plan;Growth Option;10.9722;01-Oct-2026
+SIF-33;INF109K30042;-;iSIF Equity Ex-Top 100 Long-Short Fund;;;10.10;01-Oct-2026
+SIF-99;INF000000000;-;Broken Fund;Direct Plan;Growth;N.A.;01-Oct-2026
+"""
+
+
+class SifNavSourceTests(TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        from fund_data import amfi_sif_client
+        records = amfi_sif_client.parse_sif_nav_file(_SIF_FILE)
+        patcher = patch.object(amfi_sif_client, '_load', return_value=records)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_parses_scheme_rows_only(self):
+        from fund_data.amfi_sif_client import parse_sif_nav_file
+        records = parse_sif_nav_file(_SIF_FILE)
+        self.assertEqual(sorted(records), ['SIF-1', 'SIF-23', 'SIF-24', 'SIF-25', 'SIF-33'])
+        self.assertEqual(records['SIF-23']['scheme_name'], 'qsif Equity Ex-Top 100 Long-Short Fund - Direct Plan - Growth Option')
+        self.assertEqual(records['SIF-23']['nav'], Decimal('11.3619'))
+        self.assertEqual(records['SIF-23']['date'], date(2026, 10, 1))
+        self.assertEqual(records['SIF-33']['scheme_name'], 'iSIF Equity Ex-Top 100 Long-Short Fund')
+
+    def test_search_and_fetch_route_sif_codes(self):
+        from unittest.mock import patch
+        from fund_data import nav_sources
+        with patch('fund_data.mfapi_client.search_schemes', return_value=[]):
+            codes = [r['schemeCode'] for r in nav_sources.search_schemes('qsif long short')]
+        self.assertIn('SIF-1', codes)
+        history = nav_sources.fetch_scheme_nav_history('SIF-1')['history']
+        self.assertEqual(history, [{'date': date(2026, 10, 1), 'nav': Decimal('10.9722')}])
+
+    def test_sif_search_survives_mfapi_failure(self):
+        from unittest.mock import patch
+        from fund_data import nav_sources
+        from fund_data.mfapi_client import MfApiError
+        with patch('fund_data.mfapi_client.search_schemes', side_effect=MfApiError('down')):
+            self.assertTrue(nav_sources.search_schemes('qsif'))
+
+    def test_suggests_sif_with_high_confidence(self):
+        from unittest.mock import patch
+        from fund_data.matching import suggest_scheme
+        from fund_data.nav_sources import search_schemes
+        with patch('fund_data.mfapi_client.search_schemes', return_value=[]):
+            result = suggest_scheme('qsif Equity Ex Top 100 Long Short Fund Direct Plan Growth', search=search_schemes)
+        self.assertEqual(result['best']['scheme_code'], 'SIF-23')
+        self.assertEqual(result['confidence'], 'high')
+
+    def test_linked_sif_is_synced_and_valued(self):
+        from fund_data.navs import sync_navs, write_nav_snapshots
+        from ledger.models import Transaction
+        from valuations.models import ValuationSnapshot
+        household = Household.objects.create(name='Rao Family')
+        shell = get_or_create_mf_shell(household)
+        inv = Investment.objects.create(instrument=shell, name='qsif Equity Long Short Fund Direct Growth')
+        Transaction.objects.create(
+            household=household, instrument=shell, investment=inv, tx_date=date(2026, 9, 1),
+            amount=Decimal('1000'), quantity=Decimal('100'), direction='outflow', transaction_type='buy',
+        )
+        ExternalFund.objects.create(investment=inv, mfapi_scheme_code='SIF-1', scheme_name='qsif Equity Long-Short Fund')
+
+        sync_navs(household.id, include_benchmarks=False, log=lambda *_: None)
+        result = write_nav_snapshots(household.id, as_of=date(2026, 10, 2))
+
+        self.assertEqual(result['written'], 1)
+        snap = ValuationSnapshot.objects.get(investment=inv, valuation_date=date(2026, 10, 1))
+        self.assertEqual(snap.unit_price, Decimal('10.9722'))
+        self.assertIn('AMFI SIF', snap.notes)
+
+
+_BHAV_CSV = """TradDt,BizDt,Sgmt,Src,FinInstrmTp,FinInstrmId,ISIN,TckrSymb,SctySrs,FinInstrmNm,ClsPric
+2026-10-01,2026-10-01,CM,NSE,STK,1660,INE154A01025,ITC,BL,ITC LIMITED,255.00
+2026-10-01,2026-10-01,CM,NSE,STK,1660,INE154A01025,ITC,EQ,ITC LIMITED,257.00
+2026-10-01,2026-10-01,CM,NSE,STK,2475,INE213A01029,ONGC,EQ,OIL AND NATURAL GAS CORP,222.70
+2026-10-01,2026-10-01,CM,NSE,STK,9999,INE000000000,BAD,EQ,BROKEN,-
+"""
+
+
+def _zipped(text):
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as zf:
+        zf.writestr('bhav.csv', text)
+    return buf.getvalue()
+
+
+class NseClientTests(TestCase):
+    def setUp(self):
+        from fund_data import nse_client
+        nse_client._cache.clear()
+
+    def test_parses_and_prefers_eq_series(self):
+        from fund_data.nse_client import parse_bhavcopy
+        prices = parse_bhavcopy(_BHAV_CSV)
+        self.assertEqual(sorted(prices), ['INE154A01025', 'INE213A01029'])
+        self.assertEqual((prices['INE154A01025']['close'], prices['INE154A01025']['symbol']), (Decimal('257.00'), 'ITC'))
+
+    def test_walks_back_past_non_trading_days(self):
+        from unittest.mock import MagicMock, patch
+        from fund_data.nse_client import fetch_close_prices
+        missing = MagicMock(status_code=404, ok=False)
+        found = MagicMock(status_code=200, ok=True, content=_zipped(_BHAV_CSV))
+        with patch('fund_data.nse_client.requests.get', side_effect=[missing, missing, found]) as get:
+            result = fetch_close_prices(date(2026, 10, 3))
+        self.assertEqual(result['date'], date(2026, 10, 1))
+        self.assertIn('20261001', get.call_args.args[0])
+
+
+class EquityPriceTests(TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        from instruments.models import Instrument
+        from instruments.services import get_or_create_equity_shell
+        from ledger.models import Transaction
+        from fund_data.nse_client import parse_bhavcopy
+        self.household = Household.objects.create(name='Nair Family')
+        self.shell = get_or_create_equity_shell(self.household)
+        self.itc = Investment.objects.create(instrument=self.shell, name='ITC LTD', symbol='INE154A01025')
+        self.ongc = Instrument.objects.create(household=self.household, name='ONGC', instrument_type='equity', symbol='INE213A01029')
+        self.unlisted = Investment.objects.create(instrument=self.shell, name='TRIDENT LIMITED')
+        for instrument, inv, units in ((self.shell, self.itc, '10'), (self.ongc, None, '20'), (self.shell, self.unlisted, '5')):
+            Transaction.objects.create(
+                household=self.household, instrument=instrument, investment=inv, tx_date=date(2026, 9, 1),
+                amount=Decimal('1000'), quantity=Decimal(units), direction='outflow', transaction_type='buy',
+            )
+        prices = {'date': date(2026, 10, 1), 'prices': parse_bhavcopy(_BHAV_CSV)}
+        patcher = patch('fund_data.equity_prices.fetch_close_prices', return_value=prices)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _value(self, instrument_id, investment_id):
+        from insights.services import compute_holdings
+        return next(h['market_value'] for h in compute_holdings(self.household.id, date(2026, 10, 2))
+                    if (h['instrument_id'], h['investment_id']) == (instrument_id, investment_id))
+
+    def test_values_shell_and_standalone_holdings_at_close(self):
+        from fund_data.equity_prices import write_equity_snapshots
+        result = write_equity_snapshots(self.household.id, as_of=date(2026, 10, 2))
+        self.assertEqual((result['written'], result['not_priced']), (2, ['TRIDENT LIMITED']))
+        self.assertEqual(self._value(self.shell.id, self.itc.id), Decimal('2570.00'))
+        self.assertEqual(self._value(self.ongc.id, None), Decimal('4454.00'))
+
+    def test_out_of_date_units_keep_uploaded_value(self):
+        # A bonus issue doubled the units after the import: the statement value implies 20, the ledger has 10.
+        from fund_data.equity_prices import write_equity_snapshots
+        from valuations.models import ValuationSnapshot
+        ValuationSnapshot.objects.create(
+            household=self.household, instrument=self.shell, investment=self.itc, valuation_date=date(2026, 9, 20),
+            unit_price=Decimal('130'), market_value=Decimal('2600'), source='csv',
+        )
+        result = write_equity_snapshots(self.household.id, as_of=date(2026, 10, 2))
+        self.assertEqual(result['units_out_of_date'], ['ITC LTD'])
+
+    def test_user_value_on_same_day_is_kept(self):
+        from fund_data.equity_prices import write_equity_snapshots
+        from valuations.models import ValuationSnapshot
+        ValuationSnapshot.objects.create(
+            household=self.household, instrument=self.ongc, valuation_date=date(2026, 10, 1),
+            unit_price=Decimal('200'), market_value=Decimal('4000'), source='manual',
+        )
+        write_equity_snapshots(self.household.id, as_of=date(2026, 10, 2))
+        self.assertEqual(self._value(self.ongc.id, None), Decimal('4000.00'))
+
+
+class LinkFundsByIsinTests(TestCase):
+    def test_links_demat_fund_and_skips_linked(self):
+        from unittest.mock import patch
+        from fund_data.equity_prices import link_funds_by_isin
+        household = Household.objects.create(name='Kurup Family')
+        shell = get_or_create_mf_shell(household)
+        demat = Investment.objects.create(instrument=shell, name='KOTAK MTCF D-GROW', isin='INF174KA1HV3')
+        linked = Investment.objects.create(instrument=shell, name='Axis Midcap', isin='INF846K01EH3')
+        ExternalFund.objects.create(investment=linked, mfapi_scheme_code='120505', scheme_name='Axis Midcap')
+        schemes = {'INF174KA1HV3': {'scheme_code': '149185', 'scheme_name': 'Kotak Multi Cap Fund - Direct Plan - Growth'}}
+        with patch('fund_data.equity_prices.fetch_schemes_by_isin', return_value=schemes) as fetch:
+            result = link_funds_by_isin(household.id)
+        self.assertEqual(result['linked'], ['KOTAK MTCF D-GROW'])
+        self.assertEqual(ExternalFund.objects.get(investment=demat).mfapi_scheme_code, '149185')
+        self.assertEqual(fetch.call_count, 1)
+
+    def test_no_isin_funds_skip_the_download(self):
+        from unittest.mock import patch
+        from fund_data.equity_prices import link_funds_by_isin
+        household = Household.objects.create(name='Menon Family 2')
+        Investment.objects.create(instrument=get_or_create_mf_shell(household), name='Some Fund', symbol='12345678')
+        with patch('fund_data.equity_prices.fetch_schemes_by_isin') as fetch:
+            self.assertEqual(link_funds_by_isin(household.id)['linked'], [])
+        fetch.assert_not_called()

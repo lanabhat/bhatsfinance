@@ -15,7 +15,7 @@ export function MarkPremiumPaidSheet({ alert, accountOptions, onClose, onPaid }:
   const [paidOn, setPaidOn] = useState(new Date().toISOString().slice(0, 10))
   const [accountId, setAccountId] = useState<string>('')
   const [amount, setAmount] = useState(alert.premium_amount)
-  const [deduct, setDeduct] = useState(true)
+  const [deduct, setDeduct] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [smsMatches, setSmsMatches] = useState<SmsPaymentMatch[]>([])

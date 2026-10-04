@@ -7,7 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from alerts.models import RDMandate, RDPaymentAck, SIPMandate, SIPPaymentAck
+from alerts.models import RDMandate, SIPMandate, SIPPaymentAck
 from alerts.serializers import RDMandateSerializer, SIPMandateSerializer
 from alerts.services import generate_coupon_reminders, generate_missed_rd_installments, generate_missed_sip_alerts
 from ledger.models import Transaction
@@ -192,17 +192,9 @@ class RDMandateViewSet(viewsets.ModelViewSet):
         paid_on = date.fromisoformat(payload['paid_on']) if payload.get('paid_on') else date.today()
         deduct = bool(payload.get('deduct', True))
 
-        if not deduct:
-            ack, created = RDPaymentAck.objects.get_or_create(
-                mandate=mandate,
-                due_date=due_date,
-                defaults={'acknowledged_on': paid_on, 'note': payload.get('note', '')},
-            )
-            return Response(
-                {'ack_id': ack.id, 'cleared_due_date': due_date.isoformat(), 'mode': 'ack', 'created': created},
-                status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-            )
-
+        # The instalment always goes into the RD (nothing else records RD deposits);
+        # `deduct` only decides whether the paying account's balance goes down — off
+        # when it was paid from an account whose balance already reflects it.
         account_id = int(payload.get('account_id') or mandate.account_id)
         amount = Decimal(str(payload.get('amount') or mandate.installment_amount))
 
@@ -220,6 +212,7 @@ class RDMandateViewSet(viewsets.ModelViewSet):
                 external_reference=f'RD installment for mandate #{mandate.id} due {due_date}',
                 idempotency_key=f'rd-paid-{mandate.id}-{due_date.isoformat()}',
                 metadata={'rd_mandate_id': mandate.id, 'rd_due_date': due_date.isoformat()},
+                affects_balance=deduct,
             )
         except ValidationError as e:
             return Response({'detail': e.message_dict if hasattr(e, 'message_dict') else str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -233,7 +226,8 @@ class RDMandateViewSet(viewsets.ModelViewSet):
     def mark_all_paid(self, request):
         """Bulk-mark a list of missed RD installments as paid. Each item must
         include mandate_id and due_date. Top-level options apply to every item:
-        - deduct (bool, default True): when False, records acknowledgements only.
+        - deduct (bool, default True): whether the paying account's balance goes down.
+          The instalment is recorded into the RD either way.
         - paid_on (YYYY-MM-DD, default today)
         - account_id (optional global override; falls back to each mandate's account)
         Returns per-item results."""
@@ -262,18 +256,6 @@ class RDMandateViewSet(viewsets.ModelViewSet):
                 results.append({'item': item, 'ok': False, 'error': 'mandate not found.'})
                 continue
 
-            if not deduct:
-                ack, created = RDPaymentAck.objects.get_or_create(
-                    mandate=mandate,
-                    due_date=due_date,
-                    defaults={'acknowledged_on': paid_on, 'note': item.get('note', '')},
-                )
-                results.append({
-                    'mandate_id': mandate_id, 'due_date': due_date.isoformat(),
-                    'ok': True, 'mode': 'ack', 'ack_id': ack.id, 'created': created,
-                })
-                continue
-
             account_id = int(item.get('account_id') or global_account_id or mandate.account_id)
             amount = Decimal(str(item.get('amount') or mandate.installment_amount))
             try:
@@ -290,6 +272,7 @@ class RDMandateViewSet(viewsets.ModelViewSet):
                     external_reference=f'RD installment for mandate #{mandate.id} due {due_date}',
                     idempotency_key=f'rd-paid-{mandate.id}-{due_date.isoformat()}',
                     metadata={'rd_mandate_id': mandate.id, 'rd_due_date': due_date.isoformat(), 'bulk': True},
+                    affects_balance=deduct,
                 )
                 results.append({
                     'mandate_id': mandate_id, 'due_date': due_date.isoformat(),

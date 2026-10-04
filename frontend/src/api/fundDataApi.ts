@@ -1,5 +1,5 @@
 import { deleteJson, getJson, postJson, toQueryString } from './http'
-import type { FundComparisonPayload, FundMatchSuggestion, FundRefreshResult, MfApiSearchResult } from '../types/domain'
+import type { FundComparisonPayload, FundMatchSuggestion, FundRefreshResult, MarketPriceRefreshResult, MfApiSearchResult } from '../types/domain'
 
 export const fundDataApi = {
   search: async (query: string): Promise<MfApiSearchResult[]> => {
@@ -20,6 +20,11 @@ export const fundDataApi = {
   /** Fetch latest NAVs for linked funds and value them now. */
   refresh: (householdId: number): Promise<FundRefreshResult> =>
     postJson('/api/fund-data/refresh', { household_id: householdId }),
+
+  /** Bring all market-priced holdings up to date now: link demat funds by ISIN,
+   *  fund NAVs, and listed equities at the latest NSE close. */
+  refreshPrices: (householdId: number): Promise<MarketPriceRefreshResult> =>
+    postJson('/api/fund-data/refresh-prices', { household_id: householdId }),
 
   unlink: (id: number): Promise<void> =>
     deleteJson(`/api/external-funds/${id}/`),
