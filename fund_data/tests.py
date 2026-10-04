@@ -491,3 +491,28 @@ class LinkFundsByIsinTests(TestCase):
         with patch('fund_data.equity_prices.fetch_schemes_by_isin') as fetch:
             self.assertEqual(link_funds_by_isin(household.id)['linked'], [])
         fetch.assert_not_called()
+
+
+class SifMirrorFallbackTests(TestCase):
+    def setUp(self):
+        from fund_data import amfi_sif_client
+        amfi_sif_client._cache.update({'at': 0.0, 'records': None})
+        self.addCleanup(amfi_sif_client._cache.update, {'at': 0.0, 'records': None})
+
+    def test_blocked_amfi_falls_back_to_github_copy(self):
+        from unittest.mock import MagicMock, patch
+        from fund_data import amfi_sif_client
+        blocked = MagicMock(ok=True, status_code=200, text='<html>Access denied by proxy</html>')
+        mirror = MagicMock(ok=True, status_code=200, text=_SIF_FILE)
+        with patch('fund_data.amfi_sif_client.requests.get', side_effect=[blocked, mirror]) as get:
+            codes = [r['schemeCode'] for r in amfi_sif_client.search_sifs('qsif ex top 100')]
+        self.assertIn('SIF-23', codes)
+        self.assertEqual(get.call_args_list[1].args[0], amfi_sif_client.SIF_NAV_MIRROR_URL)
+
+    def test_both_sources_failing_raises(self):
+        from unittest.mock import MagicMock, patch
+        from fund_data import amfi_sif_client
+        from fund_data.mfapi_client import MfApiError
+        with patch('fund_data.amfi_sif_client.requests.get', return_value=MagicMock(ok=False, status_code=403, text='')):
+            with self.assertRaises(MfApiError):
+                amfi_sif_client.search_sifs('qsif')

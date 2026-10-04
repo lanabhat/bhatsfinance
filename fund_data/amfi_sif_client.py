@@ -10,6 +10,7 @@ File format (semicolon-separated; header, category and AMC lines interleaved):
 """
 from __future__ import annotations
 
+import os
 import time
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -19,6 +20,12 @@ import requests
 from fund_data.mfapi_client import MfApiError
 
 SIF_NAV_URL = 'https://www.amfiindia.com/spages/SIF_NAVAll.txt'
+# Copy of the same file kept by .github/workflows/sif-nav-mirror.yml, for hosts that
+# can't reach amfiindia.com (PythonAnywhere's free allowlist covers githubusercontent.com).
+SIF_NAV_MIRROR_URL = os.environ.get(
+    'SIF_NAV_MIRROR_URL',
+    'https://raw.githubusercontent.com/lanabhat/bhatsfinance/sif-nav-data/SIF_NAVAll.txt',
+)
 TIMEOUT_SECONDS = 20
 CACHE_SECONDS = 30 * 60
 CODE_PREFIX = 'SIF-'
@@ -49,18 +56,32 @@ def parse_sif_nav_file(text: str) -> dict[str, dict]:
     return records
 
 
+def _download(url: str) -> dict[str, dict]:
+    try:
+        resp = requests.get(url, timeout=TIMEOUT_SECONDS)
+    except requests.RequestException as exc:
+        raise MfApiError(f'SIF NAV download failed ({url}): {exc}') from exc
+    if not resp.ok:
+        raise MfApiError(f'SIF NAV download failed ({url}): HTTP {resp.status_code}')
+    records = parse_sif_nav_file(resp.text)
+    if not records:  # e.g. a proxy's block page served with 200
+        raise MfApiError(f'SIF NAV file at {url} had no scheme rows')
+    return records
+
+
 def _load() -> dict[str, dict]:
+    """AMFI's file, or the GitHub copy when AMFI can't be reached from this host."""
     if _cache['records'] is not None and time.monotonic() - _cache['at'] < CACHE_SECONDS:
         return _cache['records']
-    try:
-        resp = requests.get(SIF_NAV_URL, timeout=TIMEOUT_SECONDS)
-    except requests.RequestException as exc:
-        raise MfApiError(f'AMFI SIF NAV download failed: {exc}') from exc
-    if not resp.ok:
-        raise MfApiError(f'AMFI SIF NAV download failed: HTTP {resp.status_code}')
-    _cache['records'] = parse_sif_nav_file(resp.text)
-    _cache['at'] = time.monotonic()
-    return _cache['records']
+    errors = []
+    for url in (SIF_NAV_URL, SIF_NAV_MIRROR_URL):
+        try:
+            _cache['records'] = _download(url)
+            _cache['at'] = time.monotonic()
+            return _cache['records']
+        except MfApiError as exc:
+            errors.append(str(exc))
+    raise MfApiError('; '.join(errors))
 
 
 def search_sifs(query: str) -> list[dict]:
