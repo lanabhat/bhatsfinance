@@ -180,8 +180,7 @@ function ReviewForm({
   const [reference, setReference] = useState(tx.external_reference ?? '')
   const [notes, setNotes] = useState('')
   const [tagIds, setTagIds] = useState<number[]>([])
-  // The SMS is the bank reporting the account moved, so it counts toward the balance.
-  const [affectsBalance, setAffectsBalance] = useState(true)
+  const [affectsBalance, setAffectsBalance] = useState(false)
   const [balance, setBalance] = useState(tx.balance ?? '')
   const [instrument, setInstrument] = useState(tx.instrument ? String(tx.instrument) : '')
   const [units, setUnits] = useState(tx.quantity ?? '')
