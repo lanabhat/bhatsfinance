@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { investmentEditTitle } from '../assets/investmentKind'
 import { investmentApi } from '../../api/investmentApi'
 import { ledgerApi } from '../../api/ledgerApi'
 import { portfolioApi } from '../../api/portfolioApi'
@@ -452,7 +453,7 @@ export function BuyForm({ householdId, instrumentId: initId, investmentId: initI
         </Sheet>
       )}
       {editSheet?.type === 'investment' && (
-        <Sheet title="Edit Fund" onClose={() => setEditSheet(null)}>
+        <Sheet title={investmentEditTitle(editSheet.investment, instrumentsFull)} onClose={() => setEditSheet(null)}>
           <InvestmentForm investment={editSheet.investment} onSave={closeEditSheet} onCancel={() => setEditSheet(null)} />
         </Sheet>
       )}

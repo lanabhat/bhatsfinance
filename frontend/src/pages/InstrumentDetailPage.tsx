@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { investmentEditTitle } from '../components/assets/investmentKind'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { investmentApi } from '../api/investmentApi'
 import { portfolioApi } from '../api/portfolioApi'
@@ -18,7 +19,7 @@ import type { Instrument, Investment } from '../types/domain'
  * in-place peek.
  */
 export function InstrumentDetailPage({ instrumentId, onDone }: { instrumentId: number; onDone: () => void }) {
-  const { householdId, categories, accounts } = useApp()
+  const { householdId, categories, accounts, instrumentsFull } = useApp()
   const [instrument, setInstrument] = useState<Instrument | null>(null)
   const [investments, setInvestments] = useState<Investment[]>([])
   const [search, setSearch] = useState('')
@@ -74,7 +75,7 @@ export function InstrumentDetailPage({ instrumentId, onDone }: { instrumentId: n
       />
 
       {editing && (
-        <Sheet title="Edit Fund" onClose={() => setEditing(null)}>
+        <Sheet title={investmentEditTitle(editing, instrumentsFull)} onClose={() => setEditing(null)}>
           <InvestmentForm investment={editing} onSave={async () => { setEditing(null); await load() }} onCancel={() => setEditing(null)} />
         </Sheet>
       )}

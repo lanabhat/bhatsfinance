@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { investmentEditTitle } from '../components/assets/investmentKind'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { getJson, toQueryString, unwrapList, deleteJson } from '../api/http'
 import { Money } from '../components/common/Money'
@@ -357,7 +358,7 @@ function loadViewMode(): ViewMode {
 
 export function InstrumentsPage() {
   const { canWrite } = useAuth()
-  const { householdId, categories, refreshCategories, refreshAll, members, accounts } = useApp()
+  const { householdId, categories, refreshCategories, refreshAll, members, accounts, instrumentsFull } = useApp()
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
   const [investments, setInvestments] = useState<Investment[]>([])
@@ -995,7 +996,7 @@ export function InstrumentsPage() {
         </Sheet>
       )}
       {sheet.type === 'investment' && (
-        <Sheet title="Edit Fund" onClose={close}>
+        <Sheet title={investmentEditTitle(sheet.item, instrumentsFull)} onClose={close}>
           <InvestmentForm investment={sheet.item} onSave={afterSave} onCancel={close} />
         </Sheet>
       )}

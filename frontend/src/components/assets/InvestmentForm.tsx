@@ -3,6 +3,7 @@ import { investmentApi } from '../../api/investmentApi'
 import { portfolioApi } from '../../api/portfolioApi'
 import { useApp } from '../../context/AppContext'
 import { FundClassificationCard } from './InstrumentForm'
+import { isEquityInvestment } from './investmentKind'
 import type { ApiErrorMap, Investment } from '../../types/domain'
 
 function firstErrorMessage(err: unknown, fallback: string): string {
@@ -23,8 +24,9 @@ type MfForm = { amc: string; fund_category: string; fund_sub_category: string; e
 const EMPTY_MF_FORM: MfForm = { amc: '', fund_category: '', fund_sub_category: '', expense_ratio: null }
 
 /**
- * Edits one mutual fund/SIP holding — an Investment (name/symbol/isin/
- * folio_no/owner) plus its MutualFundDetails (AMC/category/expense ratio).
+ * Edits one holding under a shared shell — an Investment (name/symbol/isin/
+ * owner). For a mutual fund/SIP it also edits the folio and MutualFundDetails
+ * (AMC/category/expense ratio); a stock/ETF under the "Equity" shell has neither.
  * Unlike InstrumentForm, this is edit-only: new funds are created via
  * "Record Buy" on the Holdings page (investmentApi.getOrCreateMfInvestment),
  * matching how FD/Bond details are also only ever created via BuyForm.
@@ -34,7 +36,8 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
   onSave: () => void
   onCancel: () => void
 }) {
-  const { members } = useApp()
+  const { members, instrumentsFull } = useApp()
+  const isStock = isEquityInvestment(investment, instrumentsFull)
   const [form, setForm] = useState<Omit<Investment, 'id'>>({
     instrument: investment.instrument,
     member: investment.member,
@@ -62,7 +65,7 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
     try {
       await investmentApi.updateInvestment(investment.id, form)
 
-      if (mfForm.amc || mfForm.fund_category || mfForm.fund_sub_category || mfForm.expense_ratio) {
+      if (!isStock && (mfForm.amc || mfForm.fund_category || mfForm.fund_sub_category || mfForm.expense_ratio)) {
         if (existingMfDetailsId) {
           await portfolioApi.updateMutualFundDetails(existingMfDetailsId, mfForm)
         } else {
@@ -72,17 +75,19 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
 
       onSave()
     } catch (e) {
-      setError(firstErrorMessage(e, 'Failed to save fund'))
+      setError(firstErrorMessage(e, isStock ? 'Failed to save stock' : 'Failed to save fund'))
     } finally { setSaving(false) }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Fund / Scheme Name</label>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">{isStock ? 'Company / Stock Name' : 'Fund / Scheme Name'}</label>
         <input className={INP} value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required /></div>
-      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Folio Number</label>
-        <input className={INP} value={form.folio_no} onChange={(e) => setForm((p) => ({ ...p, folio_no: e.target.value }))} /></div>
-      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Symbol / AMFI Code</label>
+      {!isStock && (
+        <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Folio Number</label>
+          <input className={INP} value={form.folio_no} onChange={(e) => setForm((p) => ({ ...p, folio_no: e.target.value }))} /></div>
+      )}
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">{isStock ? 'Symbol / Ticker' : 'Symbol / AMFI Code'}</label>
         <input className={INP} value={form.symbol} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} /></div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">ISIN</label>
         <input className={INP} value={form.isin} onChange={(e) => setForm((p) => ({ ...p, isin: e.target.value }))} /></div>
@@ -91,14 +96,14 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
           <option value="">— Unassigned —</option>
           {members.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
-        <p className="mt-1 text-[11px] text-[var(--text-muted)]">Which household member owns this fund — drives per-member net worth.</p>
+        <p className="mt-1 text-[11px] text-[var(--text-muted)]">Which household member owns this {isStock ? 'stock' : 'fund'} — drives per-member net worth.</p>
       </div>
       <label className="flex items-center gap-2 py-1">
         <input type="checkbox" checked={form.is_active} onChange={(e) => setForm((p) => ({ ...p, is_active: e.target.checked }))} />
         <span className="text-sm text-[var(--text-2)]">Active</span>
       </label>
 
-      <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+      {!isStock && <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
         <p className="text-xs font-medium text-[var(--text-2)]">Mutual Fund Details</p>
         <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">AMC</label>
           <input className={INP} value={mfForm.amc} onChange={(e) => setMfForm((p) => ({ ...p, amc: e.target.value }))} /></div>
@@ -112,7 +117,7 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
         <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Expense Ratio (%)</label>
           <input className={INP} type="number" step="0.001" placeholder="e.g. 0.45" value={mfForm.expense_ratio ?? ''} onChange={(e) => setMfForm((p) => ({ ...p, expense_ratio: e.target.value || null }))} /></div>
         <FundClassificationCard instrumentId={investment.instrument} />
-      </div>
+      </div>}
 
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="flex gap-2 pt-2">

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { investmentEditTitle } from '../components/assets/investmentKind'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { postJson } from '../api/http'
 import { investmentApi } from '../api/investmentApi'
@@ -142,7 +143,7 @@ function loadViewMode(): ViewMode {
 
 export function HoldingsPage() {
   const { canWrite } = useAuth()
-  const { householdId, categories, refreshCategories, dashboard, members, asOf, refreshDashboard } = useApp()
+  const { householdId, categories, refreshCategories, dashboard, members, asOf, refreshDashboard, instrumentsFull } = useApp()
   const [activeMemberId, setActiveMemberId] = useState<number | null>(null)
   const [memberHoldings, setMemberHoldings] = useState<typeof dashboard.holdings | null>(null)
   const [holdingsLoading, setHoldingsLoading] = useState(false)
@@ -1267,7 +1268,7 @@ export function HoldingsPage() {
         </Sheet>
       )}
       {sheet.type === 'edit_investment' && (
-        <Sheet title="Edit Fund" onClose={close}>
+        <Sheet title={investmentEditTitle(sheet.investment, instrumentsFull)} onClose={close}>
           <InvestmentForm investment={sheet.investment}
             onSave={async () => { close(); await refreshDashboard(); await loadInvestments(); await loadMfDetails() }}
             onCancel={close} />
