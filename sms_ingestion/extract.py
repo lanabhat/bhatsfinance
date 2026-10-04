@@ -81,12 +81,16 @@ _TX_PATTERNS: list[tuple[str, str, re.Pattern]] = [(k, d, re.compile(p, re.I)) f
     ('card_spend', 'outflow', _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?) (?:was |has been )?spent'),
     # Account debits / credits (verb after or before the amount).
     ('debit', 'outflow', r'(?:debited|deducted|withdrawn)\s+(?:with\s+|by\s+|for\s+)?' + _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)'),
-    ('debit', 'outflow', r'(?:sent|paid)\s+' + _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)'),
+    ('debit', 'outflow', r'(?:sent|paid)[!:]?\s+' + _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)'),
     ('debit', 'outflow', _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)\s+(?:is |has been |was )?(?:debited|deducted|sent|paid|withdrawn)'),
     ('debit', 'outflow', r'(?:has (?:a )?debit|DEBIT with amount)\b.{0,60}?' + _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)'),
     ('credit', 'inflow', r'credited\s+(?:with\s+|by\s+)?' + _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)'),
     ('credit', 'inflow', _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)\s+(?:is |has been |was )?credited'),
     ('credit', 'inflow', r'(?:has (?:a )?credit|CREDIT with amount)\b.{0,60}?' + _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)'),
+    ('credit', 'inflow', _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)\s+(?:is |has been |was )?deposited'),
+    # HDFC: "UPI ATM Withdrawal:Rs.10000", "Payment Successful! Rs. 10000.00 from A/c **8196 to X".
+    ('debit', 'outflow', r'withdrawal\s*:?\s*' + _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)'),
+    ('debit', 'outflow', _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)\s+from a/?c\b'),
     ('credit', 'inflow', r'(?:received|deposited)\s+' + _MONEY + r'(?P<amount>\d[\d,]*(?:\.\d+)?)'),
 ]]
 
@@ -112,7 +116,7 @@ _PARTY_PATTERNS = [re.compile(p, re.I) for p in [
     r'(?:deposit by transfer|credited|received)\s.{0,40}?\bfrom (?:mrs?\.?|ms\.?)?\s*(?P<party>(?!your)[A-Za-z][A-Za-z .]{1,40}?)(?:\.\s|\.$|\s+upi|\s+on\b|-|$)',
     r'credit by (?:NACH|NEFT|IMPS)[-\s]*(?P<party>[A-Za-z][\w .&]{2,40}?)\s+of\b',
     r'\bvia UPI to (?P<party>[A-Za-z][\w .&@\'-]{1,40}?)(?:\.\s|\s+on\b|\s+ref|$)',
-    r'\bto (?!a/?c\b|your\b|beneficiary\b|clearance\b)(?P<party>[A-Za-z][\w .&@\'-]{1,40}?)(?:\s+on\b|\s+ref|\s+via|\.\s|$)',
+    r'\bto (?!a/?c\b|your\b|beneficiary\b|clearance\b|report\b)(?P<party>[A-Za-z][\w .&@\'-]{1,40}?)(?:\s+on\b|\s+ref|\s+via|\.\s|$)',
     r'\btowards (?!your\b)(?P<party>[A-Za-z][\w .&\'-]{1,40}?)(?:\s+for\b|\s+UMRN|\s+ref|\s+on\b|\.\s|$)',
     r'\bIST (?P<party>[A-Za-z][\w .&\'-]{1,30}?) Avl Limit',
     r'\bat (?P<party>[A-Za-z][\w .&\'-]{1,40}?)(?:\s+on\b|\.\s|,|$)',
@@ -203,7 +207,15 @@ def extract_sms(body: str, sender: str = '', received_at: datetime | date | None
             kind, direction = 'mf_purchase', 'outflow'
             amount = amount or _money(_first([re.compile(_MONEY + _AMT, re.I)], text))
 
-    if kind == 'debit' and re.search(r'CC Bill\b|credit ?card (?:bill|payment)|towards your .{0,20}credit card', text, re.I):
+    if not party and kind in ('debit', 'credit', 'card_spend'):
+        party = _first(_PARTY_PATTERNS, text, 'party')
+    party = re.sub(r'\s{2,}', ' ', party)[:80]
+
+    if kind == 'debit' and (
+        re.search(r'CC Bill\b|credit ?card (?:bill|payment)|towards your .{0,20}credit card', text, re.I)
+        # Card bills paid over UPI to the card app.
+        or re.match(r'(?:CRED|Scapia)\b', party, re.I)
+    ):
         kind = 'cc_bill_paid'
 
     balance = _balance(text)
@@ -212,10 +224,6 @@ def extract_sms(body: str, sender: str = '', received_at: datetime | date | None
             kind = 'balance'
         elif _PROMO.search(text):
             kind = 'promotion'
-
-    if not party and kind in ('debit', 'credit', 'card_spend'):
-        party = _first(_PARTY_PATTERNS, text, 'party')
-    party = re.sub(r'\s{2,}', ' ', party)[:80]
 
     balance_date = None
     if balance is not None:

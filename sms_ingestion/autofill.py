@@ -98,36 +98,73 @@ def _member_for_party(household_id: int, party: str):
     return None
 
 
+# Notes valuations.services.bulk_snapshot writes on the account copies it makes
+# every day — derived values, not readings anyone took.
+_AUTO_NOTES = ('Carried forward', 'Computed from')
+
+
+def _is_auto(snapshot) -> bool:
+    return (snapshot.notes or '').startswith(_AUTO_NOTES)
+
+
 def record_sms_balance(msg, account, balance, on: date) -> int | None:
-    """Record the balance an SMS states as a reading for that account. Never
-    overrides a newer reading, or a statement/manual reading on the same day;
-    a later SMS on the same day replaces an earlier one. Returns the snapshot id."""
+    """Record the balance an SMS states as a reading for that account. Returns the snapshot id.
+
+    A real reading (statement, manual, or a later SMS) is never overridden. The
+    daily job's own carried-forward/computed copies don't count as readings: one
+    on the same day is replaced, and later ones are recomputed from this reading
+    plus the transactions in between — otherwise they'd keep the stale value as
+    the anchor every balance is rolled forward from."""
     from valuations.models import ValuationSnapshot
 
     if account.account_type == 'credit_card':
         return None  # card SMS state available limit, not a balance
-    latest = ValuationSnapshot.objects.filter(account=account).order_by('-valuation_date', '-id').first()
-    if latest and latest.valuation_date > on:
+    snaps = ValuationSnapshot.objects.filter(account=account)
+    latest_real = next((sn for sn in snaps.order_by('-valuation_date', '-id') if not _is_auto(sn)), None)
+    if latest_real and latest_real.valuation_date > on:
         return None
     note = f'From SMS: {msg.sender} (#{msg.pk})'
-    if latest and latest.valuation_date == on:
-        if not (latest.notes or '').startswith('From SMS'):
-            return None
-        earlier = re.search(r'#(\d+)\)', latest.notes or '')
+
+    if latest_real and latest_real.valuation_date == on:
+        if not (latest_real.notes or '').startswith('From SMS'):
+            return None  # the user's own reading for that day wins
+        earlier = re.search(r'#(\d+)\)', latest_real.notes or '')
         if earlier:
             from sms_ingestion.models import SmsMessage
             prev = SmsMessage.objects.filter(pk=int(earlier.group(1))).values_list('received_at', flat=True).first()
             if prev and prev > msg.received_at:
                 return None
-        latest.balance = balance
-        latest.notes = note
-        latest.save(update_fields=['balance', 'notes'])
-        return latest.pk
-    snap = ValuationSnapshot.objects.create(
-        household_id=account.household_id, account=account, balance=balance,
-        valuation_date=on, source='api', notes=note,
-    )
-    return snap.pk
+        target = latest_real
+    else:
+        target = snaps.filter(valuation_date=on).order_by('-id').first()  # an auto copy, if any
+
+    if target is not None:
+        target.balance = balance
+        target.notes = note
+        target.save(update_fields=['balance', 'notes'])
+    else:
+        target = ValuationSnapshot.objects.create(
+            household_id=account.household_id, account=account, balance=balance,
+            valuation_date=on, source='api', notes=note,
+        )
+    _recompute_auto_after(account, balance, on)
+    return target.pk
+
+
+def _recompute_auto_after(account, balance, on: date) -> None:
+    """Bring the daily job's copies dated after `on` in line with the new reading."""
+    from django.db.models import Sum
+    from ledger.models import Transaction
+    from valuations.models import ValuationSnapshot
+
+    for snap in ValuationSnapshot.objects.filter(account=account, valuation_date__gt=on).order_by('valuation_date', 'id'):
+        if not _is_auto(snap):
+            break  # a later real reading anchors everything after it
+        txs = Transaction.objects.filter(account=account, affects_balance=True, tx_date__gt=on, tx_date__lte=snap.valuation_date)
+        inflow = txs.filter(direction='inflow').aggregate(s=Sum('amount'))['s'] or 0
+        outflow = txs.filter(direction='outflow').aggregate(s=Sum('amount'))['s'] or 0
+        snap.balance = balance + inflow - outflow
+        snap.save(update_fields=['balance'])
 
 
 def build_parsed_tx(household_id: int, x: dict) -> dict:

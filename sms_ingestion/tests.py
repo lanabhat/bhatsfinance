@@ -165,3 +165,63 @@ class SmsMessageDetailTests(TestCase):
         response = client.get(f'/api/sms-messages/{msg.id}/')
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual((response.data['parsed_tx']['kind'], response.data['parsed_tx']['account_hint']), ('debit', '3422'))
+
+
+class HdfcFormatTests(TestCase):
+    def test_hdfc_formats(self):
+        r = x('Update! INR 2,07,555.00 deposited in HDFC Bank A/c XX8196 on 25-SEP-26 for NEFT Cr-CHAS0INBX01-NEXTHINK INDIA')
+        self.assertEqual((r['kind'], r['direction'], r['amount'], r['account_hint']), ('credit', 'inflow', Decimal('207555.00'), '8196'))
+        r = x('UPI ATM Withdrawal:Rs.10000 From:HDFC Bank A/c 8196 At:HDFC ATM ATM UPI RRN:371632189728 on 27/09/26')
+        self.assertEqual((r['kind'], r['amount'], r['account_hint']), ('debit', Decimal('10000'), '8196'))
+        r = x('Payment Successful! Rs. 10000.00 from A/c **********8196 to RAZPBSEINDIACOM via HDFC Bank NetBanking.')
+        self.assertEqual((r['kind'], r['amount'], r['account_hint']), ('debit', Decimal('10000.00'), '8196'))
+        r = x('HDFC Bank:Rs. 1000.00 debited from a/c *8196 on 27/09/26 to a/c **1901 (UPI Ref No. 730933769053). Not you? Call on 18002586161 to report')
+        self.assertEqual((r['counterparty'], r['to_account_hint']), ('', '1901'))
+        r = x('Toll Paid!  Rs.15 for KA03AE2739  At Brahamarakotlu Toll Plaza  On 2026-09-05 22:59:42  Wallet Bal: Rs.413.35')
+        self.assertEqual((r['kind'], r['amount']), ('debit', Decimal('15')))
+        r = x('Sent Rs.34932.07 From HDFC Bank A/C *8196 To CRED On 05/09/26 Ref 652215737479')
+        self.assertEqual(r['kind'], 'cc_bill_paid')
+
+
+class SmsBalanceVsDailyCopyTests(TestCase):
+    """The daily job writes 'Carried forward' copies of every account balance; an
+    SMS balance must replace them, not be blocked by them."""
+
+    def setUp(self):
+        from valuations.models import ValuationSnapshot
+        self.household = Household.objects.create(name='Hegde Family')
+        self.hdfc = Account.objects.create(household=self.household, name='LN HDFC (8196)', account_type='bank')
+        for d, note in ((date(2026, 9, 30), 'Carried forward from 2026-09-29'), (date(2026, 10, 1), 'Carried forward from 2026-09-30'),
+                        (date(2026, 10, 2), 'Carried forward from 2026-10-01')):
+            ValuationSnapshot.objects.create(household=self.household, account=self.hdfc, balance=Decimal('361393'),
+                                             valuation_date=d, source='api', notes=note)
+
+    def test_sms_balance_replaces_copy_and_updates_later_copies(self):
+        from insights.services import compute_household_accounts
+        from ledger.models import Transaction
+        from sms_ingestion.autofill import process_message
+        from valuations.models import ValuationSnapshot
+        Transaction.objects.create(household=self.household, account=self.hdfc, tx_date=date(2026, 10, 2),
+                                   amount=Decimal('1000'), direction='outflow', transaction_type='withdrawal')
+        msg = SmsMessage.objects.create(
+            household=self.household, sender='AD-HDFCBK-S', received_at=datetime(2026, 10, 2, 2, 32, tzinfo=timezone.utc), raw_payload={},
+            body='Available Bal in HDFC Bank A/c XX8196 as on yesterday:01-OCT-26 is INR 1,03,239.85. Cheques are subject to clearing.',
+        )
+        process_message(msg, [])
+        on_day = ValuationSnapshot.objects.get(account=self.hdfc, valuation_date=date(2026, 10, 1))
+        self.assertEqual((on_day.balance, on_day.notes.startswith('From SMS')), (Decimal('103239.85'), True))
+        self.assertEqual(ValuationSnapshot.objects.get(account=self.hdfc, valuation_date=date(2026, 10, 2)).balance, Decimal('102239.85'))
+        balance = next(a['balance'] for a in compute_household_accounts(self.household.id, date(2026, 10, 2)) if a['account_id'] == self.hdfc.id)
+        self.assertEqual(balance, '102239.85')
+
+    def test_manual_reading_still_wins(self):
+        from sms_ingestion.autofill import process_message
+        from valuations.models import ValuationSnapshot
+        ValuationSnapshot.objects.create(household=self.household, account=self.hdfc, balance=Decimal('5'),
+                                         valuation_date=date(2026, 10, 1), source='manual')
+        msg = SmsMessage.objects.create(
+            household=self.household, sender='AD-HDFCBK-S', received_at=datetime(2026, 10, 2, 2, 32, tzinfo=timezone.utc), raw_payload={},
+            body='Available Bal in HDFC Bank A/c XX8196 as on yesterday:01-OCT-26 is INR 1,03,239.85.',
+        )
+        process_message(msg, [])
+        self.assertFalse(ValuationSnapshot.objects.filter(account=self.hdfc, notes__startswith='From SMS').exists())

@@ -188,6 +188,14 @@ function ReviewForm({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Account and date are shared by every mode; the amount carries over too, so
+  // re-reading a transaction as a balance (or back) keeps what's already filled in.
+  const changeMode = (next: Mode) => {
+    if (next === 'balance' && !balance && amount) setBalance(amount)
+    if (next !== 'balance' && !amount && balance) setAmount(balance)
+    setMode(next)
+  }
+
   const selectAccount = (id: number) => {
     setAccountId(id)
     const owner = accounts.find((a) => a.id === id)?.primary_member
@@ -296,7 +304,7 @@ function ReviewForm({
       {/* ── What to record ── */}
       <div className="grid content-start gap-3">
         <Card title="What is it">
-          <Segmented<Mode> value={mode} onChange={setMode} options={[
+          <Segmented<Mode> value={mode} onChange={changeMode} options={[
             { value: 'transaction', label: '💳 Transaction' },
             { value: 'balance', label: '🏦 Balance only' },
             { value: 'investment', label: '📊 Investment' },
