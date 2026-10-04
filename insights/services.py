@@ -1299,6 +1299,53 @@ def _normalise_holding_name(name: str) -> str:
     return ''.join(w for w in words if w and w not in _DUP_FILLER_WORDS)
 
 
+def _pending_sms_breakdown(household_id: int) -> dict:
+    """Pending SMS split by what they are (as read by sms_ingestion.extract), with the
+    dates they arrived on — transactions to approve and balance updates, newest first
+    (old phone history is the least useful to review). Messages that haven't been
+    read yet (arrived before the reader) are counted apart; OTPs, promotions,
+    reminders and failed payments are left out."""
+    from django.utils import timezone
+
+    from sms_ingestion.extract import TRANSACTION_KINDS
+    from sms_ingestion.models import SmsMessage
+
+    groups = {'transactions': [], 'balances': []}
+    unread = 0
+    pending = (
+        SmsMessage.objects.filter(household_id=household_id, status=SmsMessage.STATUS_PENDING)
+        .order_by('-received_at', '-id').values('id', 'received_at', 'template_key', 'raw_payload')
+    )
+    for m in pending:
+        kind = m['template_key']
+        if not kind:
+            unread += 1
+        elif kind in TRANSACTION_KINDS or kind == 'investment_debit':
+            groups['transactions'].append(m)
+        elif kind == 'balance':
+            groups['balances'].append(m)
+
+    def summarise(msgs: list[dict]) -> dict:
+        by_date: dict[str, list[int]] = {}
+        for m in msgs:
+            day = timezone.localtime(m['received_at']).date().isoformat()
+            by_date.setdefault(day, []).append(m['id'])
+        recent_days = sorted(by_date, reverse=True)[:7]
+        return {
+            'count': len(msgs),
+            'first_date': min(by_date) if by_date else None,
+            'last_date': max(by_date) if by_date else None,
+            'ids': [m['id'] for m in msgs][:500],
+            'by_date': [{'date': d, 'count': len(by_date[d]), 'ids': by_date[d]} for d in recent_days],
+        }
+
+    result = {k: summarise(v) for k, v in groups.items()}
+    result['balances']['recorded'] = sum(
+        1 for m in groups['balances'] if (m['raw_payload'] or {}).get('balance_snapshot_id'))
+    result['unread'] = unread
+    return result
+
+
 def compute_attention(household_id: int, as_of: date) -> dict:
     """Counts of things that need the user, for the Home "Needs attention" card."""
     from django.db.models import Max
@@ -1351,5 +1398,6 @@ def compute_attention(household_id: int, as_of: date) -> dict:
         'uncategorised': sum(1 for h in holdings if not h['asset_category']),
         'duplicate_groups': duplicate_groups,
         'pending_sms': SmsMessage.objects.filter(household_id=household_id, status=SmsMessage.STATUS_PENDING).count(),
+        'pending_sms_breakdown': _pending_sms_breakdown(household_id),
         'pending_gmail': GmailProcessedMessage.objects.filter(household_id=household_id, status=GmailProcessedMessage.STATUS_PENDING).count(),
     }

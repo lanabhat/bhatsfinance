@@ -754,3 +754,29 @@ class ComputeAttentionTests(TestCase):
         )
         result = compute_attention(self.household.id, date(2026, 10, 2))
         self.assertEqual((result['stale_holdings'], result['never_valued']), (1, 0))
+
+
+class PendingSmsBreakdownTests(TestCase):
+    def test_pending_sms_grouped_by_kind_newest_first(self):
+        from datetime import datetime, timezone as dt_tz
+        from core.models import Household
+        from insights.services import _pending_sms_breakdown
+        from sms_ingestion.models import SmsMessage
+        household = Household.objects.create(name='Shenoy Family')
+
+        def sms(day, kind, status='pending', snap=None):
+            payload = {'balance_snapshot_id': snap} if snap else {}
+            return SmsMessage.objects.create(household=household, sender='AD-HDFCBK-S', body=f'{kind} {day}', status=status,
+                                             received_at=datetime(2026, 10, day, 6, tzinfo=dt_tz.utc), template_key=kind, raw_payload=payload)
+
+        old_tx, new_tx = sms(1, 'debit'), sms(3, 'credit')
+        sms(2, 'cc_bill_paid')
+        sms(2, 'balance', snap=99)
+        sms(3, 'otp')
+        sms(3, 'debit', status='approved')
+        sms(3, '')
+        b = _pending_sms_breakdown(household.id)
+        self.assertEqual((b['transactions']['count'], b['balances']['count'], b['balances']['recorded'], b['unread']), (3, 1, 1, 1))
+        self.assertEqual((b['transactions']['ids'][0], b['transactions']['ids'][-1]), (new_tx.id, old_tx.id))
+        self.assertEqual((b['transactions']['first_date'], b['transactions']['last_date']), ('2026-10-01', '2026-10-03'))
+        self.assertEqual([d['date'] for d in b['transactions']['by_date']], ['2026-10-03', '2026-10-02', '2026-10-01'])

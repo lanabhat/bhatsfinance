@@ -887,7 +887,22 @@ export type AttentionCounts = {
   uncategorised: number
   duplicate_groups: number
   pending_sms: number
+  pending_sms_breakdown?: {
+    transactions: PendingSmsGroup
+    balances: PendingSmsGroup & { recorded: number }
+    /** Pending SMS not yet read for amount/account (arrived before the reader). */
+    unread: number
+  }
   pending_gmail: number
+}
+
+/** Pending SMS of one kind, oldest first, with the most recent days they arrived on. */
+export type PendingSmsGroup = {
+  count: number
+  first_date: string | null
+  last_date: string | null
+  ids: number[]
+  by_date: { date: string; count: number; ids: number[] }[]
 }
 
 export type FundRiskMetrics = {
