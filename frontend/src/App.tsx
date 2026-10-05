@@ -46,8 +46,14 @@ const VALID_ROUTES = new Set<RouteKey>(['home', 'holdings', 'accounts', 'allocat
 // ported there) — redirect old bookmarks/muscle memory instead of 404ing to home.
 const LEGACY_ROUTE_REDIRECTS: Record<string, RouteKey> = { assets: 'instruments' }
 
+// A page may keep its own state in a query after the path (#/analytics?type=Equity);
+// routing only looks at the path.
+function hashPath(): string {
+  return window.location.hash.replace('#/', '').split('?')[0]
+}
+
 function routeFromHash(): RouteKey {
-  const value = window.location.hash.replace('#/', '').split('/')[0]
+  const value = hashPath().split('/')[0]
   if (value in LEGACY_ROUTE_REDIRECTS) return LEGACY_ROUTE_REDIRECTS[value]
   return VALID_ROUTES.has(value as RouteKey) ? (value as RouteKey) : 'home'
 }
@@ -58,7 +64,7 @@ function routeFromHash(): RouteKey {
 // SMS id under 'sms' (#/sms/<id>, the full-page SMS review). Not a general sub-routing scheme — each caller interprets the
 // segment itself; extend the same way if another page needs one.
 function subRouteFromHash(): string | null {
-  const parts = window.location.hash.replace('#/', '').split('/')
+  const parts = hashPath().split('/')
   return parts.length > 1 ? parts[1] : null
 }
 

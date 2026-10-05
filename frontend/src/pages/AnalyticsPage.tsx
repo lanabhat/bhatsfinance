@@ -1,30 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { useApp } from '../context/AppContext'
-import { fetchAnalytics, fetchHoldingsHistory } from '../api/analyticsApi'
-import { Money, useMaskedFmt } from '../components/common/Money'
-import { KpiCard } from '../components/analytics/KpiCard'
-import { MemberKpiStrip } from '../components/analytics/MemberKpiStrip'
-import { HoldingsTable } from '../components/analytics/HoldingsTable'
-import { InvestmentBarChart } from '../components/analytics/InvestmentBarChart'
-import { ValuationTrendChart } from '../components/analytics/ValuationTrendChart'
-import { AllocationPieChart } from '../components/charts/AllocationPieChart'
-import type { AnalyticsPayload, HoldingsTrendPoint } from '../api/analyticsApi'
-import type { DashboardHolding } from '../types/domain'
 import { getJson, toQueryString } from '../api/http'
+import { fetchHoldingsHistory } from '../api/analyticsApi'
+import type { HoldingsTrendPoint } from '../api/analyticsApi'
+import { KpiCard } from '../components/analytics/KpiCard'
+import { ValuationTrendChart } from '../components/analytics/ValuationTrendChart'
+import { AllocationTreemap } from '../components/analytics/dashboard/AllocationTreemap'
+import { AssetClassBar } from '../components/analytics/dashboard/AssetClassBar'
+import { DimensionBars } from '../components/analytics/dashboard/DimensionBars'
+import { FactsTable } from '../components/analytics/dashboard/FactsTable'
+import { DIM_LABELS, pct, useMoney } from '../components/analytics/dashboard/facts'
+import type { Fact, FactsPayload } from '../components/analytics/dashboard/facts'
+import { useCrossFilter } from '../components/analytics/dashboard/useCrossFilter'
 
 type Range = '1M' | '3M' | '6M' | '1Y' | 'All'
-type GroupBy = 'category' | 'type'
+const RANGES: Range[] = ['1M', '3M', '6M', '1Y', 'All']
+const RANGE_MONTHS: Record<Exclude<Range, 'All'>, number> = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12 }
 
-const RANGE_MONTHS: Record<Exclude<Range, 'All'>, number> = {
-  '1M': 1, '3M': 3, '6M': 6, '1Y': 12,
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  equity: 'Equity', mutual_fund: 'Mutual Fund', fd: 'FD', rd: 'RD',
-  epf: 'EPF', ppf: 'PPF', nps: 'NPS', gold: 'Gold',
-  real_estate: 'Real Estate', sip: 'SIP', insurance: 'Insurance',
-  lending: 'Lending', cash: 'Cash', vehicle: 'Vehicle', liability: 'Liability', other: 'Other',
+// Dashboard type labels back to instrument_type, for the value-over-time chart.
+const TYPE_KEYS: Record<string, string> = {
+  Equity: 'equity', 'Mutual Fund': 'mutual_fund', FD: 'fd', RD: 'rd', Bond: 'bond', EPF: 'epf', PPF: 'ppf', NPS: 'nps',
+  Gold: 'gold', 'Real Estate': 'real_estate', Lending: 'lending', Cash: 'cash', Vehicle: 'vehicle', Other: 'other',
 }
 
 function subMonths(dateStr: string, months: number): string {
@@ -36,331 +33,178 @@ function subMonths(dateStr: string, months: number): string {
 const _d = new Date()
 const today = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`
 
+const EMPTY: Fact[] = []
+
+/**
+ * Asset-allocation dashboard. Every chart cross-filters the others: clicking a bar,
+ * segment, treemap block or table row toggles it (several can be selected), the
+ * other charts redraw for that selection, and the KPIs and table follow. The
+ * selection is kept in the URL so a view can be bookmarked.
+ */
 export function AnalyticsPage() {
-  const { householdId, members } = useApp()
-  const fmt = useMaskedFmt()
-
+  const { householdId } = useApp()
+  const money = useMoney()
   const [asOf, setAsOf] = useState(today)
-  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null)
-  const [selectedType, setSelectedType] = useState<string | null>(null)
-  const [groupBy, setGroupBy] = useState<GroupBy>('type')
-  const [range, setRange] = useState<Range>('1Y')
-  const [loading, setLoading] = useState(true)
-  const [data, setData] = useState<AnalyticsPayload | null>(null)
-  const [memberHoldings, setMemberHoldings] = useState<Record<number, DashboardHolding[]>>({})
-  const [trendHistory, setTrendHistory] = useState<HoldingsTrendPoint[]>([])
-  const [trendLoading, setTrendLoading] = useState(false)
-
-  // Fetch main analytics data
+  // Results are keyed by what they were loaded for, so "loading" is simply a key
+  // mismatch, and a refetch keeps showing the previous view (dimmed) meanwhile.
+  const factsKey = `${householdId}|${asOf}`
+  const [loaded, setLoaded] = useState<{ key: string; facts?: FactsPayload; error?: string } | null>(null)
   useEffect(() => {
     if (!householdId) return
-    setLoading(true)
-    fetchAnalytics(householdId, asOf, selectedMemberId)
-      .then(setData)
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [householdId, asOf, selectedMemberId])
+    let active = true
+    getJson<FactsPayload>(`/api/analytics/facts?${toQueryString({ household_id: householdId, as_of: asOf })}`)
+      .then((d) => { if (active) setLoaded({ key: factsKey, facts: d }) })
+      .catch(() => { if (active) setLoaded((prev) => ({ key: factsKey, facts: prev?.facts, error: 'Could not load the dashboard data.' })) })
+    return () => { active = false }
+  }, [householdId, asOf, factsKey])
+  const facts = loaded?.facts ?? null
+  const loading = loaded?.key !== factsKey
+  const error = loaded?.error ?? ''
 
-  // Fetch holdings history for trend chart
-  useEffect(() => {
-    if (!householdId) return
-    setTrendLoading(true)
-    fetchHoldingsHistory(householdId, selectedType, selectedMemberId)
-      .then(setTrendHistory)
-      .catch(console.error)
-      .finally(() => setTrendLoading(false))
-  }, [householdId, selectedType, selectedMemberId])
+  const cf = useCrossFilter(facts?.rows ?? EMPTY)
+  const rows = cf.filtered
 
-  // Fetch per-member holdings for KPI strip
-  useEffect(() => {
-    if (!householdId || !data) return
-    const memberIds = data.membersNetworth.filter(m => m.include_in_networth).map(m => m.member_id)
-    Promise.all(
-      memberIds.map(mid =>
-        getJson<{ holdings: DashboardHolding[] }>(
-          `/api/holdings?${toQueryString({ household_id: householdId, as_of: asOf, member_id: mid })}`
-        ).then(r => [mid, r.holdings ?? []] as [number, DashboardHolding[]])
-      )
-    ).then(entries => {
-      setMemberHoldings(Object.fromEntries(entries))
-    }).catch(() => {})
-  }, [householdId, asOf, data?.membersNetworth])
-
-  // Filter holdings by selected type
-  const filteredHoldings = useMemo(() => {
-    const holdings = data?.holdings ?? []
-    return selectedType ? holdings.filter(h => h.instrument_type === selectedType) : holdings
-  }, [data, selectedType])
-
-  // Available types from all holdings (for filter dropdown)
-  const availableTypes = useMemo(() => {
-    const types = new Set((data?.holdings ?? []).map(h => h.instrument_type))
-    return Array.from(types).sort()
-  }, [data])
-
-  // KPI totals from filtered holdings
-  const { totalCurrent, totalInvested, totalGain, totalGainPct } = useMemo(() => {
-    const totalCurrent = filteredHoldings.reduce((s, h) => s + parseFloat(h.market_value), 0)
-    const totalInvested = filteredHoldings.reduce((s, h) => s + parseFloat(h.net_invested), 0)
-    const totalGain = totalCurrent - totalInvested
-    const totalGainPct = totalInvested > 0 ? (totalGain / totalInvested) * 100 : null
-    return { totalCurrent, totalInvested, totalGain, totalGainPct }
-  }, [filteredHoldings])
-
-  const gainPositive = totalGain >= 0
-
-  // Sliced trend history for selected range
-  const trendData = useMemo((): HoldingsTrendPoint[] => {
-    if (range === 'All') return trendHistory
-    const from = subMonths(asOf, RANGE_MONTHS[range])
-    return trendHistory.filter(p => p.date >= from && p.date <= asOf)
-  }, [trendHistory, range, asOf])
-
-  // Grouped data for Invested vs Current cards
-  const groupedEntries = useMemo(() => {
-    const catBreakdown = data?.categoryBreakdown ?? []
-    const groups: Record<string, { invested: number; current: number; color?: string }> = {}
-    if (groupBy === 'category') {
-      for (const h of filteredHoldings) {
-        const cat = catBreakdown.find(c => c.category_id === h.asset_category)
-        const key = cat?.category_name ?? 'Uncategorised'
-        if (!groups[key]) groups[key] = { invested: 0, current: 0, color: cat?.color }
-        groups[key].invested += parseFloat(h.net_invested)
-        groups[key].current += parseFloat(h.market_value)
-      }
-    } else {
-      for (const h of filteredHoldings) {
-        const key = TYPE_LABELS[h.instrument_type] ?? h.instrument_type
-        if (!groups[key]) groups[key] = { invested: 0, current: 0 }
-        groups[key].invested += parseFloat(h.net_invested)
-        groups[key].current += parseFloat(h.market_value)
-      }
+  // KPIs over the fully filtered view
+  const kpi = useMemo(() => {
+    const value = rows.reduce((s, r) => s + r.value, 0)
+    const invested = rows.reduce((s, r) => s + r.invested, 0)
+    const equity = rows.filter((r) => r.asset_class === 'Equity').reduce((s, r) => s + r.value, 0)
+    return {
+      value, invested, gain: value - invested, gainPct: invested > 0 ? ((value - invested) / invested) * 100 : null,
+      equityPct: pct(equity, value),
+      holdings: new Set(rows.map((r) => `${r.holding}|${r.type}`)).size,
+      members: new Set(rows.map((r) => r.member)).size,
     }
-    return Object.entries(groups).sort((a, b) => b[1].current - a[1].current)
-  }, [filteredHoldings, groupBy, data?.categoryBreakdown])
+  }, [rows])
 
-  const RANGES: Range[] = ['1M', '3M', '6M', '1Y', 'All']
+  // Member chips: everyone in the household, plus "Unassigned" when something has no owner.
+  const memberChips = useMemo(() => {
+    const names = (facts?.members ?? []).map((m) => ({ name: m.name, included: m.included }))
+    if ((facts?.rows ?? []).some((r) => r.member === 'Unassigned')) names.push({ name: 'Unassigned', included: true })
+    return names
+  }, [facts])
+  const memberSel = cf.selected('member')
+
+  // Value over time follows a single selected member / type.
+  const [range, setRange] = useState<Range>('1Y')
+  const oneMember = cf.filters.member?.length === 1 ? facts?.members.find((m) => m.name === cf.filters.member![0]) : undefined
+  const oneTypeKey = cf.filters.type?.length === 1 ? TYPE_KEYS[cf.filters.type[0]] : undefined
+  const trendKey = `${householdId}|${oneTypeKey ?? ''}|${oneMember?.id ?? ''}`
+  const [trendLoaded, setTrendLoaded] = useState<{ key: string; points: HoldingsTrendPoint[] } | null>(null)
+  useEffect(() => {
+    if (!householdId) return
+    let active = true
+    fetchHoldingsHistory(householdId, oneTypeKey ?? null, oneMember?.id ?? null)
+      .then((t) => { if (active) setTrendLoaded({ key: trendKey, points: t }) })
+      .catch(() => { if (active) setTrendLoaded({ key: trendKey, points: [] }) })
+    return () => { active = false }
+  }, [householdId, oneTypeKey, oneMember?.id, trendKey])
+  const trend = trendLoaded?.points ?? []
+  const trendLoading = trendLoaded?.key !== trendKey
+  const trendData = range === 'All' ? trend : trend.filter((p) => p.date >= subMonths(asOf, RANGE_MONTHS[range]) && p.date <= asOf)
+
+  if (loading && !facts) return <div className="flex justify-center py-16"><CoinSpinner size={56} /></div>
+  if (error && !facts) return <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+
+  const bars = (dim: 'type' | 'member' | 'market_cap' | 'category' | 'classification' | 'provider', title: string, opts: { limit?: number; hint?: string; only?: (r: Fact) => boolean } = {}) => (
+    <DimensionBars title={title} dim={dim}
+      rows={opts.only ? cf.rowsFor(dim).filter(opts.only) : cf.rowsFor(dim)}
+      selected={cf.selected(dim)} onToggle={(v) => cf.toggle(dim, v)} onClear={() => cf.clear(dim)}
+      limit={opts.limit} hint={opts.hint} />
+  )
 
   return (
-    <section className="grid gap-6 pb-24">
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-[var(--text-muted)]">Member</label>
-          <select
-            className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-400"
-            value={selectedMemberId ?? ''}
-            onChange={e => setSelectedMemberId(e.target.value ? Number(e.target.value) : null)}
-          >
-            <option value="">All members</option>
-            {members.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-[var(--text-muted)]">Type</label>
-          <select
-            className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-400"
-            value={selectedType ?? ''}
-            onChange={e => setSelectedType(e.target.value || null)}
-          >
-            <option value="">All types</option>
-            {availableTypes.map(t => <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>)}
-          </select>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-[var(--text-muted)]">Group by</label>
-          <select
-            className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-400"
-            value={groupBy}
-            onChange={e => setGroupBy(e.target.value as GroupBy)}
-          >
-            <option value="type">Asset Type</option>
-            <option value="category">Category</option>
-          </select>
-        </div>
-
-        <div className="flex items-center gap-2 ml-auto">
-          <label className="text-xs font-medium text-[var(--text-muted)]">As of</label>
-          <input
-            type="date"
-            value={asOf}
-            max={today}
-            onChange={e => setAsOf(e.target.value)}
-            className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-primary-400"
-          />
-        </div>
+    <section className={`grid gap-4 pb-24 transition-opacity ${loading ? 'opacity-60' : ''}`}>
+      {/* Filters: one row above everything they scope */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => cf.clear('member')}
+          className={`rounded-full border px-3 py-1 text-xs font-medium ${memberSel.size === 0
+            ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+            : 'border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--surface-2)]'}`}>
+          Whole household
+        </button>
+        {memberChips.map((m) => (
+          <button key={m.name} type="button" onClick={() => cf.toggle('member', m.name)}
+            title={m.included ? undefined : 'Not counted in household net worth — shown only when selected'}
+            className={`rounded-full border px-3 py-1 text-xs font-medium ${memberSel.has(m.name)
+              ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+              : 'border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--surface-2)]'} ${m.included ? '' : 'border-dashed'}`}>
+            {memberSel.has(m.name) ? '✓ ' : ''}{m.name}
+          </button>
+        ))}
+        <label className="ml-auto flex items-center gap-2 text-xs text-[var(--text-muted)]">
+          As of
+          <input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value)}
+            className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 text-sm text-[var(--text)]" />
+        </label>
       </div>
 
-      {/* Household KPI row */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Current Value" value={fmt(totalCurrent)} loading={loading} />
-        <KpiCard label="Invested" value={fmt(totalInvested)} loading={loading} />
-        <KpiCard
-          label="Gain / Loss"
-          value={`${gainPositive ? '+' : ''}${fmt(totalGain)}`}
-          loading={loading}
-          sub={totalGainPct !== null ? [{
-            label: '',
-            value: `${gainPositive ? '+' : ''}${totalGainPct.toFixed(1)}%`,
-            positive: gainPositive,
-          }] : undefined}
-        />
-        <KpiCard
-          label="XIRR"
-          value={data?.xirr != null ? `${(data.xirr * 100).toFixed(1)}%` : '—'}
-          loading={loading}
-        />
-      </div>
-
-      {/* Per-member KPI strip */}
-      {data && data.membersNetworth.length > 0 && (
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wide">By Member</h2>
-          <MemberKpiStrip
-            members={data.membersNetworth}
-            holdingsByMember={memberHoldings}
-            selectedMemberId={selectedMemberId}
-            onSelect={id => setSelectedMemberId(id)}
-          />
+      {cf.active.filter((a) => a.dim !== 'member').length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-[var(--text-muted)]">Filtered by</span>
+          {cf.active.filter((a) => a.dim !== 'member').map((a) => (
+            <button key={`${a.dim}:${a.value}`} type="button" onClick={() => cf.toggle(a.dim, a.value)}
+              className="flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-3)]">
+              <span className="text-[var(--text-muted)]">{DIM_LABELS[a.dim]}:</span> {a.value} <span aria-hidden>✕</span>
+            </button>
+          ))}
+          <button type="button" onClick={() => cf.clear()} className="ml-1 text-xs text-primary-600 hover:underline dark:text-primary-300">
+            Clear all
+          </button>
         </div>
       )}
 
-      {/* Investment Trend */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <KpiCard label="Value" value={money.compact(kpi.value)} />
+        <KpiCard label="Invested" value={money.compact(kpi.invested)} />
+        <KpiCard label="Gain" value={`${kpi.gain >= 0 ? '+' : ''}${money.compact(kpi.gain)}`}
+          sub={kpi.gainPct !== null ? [{ label: '', value: `${kpi.gainPct >= 0 ? '+' : ''}${kpi.gainPct.toFixed(1)}%`, positive: kpi.gainPct >= 0 }] : undefined} />
+        <KpiCard label="Equity share" value={`${kpi.equityPct.toFixed(1)}%`} />
+        <KpiCard label="Holdings" value={String(kpi.holdings)} />
+        <KpiCard label="Members" value={String(kpi.members)} />
+      </div>
+
+      {/* Overview */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {bars('type', 'Type', { hint: 'What you hold' })}
+        <AssetClassBar rows={cf.rowsFor('asset_class')} selected={cf.selected('asset_class')}
+          onToggle={(v) => cf.toggle('asset_class', v)} onClear={() => cf.clear('asset_class')} />
+        {bars('member', 'Members', { hint: 'Who holds it' })}
+      </div>
+
+      <AllocationTreemap filters={cf.filters} rowsFor={cf.rowsFor} set={cf.set} toggle={cf.toggle} />
+
+      {/* Drill-downs */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {bars('market_cap', 'Market cap', { hint: 'Stocks + equity funds', only: (r) => r.market_cap !== '—' })}
+        {bars('category', 'Category')}
+        {bars('classification', 'Classification', { limit: 12, hint: 'Fund category, cap, debt…' })}
+        {bars('provider', 'Fund house / provider', { limit: 10, only: (r) => r.provider !== '—' })}
+      </div>
+
+      <FactsTable rows={rows} selected={cf.selected('holding')} onToggle={(h) => cf.toggle('holding', h)} />
+
+      {/* Value over time (single member / type when exactly one is selected) */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <div>
-            <h2 className="text-sm font-semibold text-[var(--text)]">
-              Investment Trend{selectedType ? ` — ${TYPE_LABELS[selectedType] ?? selectedType}` : ''}
-            </h2>
-            <p className="text-xs text-[var(--text-muted)]">Invested vs current value over time</p>
+            <h3 className="text-sm font-semibold text-[var(--text)]">
+              Value over time{oneTypeKey ? ` — ${cf.filters.type![0]}` : ''}{oneMember ? ` · ${oneMember.name}` : ''}
+            </h3>
+            <p className="text-xs text-[var(--text-muted)]">Invested vs current value. Follows the member and type when one of each is selected.</p>
           </div>
-          <div className="ml-auto flex flex-wrap gap-1.5">
-            {RANGES.map(r => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setRange(r)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                  range === r
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)]'
-                }`}
-              >
+          <div className="ml-auto flex gap-1.5">
+            {RANGES.map((r) => (
+              <button key={r} type="button" onClick={() => setRange(r)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium ${range === r ? 'bg-primary-600 text-white'
+                  : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)]'}`}>
                 {r}
               </button>
             ))}
           </div>
         </div>
-        {trendLoading ? (
-          <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
-        ) : (
-          <ValuationTrendChart data={trendData} />
-        )}
-      </div>
-
-      {/* Invested vs Current — grouped KPI cards + bar chart */}
-      <div>
-        <div className="mb-3 flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-[var(--text)]">
-            Invested vs Current — by {groupBy === 'category' ? 'Category' : 'Asset Type'}
-          </h2>
-        </div>
-
-        {/* Bar chart */}
-        <div className="mb-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-          {loading ? (
-            <div className="h-[260px] animate-pulse rounded-xl bg-[var(--surface-2)]" />
-          ) : (
-            <InvestmentBarChart
-              holdings={filteredHoldings}
-              categoryBreakdown={data?.categoryBreakdown ?? []}
-              groupBy={groupBy}
-            />
-          )}
-        </div>
-
-        {/* KPI cards grid */}
-        {loading ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map(i => <div key={i} className="h-24 animate-pulse rounded-2xl bg-[var(--surface-2)]" />)}
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {groupedEntries.map(([name, v]) => {
-              const gain = v.current - v.invested
-              const gainPct = v.invested > 0 ? (gain / v.invested) * 100 : null
-              const pos = gain >= 0
-              return (
-                <div key={name} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-5 py-4 shadow-sm">
-                  <div className="flex items-center gap-2 mb-1">
-                    {v.color && <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: v.color }} />}
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] truncate">{name}</p>
-                  </div>
-                  <p className="text-xl font-bold text-[var(--text)]"><Money value={v.current} /></p>
-                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-                    <span className="text-[var(--text-muted)]">Invested <span className="font-medium text-[var(--text)]"><Money value={v.invested} /></span></span>
-                    {gainPct !== null && (
-                      <span className={`font-medium ${pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                        {pos ? '+' : ''}<Money value={gain} /> ({pos ? '+' : ''}{gainPct.toFixed(1)}%)
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Allocation pie + category breakdown */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-[var(--text)]">Allocation by Type</h2>
-          {loading ? (
-            <div className="h-52 animate-pulse rounded-xl bg-[var(--surface-2)]" />
-          ) : (
-            <AllocationPieChart data={data?.allocation ?? []} />
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-[var(--text)]">Category Breakdown</h2>
-          {loading ? (
-            <div className="grid gap-2">
-              {[1, 2, 3, 4].map(i => <div key={i} className="h-8 animate-pulse rounded-lg bg-[var(--surface-2)]" />)}
-            </div>
-          ) : data?.categoryBreakdown.length === 0 ? (
-            <p className="text-sm text-[var(--text-muted)]">No categories assigned yet.</p>
-          ) : (
-            <div className="grid gap-2">
-              {data?.categoryBreakdown.map(c => (
-                <div key={c.category_id ?? c.category_name} className="flex items-center gap-3">
-                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: c.color || '#6366f1' }} />
-                  <span className="flex-1 truncate text-sm text-[var(--text)]">{c.category_name}</span>
-                  <span className="text-sm font-medium text-[var(--text)]"><Money value={parseFloat(c.market_value)} /></span>
-                  <span className="w-10 text-right text-xs text-[var(--text-muted)]">{parseFloat(c.allocation_percent).toFixed(1)}%</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Holdings detail table */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-semibold text-[var(--text)]">Holdings Detail</h2>
-        {loading ? (
-          <div className="grid gap-2">
-            {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-9 animate-pulse rounded-lg bg-[var(--surface-2)]" />)}
-          </div>
-        ) : (
-          <HoldingsTable
-            holdings={filteredHoldings}
-            categoryBreakdown={data?.categoryBreakdown ?? []}
-          />
-        )}
+        {trendLoading ? <div className="flex justify-center py-8"><CoinSpinner size={48} /></div> : <ValuationTrendChart data={trendData} />}
       </div>
     </section>
   )

@@ -509,6 +509,149 @@ def compute_allocation(household_id: int, as_of: date) -> list[dict]:
     return rows
 
 
+_FACT_TYPE_LABELS = {
+    'equity': 'Equity', 'mutual_fund': 'Mutual Fund', 'sip': 'Mutual Fund', 'fd': 'FD', 'rd': 'RD', 'bond': 'Bond',
+    'epf': 'EPF', 'ppf': 'PPF', 'nps': 'NPS', 'gold': 'Gold', 'real_estate': 'Real Estate', 'lending': 'Lending',
+    'cash': 'Cash', 'vehicle': 'Vehicle', 'insurance': 'Insurance', 'other': 'Other',
+}
+_SUB_CATEGORY_CLASS = {
+    'debt': 'Debt', 'equity': 'Equity', 'liquid': 'Cash', 'retirement': 'Retirement', 'hybrid': 'Hybrid',
+    'gold': 'Gold', 'real_asset': 'Real estate', 'other': 'Other',
+}
+_TYPE_CLASS = {
+    'fd': 'Debt', 'rd': 'Debt', 'bond': 'Debt', 'lending': 'Debt', 'epf': 'Retirement', 'ppf': 'Retirement',
+    'nps': 'Retirement', 'gold': 'Gold', 'real_estate': 'Real estate', 'cash': 'Cash', 'equity': 'Equity',
+}
+_FUND_CLASS = {'equity': 'Equity', 'debt': 'Debt', 'hybrid': 'Hybrid', 'commodities': 'Gold', 'gold': 'Gold'}
+_CAP_LABELS = {'large_cap': 'Large Cap', 'mid_cap': 'Mid Cap', 'small_cap': 'Small Cap', 'multi': 'Multi-cap'}
+
+
+def compute_allocation_facts(household_id: int, as_of: date) -> dict:
+    """Flat rows for the Analytics dashboard: one per holding x member (plus an
+    "Unassigned" row for whatever no included member owns, and Savings & Cash rows
+    from positive account balances), each tagged with every dimension the dashboard
+    cross-filters on: type, category, asset class, market cap, classification,
+    provider. The browser does all filtering and aggregation on these rows."""
+    import re
+
+    from core.models import Member
+    from fund_data.market_cap import NON_EQUITY_ETF, cap_for_fund
+    from instruments.models import Account, AssetCategory, Instrument, Investment, MutualFundDetails
+
+    members = list(Member.objects.filter(household_id=household_id, is_active=True).order_by('id'))
+    categories = {c.id: c.name for c in AssetCategory.objects.filter(household_id=household_id)}
+
+    household = compute_holdings(household_id, as_of)
+    per_member = {m.id: compute_holdings(household_id, as_of, member_id=m.id) for m in members}
+    all_holdings = household + [h for hs in per_member.values() for h in hs]
+    instruments = {
+        i.id: i for i in Instrument.objects.filter(id__in={h['instrument_id'] for h in all_holdings})
+        .select_related('default_account')
+    }
+    inv_ids = {h['investment_id'] for h in all_holdings if h['investment_id']}
+    investments = {i.id: i for i in Investment.objects.filter(id__in=inv_ids)}
+    fund_details = {d.investment_id: d for d in MutualFundDetails.objects.filter(investment_id__in=inv_ids)}
+
+    def describe(h: dict) -> dict:
+        inst = instruments.get(h['instrument_id'])
+        inv = investments.get(h['investment_id']) if h['investment_id'] else None
+        kind = h['instrument_type']
+        name = (inv.name if inv else None) or h['instrument_name']
+        market_cap, provider = '—', '—'
+        if kind in ('mutual_fund', 'sip'):
+            d = fund_details.get(h['investment_id'])
+            asset_class = _FUND_CLASS.get(((d.fund_category if d else '') or '').strip().lower(), 'Other')
+            classification = (d.fund_sub_category or d.fund_category) if d else 'Unclassified fund'
+            cap = cap_for_fund(d.fund_sub_category, d.fund_category) if d else ''
+            market_cap = _CAP_LABELS.get(cap or '', '—')
+            provider = (d.amc if d else '') or '—'
+        elif kind == 'equity':
+            cap = inv.market_cap if inv else ''
+            market_cap = _CAP_LABELS.get(cap, '—')
+            if not cap and NON_EQUITY_ETF.search(name or ''):
+                asset_class = 'Gold' if re.search(r'gold|gld', name, re.I) else 'Cash'
+                classification = 'Gold ETF' if asset_class == 'Gold' else 'Liquid ETF'
+            else:
+                asset_class = 'Equity'
+                classification = market_cap if cap else 'Stocks (unclassified)'
+        else:
+            sub = inst.sub_category if inst else ''
+            asset_class = _SUB_CATEGORY_CLASS.get(sub) or _TYPE_CLASS.get(kind, 'Other')
+            classification = asset_class
+            if inst and inst.default_account and inst.default_account.institution_name:
+                provider = inst.default_account.institution_name
+        return {
+            'type': _FACT_TYPE_LABELS.get(kind, kind.replace('_', ' ').title()),
+            'category': categories.get(h['asset_category'], 'Uncategorised'),
+            'asset_class': asset_class,
+            'market_cap': market_cap,
+            'classification': classification or '—',
+            'provider': provider,
+            'holding': name,
+        }
+
+    rows: list[dict] = []
+
+    def add(member_id, member_name, included, h, value, invested):
+        if value <= 0:
+            return
+        rows.append({
+            'member_id': member_id, 'member': member_name, 'included': included, **describe(h),
+            'value': float(round(value, 2)), 'invested': float(round(max(invested, ZERO), 2)),
+        })
+
+    def key(h):
+        return (h['investment_id'] or 0, h['instrument_id'])
+
+    included_value: dict = {}
+    for m in members:
+        for h in per_member[m.id]:
+            if h['instrument_type'] == 'liability':
+                continue
+            add(m.id, m.full_name, m.include_in_networth, h, h['market_value'], h['net_invested'])
+            if m.include_in_networth:
+                included_value[key(h)] = included_value.get(key(h), ZERO) + h['market_value']
+    for h in household:
+        if h['instrument_type'] == 'liability':
+            continue
+        rest = h['market_value'] - included_value.get(key(h), ZERO)
+        if rest > Decimal('1'):  # ignore rounding dust
+            share = rest / h['market_value'] if h['market_value'] else ZERO
+            add(None, 'Unassigned', True, h, rest, h['net_invested'] * share)
+
+    # Savings & cash: positive balances (credit cards and other negatives are left out).
+    institutions = dict(Account.objects.filter(household_id=household_id).values_list('id', 'institution_name'))
+    owned: dict = {}
+    for m in members:
+        for a in compute_member_accounts(household_id, as_of, m.id):
+            balance = Decimal(a['balance'])
+            if a['account_type'] == 'credit_card' or balance <= 0:
+                continue
+            if m.include_in_networth:
+                owned[a['account_id']] = owned.get(a['account_id'], ZERO) + balance
+            rows.append(_account_fact(m.id, m.full_name, m.include_in_networth, a, balance, institutions))
+    for a in compute_household_accounts(household_id, as_of):
+        balance = Decimal(a['balance']) - owned.get(a['account_id'], ZERO)
+        if a['account_type'] != 'credit_card' and balance > Decimal('1'):
+            rows.append(_account_fact(None, 'Unassigned', True, a, balance, institutions))
+
+    return {
+        'as_of': as_of,
+        'members': [{'id': m.id, 'name': m.full_name, 'included': m.include_in_networth} for m in members],
+        'rows': rows,
+    }
+
+
+def _account_fact(member_id, member_name, included, account: dict, balance: Decimal, institutions: dict) -> dict:
+    return {
+        'member_id': member_id, 'member': member_name, 'included': included,
+        'type': 'Savings & Cash', 'category': 'Savings & Cash', 'asset_class': 'Cash', 'market_cap': '—',
+        'classification': 'Wallets' if account['account_type'] in ('other', 'cash') else 'Savings',
+        'provider': institutions.get(account['account_id']) or '—', 'holding': account['account_name'],
+        'value': float(round(balance, 2)), 'invested': float(round(balance, 2)),
+    }
+
+
 MARKET_CAP_ROWS = [
     ('large_cap', 'Large Cap'), ('mid_cap', 'Mid Cap'), ('small_cap', 'Small Cap'),
     ('multi', 'Multi-cap / other equity'), ('unclassified', 'Not classified'),

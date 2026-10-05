@@ -814,3 +814,60 @@ class MarketCapSplitTests(TestCase):
         self.assertEqual(rows['small_cap']['total'], Decimal('500.00'))
         self.assertEqual(rows['multi']['total'], Decimal('500.00'))
         self.assertNotIn('mid_cap', rows)
+
+
+class AllocationFactsTests(TestCase):
+    def setUp(self):
+        from datetime import date
+        from decimal import Decimal
+        from core.models import Household, Member
+        from instruments.models import Account, AccountOwnership, Instrument, InstrumentOwnership, Investment, MutualFundDetails
+        from instruments.services import get_or_create_equity_shell, get_or_create_mf_shell
+        from ledger.models import Transaction
+        self.date = date(2026, 9, 1)
+        self.household = Household.objects.create(name='Facts Family')
+        self.ln = Member.objects.create(household=self.household, full_name='LN')
+        self.anu = Member.objects.create(household=self.household, full_name='Anu')
+
+        def buy(instrument, amount, investment=None):
+            Transaction.objects.create(household=self.household, instrument=instrument, investment=investment, tx_date=self.date,
+                                       amount=Decimal(amount), quantity=Decimal('1'), direction='outflow', transaction_type='buy')
+        eq = get_or_create_equity_shell(self.household)
+        itc = Investment.objects.create(instrument=eq, name='ITC', member=self.ln, market_cap='large_cap')
+        buy(eq, '1000', itc)
+        mf = get_or_create_mf_shell(self.household)
+        fund = Investment.objects.create(instrument=mf, name='Axis Midcap', member=self.anu)
+        MutualFundDetails.objects.create(investment=fund, amc='Axis', fund_category='Equity', fund_sub_category='Mid Cap')
+        buy(mf, '2000', fund)
+        fd = Instrument.objects.create(household=self.household, name='Joint FD', instrument_type='fd', sub_category='debt')
+        InstrumentOwnership.objects.create(instrument=fd, member=self.ln, allocation_percent=60)
+        InstrumentOwnership.objects.create(instrument=fd, member=self.anu, allocation_percent=40)
+        buy(fd, '5000')
+        orphan = Instrument.objects.create(household=self.household, name='Old Gold', instrument_type='gold')
+        buy(orphan, '300')
+        loan = Instrument.objects.create(household=self.household, name='Home Loan', instrument_type='liability')
+        buy(loan, '9999')
+        savings = Account.objects.create(household=self.household, name='SBI', account_type='bank', opening_balance=Decimal('700'))
+        AccountOwnership.objects.create(account=savings, member=self.anu, allocation_percent=100)
+        Account.objects.create(household=self.household, name='Card', account_type='credit_card')
+
+    def _rows(self):
+        from datetime import date
+        from insights.services import compute_allocation_facts
+        return compute_allocation_facts(self.household.id, date(2026, 10, 1))['rows']
+
+    def test_rows_split_by_member_with_dimensions(self):
+        rows = self._rows()
+        by = {(r['member'], r['holding']): r for r in rows}
+        self.assertEqual((by[('LN', 'ITC')]['type'], by[('LN', 'ITC')]['market_cap'], by[('LN', 'ITC')]['asset_class']),
+                         ('Equity', 'Large Cap', 'Equity'))
+        fund = by[('Anu', 'Axis Midcap')]
+        self.assertEqual((fund['market_cap'], fund['provider'], fund['classification']), ('Mid Cap', 'Axis', 'Mid Cap'))
+        self.assertEqual((by[('LN', 'Joint FD')]['value'], by[('Anu', 'Joint FD')]['value']), (3000.0, 2000.0))
+        self.assertEqual(by[('Unassigned', 'Old Gold')]['value'], 300.0)  # no owner
+        self.assertEqual((by[('Anu', 'SBI')]['type'], by[('Anu', 'SBI')]['value']), ('Savings & Cash', 700.0))
+
+    def test_liabilities_and_cards_left_out_and_total_matches(self):
+        rows = self._rows()
+        self.assertFalse([r for r in rows if r['holding'] in ('Home Loan', 'Card')])
+        self.assertEqual(sum(r['value'] for r in rows), 1000 + 2000 + 5000 + 300 + 700)
