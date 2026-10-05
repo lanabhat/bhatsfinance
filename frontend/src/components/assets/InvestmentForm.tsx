@@ -18,6 +18,8 @@ function firstErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
+const CAP_LABEL: Record<string, string> = { large_cap: 'Large Cap', mid_cap: 'Mid Cap', small_cap: 'Small Cap' }
+
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
 type MfForm = { amc: string; fund_category: string; fund_sub_category: string; expense_ratio: string | null }
@@ -45,6 +47,8 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
     symbol: investment.symbol,
     isin: investment.isin,
     folio_no: investment.folio_no,
+    market_cap: investment.market_cap ?? '',
+    market_cap_auto: investment.market_cap_auto ?? true,
     is_active: investment.is_active,
   })
   const [mfForm, setMfForm] = useState<MfForm>(EMPTY_MF_FORM)
@@ -91,6 +95,24 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
         <input className={INP} value={form.symbol} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} /></div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">ISIN</label>
         <input className={INP} value={form.isin} onChange={(e) => setForm((p) => ({ ...p, isin: e.target.value }))} /></div>
+      {isStock && (
+        <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Market cap</label>
+          <select className={INP}
+            value={form.market_cap_auto ? 'auto' : form.market_cap || 'auto'}
+            onChange={(e) => {
+              const v = e.target.value
+              setForm((p) => v === 'auto'
+                ? { ...p, market_cap_auto: true }
+                : { ...p, market_cap: v as Investment['market_cap'], market_cap_auto: false })
+            }}>
+            <option value="auto">Auto{investment.market_cap_auto !== false && investment.market_cap ? ` (${CAP_LABEL[investment.market_cap]})` : ''}</option>
+            <option value="large_cap">Large Cap</option>
+            <option value="mid_cap">Mid Cap</option>
+            <option value="small_cap">Small Cap</option>
+          </select>
+          <p className="mt-1 text-[11px] text-[var(--text-muted)]">Auto follows NSE's Nifty 100 / Midcap 150 lists (SEBI bands), refreshed daily.</p>
+        </div>
+      )}
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Owner</label>
         <select className={INP} value={form.member ?? ''} onChange={(e) => setForm((p) => ({ ...p, member: e.target.value ? Number(e.target.value) : null }))}>
           <option value="">— Unassigned —</option>

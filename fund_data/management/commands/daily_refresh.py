@@ -14,6 +14,7 @@ from django.core.management.base import BaseCommand
 
 from core.models import Household
 from fund_data.equity_prices import link_funds_by_isin, write_equity_snapshots
+from fund_data.market_cap import ensure_equities_category, update_stock_caps
 from fund_data.mfapi_client import MfApiError
 from fund_data.navs import sync_navs, write_nav_snapshots
 from valuations.services import bulk_snapshot
@@ -57,6 +58,17 @@ class Command(BaseCommand):
                     self.stdout.write(f'  units out of date: {name}')
             except MfApiError as exc:
                 self.stdout.write(f'Equity prices skipped: {exc}')
+
+            try:
+                for household in Household.objects.all():
+                    ensure_equities_category(household)
+                caps = update_stock_caps()
+                self.stdout.write(
+                    f"Market caps: {caps['large_cap']} large, {caps['mid_cap']} mid, {caps['small_cap']} small, "
+                    f"{caps['unclassified']} unclassified"
+                )
+            except MfApiError as exc:
+                self.stdout.write(f'Market caps skipped: {exc}')
 
         for household in Household.objects.all():
             summary = bulk_snapshot(household.id, today)

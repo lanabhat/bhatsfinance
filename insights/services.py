@@ -505,6 +505,66 @@ def compute_allocation(household_id: int, as_of: date) -> list[dict]:
     return rows
 
 
+MARKET_CAP_ROWS = [
+    ('large_cap', 'Large Cap'), ('mid_cap', 'Mid Cap'), ('small_cap', 'Small Cap'),
+    ('multi', 'Multi-cap / other equity'), ('unclassified', 'Not classified'),
+]
+
+
+def compute_market_cap_split(household_id: int, as_of: date, member_id: int | None = None) -> dict:
+    """Equity exposure by market cap, stocks and funds together.
+
+    Stocks/ETFs use Investment.market_cap (set from NSE index lists, see
+    fund_data/market_cap.py); funds use their MutualFundDetails sub-category —
+    flexi/multi-cap, ELSS and sectoral funds count as "multi". Debt, liquid,
+    hybrid and gold holdings aren't equity and are left out of the total."""
+    from fund_data.market_cap import NON_EQUITY_ETF, cap_for_fund
+    from instruments.models import Investment, MutualFundDetails
+
+    holdings = [h for h in compute_holdings(household_id, as_of, member_id) if h['market_value'] > 0]
+    inv_ids = [h['investment_id'] for h in holdings if h['investment_id']]
+    stock_caps = dict(Investment.objects.filter(id__in=inv_ids).values_list('id', 'market_cap'))
+    fund_details = {
+        d.investment_id: d for d in MutualFundDetails.objects.filter(investment_id__in=inv_ids)
+    }
+
+    rows = {key: {'key': key, 'label': label, 'stocks': ZERO, 'funds': ZERO, 'holdings': []} for key, label in MARKET_CAP_ROWS}
+    for h in holdings:
+        if h['instrument_type'] == 'equity':
+            kind = 'stock'
+            cap = stock_caps.get(h['investment_id'], '') if h['investment_id'] else ''
+            if not cap and NON_EQUITY_ETF.search(h['investment_name'] or ''):
+                continue  # gold/liquid ETF: not equity exposure
+        elif h['instrument_type'] in ('mutual_fund', 'sip'):
+            kind = 'fund'
+            details = fund_details.get(h['investment_id'])
+            cap = cap_for_fund(details.fund_sub_category, details.fund_category) if details else ''
+            if cap is None:
+                continue  # debt / hybrid / gold fund
+        else:
+            continue
+        row = rows[cap or 'unclassified']
+        row['stocks' if kind == 'stock' else 'funds'] += h['market_value']
+        row['holdings'].append({'name': h['investment_name'] or h['instrument_name'], 'value': h['market_value'], 'kind': kind})
+
+    total = sum((r['stocks'] + r['funds'] for r in rows.values()), start=ZERO)
+    out = []
+    for key, _label in MARKET_CAP_ROWS:
+        r = rows[key]
+        value = r['stocks'] + r['funds']
+        if not value:
+            continue
+        r['holdings'].sort(key=lambda x: x['value'], reverse=True)
+        out.append({
+            **r,
+            'total': value.quantize(Decimal('0.01')),
+            'stocks': r['stocks'].quantize(Decimal('0.01')),
+            'funds': r['funds'].quantize(Decimal('0.01')),
+            'percent': float(round(value / total * 100, 2)) if total else 0.0,
+        })
+    return {'as_of': as_of, 'total': total.quantize(Decimal('0.01')), 'rows': out}
+
+
 def compute_category_breakdown(household_id: int, as_of: date, member_id: int | None = None) -> list[dict]:
     """Group holdings market_value by AssetCategory. Instruments with no category go to Uncategorised."""
     from instruments.models import Instrument

@@ -150,10 +150,19 @@ class MarketPriceRefreshView(APIView):
             equities = write_equity_snapshots(household_id=household_id)
         except MfApiError as exc:
             errors.append(str(exc))
+        caps = None
+        try:
+            from core.models import Household
+            from fund_data.market_cap import ensure_equities_category, update_stock_caps
+            ensure_equities_category(Household.objects.get(pk=household_id))
+            caps = update_stock_caps(household_id)
+        except MfApiError as exc:
+            errors.append(str(exc))
         return Response({
             'funds_linked': linked,
             'funds': {**synced, **funds},
             'equities': equities,
+            'market_caps': caps,
             'errors': errors,
         })
 

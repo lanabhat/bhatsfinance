@@ -261,9 +261,27 @@ export type Investment = {
   symbol: string
   isin: string
   folio_no: string
+  /** Stock/ETF market-cap sub-category, set automatically from NSE index lists. */
+  market_cap?: '' | 'large_cap' | 'mid_cap' | 'small_cap'
+  /** False once set by hand, so automatic refreshes leave it alone. */
+  market_cap_auto?: boolean
   is_active: boolean
   created_at?: string
   updated_at?: string
+}
+
+export type MarketCapSplit = {
+  as_of: string
+  total: string
+  rows: {
+    key: 'large_cap' | 'mid_cap' | 'small_cap' | 'multi' | 'unclassified'
+    label: string
+    total: string
+    stocks: string
+    funds: string
+    percent: number
+    holdings: { name: string; value: string; kind: 'stock' | 'fund' }[]
+  }[]
 }
 
 export type Transaction = {

@@ -339,6 +339,14 @@ class GrowwApplyView(APIView):
             except Exception as e:
                 all_results.append({'filename': f.name, 'member_name': member.full_name, 'error': str(e)})
 
+        # New stocks get their category and market cap now rather than at the next daily refresh.
+        try:
+            from fund_data.market_cap import ensure_equities_category, update_stock_caps
+            ensure_equities_category(household)
+            update_stock_caps(household.id)
+        except Exception:
+            pass  # NSE unreachable — the daily refresh fills it in
+
         return Response(all_results, status=201)
 
 

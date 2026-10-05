@@ -271,6 +271,20 @@ class Investment(TimeStampedModel):
     symbol = models.CharField(max_length=32, blank=True, help_text='Ticker (equity) or AMFI code (mutual fund)')
     isin = models.CharField(max_length=20, blank=True)
     folio_no = models.CharField(max_length=60, blank=True, help_text='Mutual fund folio number')
+
+    class MarketCap(models.TextChoices):
+        LARGE = 'large_cap', 'Large Cap'
+        MID = 'mid_cap', 'Mid Cap'
+        SMALL = 'small_cap', 'Small Cap'
+
+    market_cap = models.CharField(
+        max_length=20, choices=MarketCap.choices, blank=True,
+        help_text='Stock/ETF market-cap sub-category (SEBI: top 100 large, 101–250 mid, rest small). '
+                  'Set automatically from NSE index lists — see fund_data/market_cap.py.',
+    )
+    market_cap_auto = models.BooleanField(
+        default=True, help_text='False once the user sets market_cap by hand, so refreshes leave it alone.',
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:

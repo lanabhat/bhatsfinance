@@ -780,3 +780,37 @@ class PendingSmsBreakdownTests(TestCase):
         self.assertEqual((b['transactions']['ids'][0], b['transactions']['ids'][-1]), (new_tx.id, old_tx.id))
         self.assertEqual((b['transactions']['first_date'], b['transactions']['last_date']), ('2026-10-01', '2026-10-03'))
         self.assertEqual([d['date'] for d in b['transactions']['by_date']], ['2026-10-03', '2026-10-02', '2026-10-01'])
+
+
+class MarketCapSplitTests(TestCase):
+    def test_stocks_and_funds_combined_debt_left_out(self):
+        from datetime import date
+        from decimal import Decimal
+        from core.models import Household
+        from instruments.models import Investment, MutualFundDetails
+        from instruments.services import get_or_create_equity_shell, get_or_create_mf_shell
+        from insights.services import compute_market_cap_split
+        from ledger.models import Transaction
+        household = Household.objects.create(name='Kamath Family 2')
+        eq, mf = get_or_create_equity_shell(household), get_or_create_mf_shell(household)
+
+        def holding(shell, name, amount, cap='', fund=None):
+            inv = Investment.objects.create(instrument=shell, name=name, market_cap=cap)
+            if fund:
+                MutualFundDetails.objects.create(investment=inv, fund_category=fund[0], fund_sub_category=fund[1])
+            Transaction.objects.create(household=household, instrument=shell, investment=inv, tx_date=date(2026, 9, 1),
+                                       amount=Decimal(amount), quantity=Decimal('1'), direction='outflow', transaction_type='buy')
+        holding(eq, 'ITC', '600', cap='large_cap')
+        holding(mf, 'Axis Bluechip', '400', fund=('Equity', 'Large Cap'))
+        holding(mf, 'Kotak Small Cap', '500', fund=('Equity', 'Small Cap'))
+        holding(mf, 'PPFAS Flexi', '500', fund=('Equity', 'Flexi Cap'))
+        holding(mf, 'HDFC Short Term', '9000', fund=('Debt', 'Short Duration'))
+
+        result = compute_market_cap_split(household.id, date(2026, 10, 1))
+        rows = {r['key']: r for r in result['rows']}
+        self.assertEqual(result['total'], Decimal('2000.00'))  # debt fund excluded
+        self.assertEqual((rows['large_cap']['stocks'], rows['large_cap']['funds'], rows['large_cap']['percent']),
+                         (Decimal('600.00'), Decimal('400.00'), 50.0))
+        self.assertEqual(rows['small_cap']['total'], Decimal('500.00'))
+        self.assertEqual(rows['multi']['total'], Decimal('500.00'))
+        self.assertNotIn('mid_cap', rows)

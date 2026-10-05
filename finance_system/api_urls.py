@@ -6,7 +6,7 @@ from insurance.views import InsurancePolicyViewSet, InsuranceSummaryView, Missed
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
 from ingestion.views import CSVImportView, EpfPassbookApplyView, EpfPassbookPreviewView, FDAdviceApplyView, FDAdvicePreviewView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView, NpsApplyView, NpsPreviewView, PpfStatementApplyView, PpfStatementPreviewView, SBIStatementApplyView, SBIStatementPreviewView
-from insights.views import AllocationSuggestionView, AllocationView, AttentionView, CategoryBreakdownView, CashFlowView, DiversificationView, FundPerformanceView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, RebalancingView, SpendAnalyticsView, XIRRView
+from insights.views import AllocationSuggestionView, AllocationView, AttentionView, CategoryBreakdownView, MarketCapSplitView, CashFlowView, DiversificationView, FundPerformanceView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, RebalancingView, SpendAnalyticsView, XIRRView
 from reports.views import StatementExportView, StatementPreviewView
 from instruments.views import (
     AccountBalanceView,
@@ -121,6 +121,7 @@ urlpatterns = [
     path('holdings', HoldingsView.as_view(), name='holdings'),
     path('holdings/history', HoldingsHistoryView.as_view(), name='holdings-history'),
     path('fund-performance', FundPerformanceView.as_view(), name='fund-performance'),
+    path('market-cap-split', MarketCapSplitView.as_view(), name='market-cap-split'),
     path('household-accounts', HouseholdAccountsView.as_view(), name='household-accounts'),
     path('attention', AttentionView.as_view(), name='attention'),
     path('networth', NetWorthView.as_view(), name='networth'),

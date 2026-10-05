@@ -113,6 +113,7 @@ const SUB_CATEGORY_LABELS: Record<string, string> = {
 }
 type HoldingSortBy = 'value' | 'gain' | 'gainPct' | 'name' | 'invested'
 
+const MARKET_CAP_LABELS: Record<string, string> = { large_cap: 'Large Cap', mid_cap: 'Mid Cap', small_cap: 'Small Cap' }
 const MF_TYPES = new Set(['mutual_fund', 'sip'])
 const QUANTITY_TRACKED_TYPES = new Set(['equity', 'mutual_fund', 'sip', 'bond'])
 
@@ -258,6 +259,14 @@ export function HoldingsPage() {
   const afterSell = async () => { close(); await refreshDashboard(); await loadInstruments(); await loadInvestments(); await loadOwnerships() }
   const afterValuation = async () => { close(); await refreshDashboard() }
 
+  // Stocks/ETFs: their market cap (set from NSE index lists), so they group with
+  // same-cap funds.
+  const capLabelByInvestment = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const inv of investments) if (inv.market_cap) m.set(inv.id, MARKET_CAP_LABELS[inv.market_cap])
+    return m
+  }, [investments])
+
   // MF/SIP sub-category lives on MutualFundDetails (the shared MF shell's own
   // sub_category is the same for every fund); other types use the instrument's.
   const subCategoryOf = useCallback((h: DashboardHolding): string => {
@@ -265,9 +274,11 @@ export function HoldingsPage() {
       const details = mfDetailsByInvestment.get(h.investment_id)
       return details?.fund_sub_category || details?.fund_category || 'Uncategorised'
     }
+    const cap = h.investment_id ? capLabelByInvestment.get(h.investment_id) : undefined
+    if (cap) return cap
     const inst = instruments.find((i) => i.id === h.instrument_id)
     return inst?.sub_category ? (SUB_CATEGORY_LABELS[inst.sub_category] ?? inst.sub_category) : 'Uncategorised'
-  }, [mfDetailsByInvestment, instruments])
+  }, [mfDetailsByInvestment, instruments, capLabelByInvestment])
 
   // "Fund Category" grouping key: a fund's sub-category, else the holding's type.
   const fundGroupKeyOf = useCallback((h: DashboardHolding): string => {
@@ -275,8 +286,10 @@ export function HoldingsPage() {
       const details = mfDetailsByInvestment.get(h.investment_id)
       return details?.fund_sub_category || details?.fund_category || 'Uncategorised'
     }
+    const cap = h.investment_id ? capLabelByInvestment.get(h.investment_id) : undefined
+    if (cap) return cap
     return TYPE_LABELS[h.instrument_type] ?? h.instrument_type
-  }, [mfDetailsByInvestment])
+  }, [mfDetailsByInvestment, capLabelByInvestment])
 
   const ownerLabelsByInstrument = useMemo(() => {
     const m = new Map<number, string[]>()

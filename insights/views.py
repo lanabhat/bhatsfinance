@@ -109,6 +109,19 @@ class CategoryBreakdownView(APIView):
         return Response({'breakdown': compute_category_breakdown(int(household_id), as_of, _get_member_id(request))})
 
 
+class MarketCapSplitView(APIView):
+    """Equity exposure by market cap (stocks + funds) for the Home "Market cap split" card."""
+
+    def get(self, request):
+        from insights.services import compute_market_cap_split
+
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        as_of = date.fromisoformat(request.query_params['as_of']) if request.query_params.get('as_of') else date.today()
+        return Response(compute_market_cap_split(int(household_id), as_of, _get_member_id(request)))
+
+
 class RebalancingView(APIView):
     def get(self, request):
         household_id = request.query_params.get('household_id')

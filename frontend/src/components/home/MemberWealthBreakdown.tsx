@@ -15,6 +15,8 @@ type Props = {
    * of lumping every fund under one "Mutual Fund" bucket. Optional — when
    * omitted, MF holdings fall back to the plain asset-category grouping. */
   mfDetailsByInvestment?: Map<number, MutualFundDetails>
+  /** Stock/ETF market cap by Investment id ('large_cap' | 'mid_cap' | 'small_cap'). */
+  capByInvestment?: Map<number, string>
 }
 
 type Bucket = {
@@ -36,6 +38,12 @@ const TYPE_ICON: Record<string, string> = {
 // Deterministic shade of the base mutual_fund blue per sub-category name, so
 // "Large Cap", "Mid Cap", "Debt", "Corporate Bond" etc. read as distinct but
 // related colors rather than all sharing one flat blue.
+const STOCK_CAPS: Record<string, { label: string; color: string }> = {
+  large_cap: { label: 'Large Cap', color: '#15803d' },
+  mid_cap: { label: 'Mid Cap', color: '#22c55e' },
+  small_cap: { label: 'Small Cap', color: '#86efac' },
+}
+
 const MF_SUBCATEGORY_SHADES = ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#1e40af', '#0ea5e9']
 function mfShade(label: string): string {
   let hash = 0
@@ -43,7 +51,7 @@ function mfShade(label: string): string {
   return MF_SUBCATEGORY_SHADES[hash % MF_SUBCATEGORY_SHADES.length]
 }
 
-export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTotal, householdTotal, categories, mfDetailsByInvestment }: Props) {
+export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTotal, householdTotal, categories, mfDetailsByInvestment, capByInvestment }: Props) {
   const categoryMap = useMemo(() => {
     const m = new Map<number, AssetCategory>()
     categories.forEach((c) => m.set(c.id, c))
@@ -68,7 +76,14 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
       let key: string, label: string, color: string, icon: string
       const isMf = h.instrument_type === 'mutual_fund' || h.instrument_type === 'sip'
       const mfDetails = isMf && h.investment_id ? mfDetailsByInvestment?.get(h.investment_id) : undefined
-      if (isMf) {
+      const stockCap = h.instrument_type === 'equity' && h.investment_id ? capByInvestment?.get(h.investment_id) : undefined
+      if (stockCap && STOCK_CAPS[stockCap]) {
+        // Stocks split by market cap, like funds by sub-category.
+        key = `stock_${stockCap}`
+        label = `Stocks · ${STOCK_CAPS[stockCap].label}`
+        color = STOCK_CAPS[stockCap].color
+        icon = '📈'
+      } else if (isMf) {
         const subLabel = mfDetails?.fund_sub_category || mfDetails?.fund_category || 'Uncategorised'
         key = `mf_${subLabel.toLowerCase()}`
         label = subLabel
@@ -113,7 +128,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
     }
 
     return Array.from(map.values()).sort((a, b) => b.value - a.value)
-  }, [holdings, accounts, categoryMap, mfDetailsByInvestment])
+  }, [holdings, accounts, categoryMap, mfDetailsByInvestment, capByInvestment])
 
   const positiveTotal = useMemo(() => buckets.reduce((s, b) => s + Math.max(b.value, 0), 0), [buckets])
 

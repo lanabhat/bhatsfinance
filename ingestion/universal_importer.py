@@ -479,6 +479,11 @@ def _get_or_create_broker_account(household, broker_name: str):
     return account
 
 
+def equities_category(household):
+    from fund_data.market_cap import equities_category as _equities
+    return _equities(household)
+
+
 def _get_asset_category(household, name: str):
     """Look up an AssetCategory by name for the household, case-insensitive."""
     from instruments.models import AssetCategory
@@ -1391,7 +1396,7 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
     member_label = member.full_name if member else None
     account_name = f'Groww ({member_label})' if member_label else 'Groww'
     groww_account = _get_or_create_broker_account(household, account_name)
-    stocks_category = _get_asset_category(household, 'Stocks')
+    stocks_category = equities_category(household)  # "Equities" or "Stocks"
     mf_category = _get_asset_category(household, 'Mutual Fund')
 
     # ── Stocks ────────────────────────────────────────────────────────────────
@@ -1624,7 +1629,7 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
     member_label = member.full_name if member else None
     account_name = f'Upstox ({member_label})' if member_label else 'Upstox'
     upstox_account = _get_or_create_broker_account(household, account_name)
-    stocks_category = _get_asset_category(household, 'Stocks')
+    stocks_category = equities_category(household)  # "Equities" or "Stocks"
 
     # Same shared "Equity" shell + per-member Investment pattern as
     # apply_groww_import's stocks section above — see get_or_create_equity_shell()'s

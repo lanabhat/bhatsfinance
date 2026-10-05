@@ -516,3 +516,67 @@ class SifMirrorFallbackTests(TestCase):
         with patch('fund_data.amfi_sif_client.requests.get', return_value=MagicMock(ok=False, status_code=403, text='')):
             with self.assertRaises(MfApiError):
                 amfi_sif_client.search_sifs('qsif')
+
+
+_NIFTY100_CSV = 'Company Name,Industry,Symbol,Series,ISIN Code\nITC Ltd.,FMCG,ITC,EQ,INE154A01025\n'
+_MIDCAP150_CSV = 'Company Name,Industry,Symbol,Series,ISIN Code\nPolycab India Ltd.,Capital Goods,POLYCAB,EQ,INE455K01017\n'
+
+
+class MarketCapTests(TestCase):
+    def setUp(self):
+        from unittest.mock import MagicMock, patch
+        from fund_data import market_cap
+        market_cap._cache.update({'at': 0.0, 'caps': None})
+        self.addCleanup(market_cap._cache.update, {'at': 0.0, 'caps': None})
+        responses = {
+            market_cap.LIST_URLS[market_cap.LARGE]: _NIFTY100_CSV,
+            market_cap.LIST_URLS[market_cap.MID]: _MIDCAP150_CSV,
+        }
+        patcher = patch('fund_data.market_cap.requests.get',
+                        side_effect=lambda url, **kw: MagicMock(ok=True, status_code=200, content=responses[url].encode()))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_stock_caps_follow_sebi_bands(self):
+        from fund_data.market_cap import cap_for_stock, fetch_cap_lists
+        lists = fetch_cap_lists()
+        self.assertEqual(cap_for_stock('INE154A01025', 'ITC', lists), 'large_cap')
+        self.assertEqual(cap_for_stock('INE455K01017', 'POLYCAB', lists), 'mid_cap')
+        self.assertEqual(cap_for_stock('INE039O01029', 'JASH ENGINEERING', lists), 'small_cap')
+        self.assertEqual(cap_for_stock('INE658F08565', 'KIIFB 9.30 2032', lists), '')  # bond
+        self.assertEqual(cap_for_stock('INF109KC1NS5', 'ICICI NIFTY NXT50ETF', lists), 'large_cap')
+        self.assertEqual(cap_for_stock('INF204KB1V68', 'NIP IND ETF MIDCAP 150', lists), 'mid_cap')
+        self.assertEqual(cap_for_stock('INF0R8F01042', 'ZERODHA GLD ETF D-GR', lists), '')
+        self.assertEqual(cap_for_stock('INF732E01037', 'NIP ETNF1D RTLIQBEES', lists), '')
+
+    def test_fund_caps(self):
+        from fund_data.market_cap import cap_for_fund
+        self.assertEqual(cap_for_fund('Large Cap', 'Equity'), 'large_cap')
+        self.assertEqual(cap_for_fund('Nifty 50 Index', 'Equity'), 'large_cap')
+        self.assertEqual(cap_for_fund('Mid Cap', 'Equity'), 'mid_cap')
+        self.assertEqual(cap_for_fund('Large & Mid Cap', 'Equity'), 'multi')
+        self.assertEqual(cap_for_fund('Flexi Cap', 'Equity'), 'multi')
+        self.assertIsNone(cap_for_fund('Short Duration', 'Debt'))
+        self.assertIsNone(cap_for_fund('Gold', 'Commodities'))
+        self.assertEqual(cap_for_fund('', ''), '')
+
+    def test_update_keeps_manual_caps_and_sets_category(self):
+        from instruments.models import AssetCategory
+        from instruments.services import get_or_create_equity_shell
+        from fund_data.market_cap import ensure_equities_category, update_stock_caps
+        household = Household.objects.create(name='Kini Family')
+        shell = get_or_create_equity_shell(household)
+        auto = Investment.objects.create(instrument=shell, name='ITC LTD', symbol='INE154A01025')
+        manual = Investment.objects.create(instrument=shell, name='JASH ENGINEERING', symbol='INE039O01029',
+                                           market_cap='mid_cap', market_cap_auto=False)
+        counts = update_stock_caps(household.id)
+        auto.refresh_from_db()
+        manual.refresh_from_db()
+        self.assertEqual((auto.market_cap, manual.market_cap), ('large_cap', 'mid_cap'))
+        self.assertEqual(counts['large_cap'], 1)
+
+        existing = AssetCategory.objects.create(household=household, name='Equities')
+        self.assertTrue(ensure_equities_category(household))
+        shell.refresh_from_db()
+        self.assertEqual(shell.asset_category_id, existing.id)
+        self.assertFalse(ensure_equities_category(household))  # already set
