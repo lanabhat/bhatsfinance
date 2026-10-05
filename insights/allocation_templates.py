@@ -94,9 +94,10 @@ def suggest_category_targets(household_id: int, as_of: date, age: int, equity_ba
     category_composition: dict[int, dict] = {}
     for h in holdings:
         inst = instruments_by_id.get(h['instrument_id'])
-        if inst is None or inst.asset_category_id is None:
+        # The holding's own category (e.g. Large Cap for one stock), else its instrument's.
+        if inst is None or h['asset_category'] is None:
             continue
-        cat_id = inst.asset_category_id
+        cat_id = h['asset_category']
         entry = category_composition.setdefault(cat_id, {'equity_value': ZERO, 'debt_value': ZERO, 'other_value': ZERO})
         classification = classification_by_investment.get(h['investment_id']) if h['investment_id'] else None
         bucket = _holding_bucket(inst, classification)

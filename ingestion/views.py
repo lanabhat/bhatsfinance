@@ -341,9 +341,10 @@ class GrowwApplyView(APIView):
 
         # New stocks get their category and market cap now rather than at the next daily refresh.
         try:
-            from fund_data.market_cap import ensure_equities_category, update_stock_caps
+            from fund_data.market_cap import assign_cap_categories, ensure_equities_category, update_stock_caps
             ensure_equities_category(household)
             update_stock_caps(household.id)
+            assign_cap_categories(household)
         except Exception:
             pass  # NSE unreachable — the daily refresh fills it in
 

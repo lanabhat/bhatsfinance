@@ -638,3 +638,34 @@ class ReclassifyHoldingTests(TestCase):
         tx = Transaction.objects.get(amount=Decimal('99120'))
         self.assertEqual((tx.instrument_id, tx.investment_id), (bond.id, None))
         self.assertTrue(InstrumentOwnership.objects.filter(instrument=bond, member=self.member).exists())
+
+
+class EquityShellCategoryMigrationTests(TestCase):
+    """instruments/migrations/0021: stocks get a category on deploy, not only after a price refresh."""
+
+    def _run(self):
+        import importlib
+        from django.apps import apps
+        importlib.import_module('instruments.migrations.0021_equity_shell_category').forwards(apps, None)
+
+    def test_reuses_existing_category_and_leaves_set_shells_alone(self):
+        household = Household.objects.create(name='Nayak Family')
+        shell = get_or_create_equity_shell(household)
+        equities = AssetCategory.objects.create(household=household, name='Equities')
+        other_household = Household.objects.create(name='Prabhu Family')
+        other_shell = get_or_create_equity_shell(other_household)
+        custom = AssetCategory.objects.create(household=other_household, name='My Stocks')
+        other_shell.asset_category = custom
+        other_shell.save()
+
+        self._run()
+        shell.refresh_from_db()
+        other_shell.refresh_from_db()
+        self.assertEqual((shell.asset_category_id, other_shell.asset_category_id), (equities.id, custom.id))
+
+    def test_creates_equities_when_missing(self):
+        household = Household.objects.create(name='Rai Family')
+        shell = get_or_create_equity_shell(household)
+        self._run()
+        shell.refresh_from_db()
+        self.assertEqual(shell.asset_category.name, 'Equities')

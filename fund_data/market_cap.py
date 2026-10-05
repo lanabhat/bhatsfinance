@@ -156,3 +156,151 @@ def equities_category(household, create: bool = False):
     if create:
         return AssetCategory.objects.create(household=household, name='Equities', color='#16a34a')
     return None
+
+
+CAP_CATEGORY_NAMES = {LARGE: 'Large Cap', MID: 'Mid Cap', SMALL: 'Small Cap'}
+_CAP_CATEGORY_COLORS = {LARGE: '#4f46e5', MID: '#0ea5e9', SMALL: '#f59e0b'}
+
+
+def cap_categories(household) -> dict:
+    """{'large_cap': AssetCategory, …}, creating the household's Large/Mid/Small Cap categories if missing."""
+    from django.db.models import Max
+    from instruments.models import AssetCategory
+
+    result = {}
+    next_order = (AssetCategory.objects.filter(household=household).aggregate(m=Max('sort_order'))['m'] or 0) + 1
+    for cap, name in CAP_CATEGORY_NAMES.items():
+        category = AssetCategory.objects.filter(household=household, name__iexact=name).first()
+        if category is None:
+            category = AssetCategory.objects.create(household=household, name=name, color=_CAP_CATEGORY_COLORS[cap],
+                                                    sort_order=next_order)
+            next_order += 1
+        result[cap] = category
+    return result
+
+
+def _named_category(household, *names):
+    from instruments.models import AssetCategory
+    for name in names:
+        found = AssetCategory.objects.filter(household=household, name__iexact=name).first()
+        if found:
+            return found
+    return None
+
+
+def assign_cap_categories(household) -> dict:
+    """Put each stock/ETF and equity fund in its market-cap category (Large/Mid/Small
+    Cap), leaving holdings the user categorised by hand alone. Gold/liquid ETFs go to
+    the household's Gold / Liquid Cash category; diversified, debt and hybrid funds
+    keep their instrument's category ("Mutual Fund").
+
+    The first time any holding moves into a cap category, allocation targets are
+    re-expressed in the new categories at the current mix — an old category's target
+    is shared out in proportion to the value that moved — so the overall intended
+    allocation is unchanged. Targets are never changed automatically after that."""
+    from collections import defaultdict
+    from datetime import date
+    from decimal import Decimal
+
+    from django.db import transaction as db_transaction
+
+    from insights.services import compute_holdings
+    from instruments.models import AllocationTarget, Instrument, Investment, MutualFundDetails
+
+    caps = cap_categories(household)
+    gold = _named_category(household, 'Gold')
+    liquid = _named_category(household, 'Liquid Cash', 'Liquid', 'Cash')
+
+    holdings = compute_holdings(household.id, date.today())
+    value_by_investment = {h['investment_id']: h['market_value'] for h in holdings if h['investment_id']}
+    category_before = {h['investment_id']: h['asset_category'] for h in holdings if h['investment_id']}
+    value_by_category: dict = defaultdict(Decimal)
+    for h in holdings:
+        value_by_category[h['asset_category']] += h['market_value']
+    first_time = not AllocationTarget.objects.filter(household=household, asset_category__in=caps.values()).exists()
+
+    fund_details = {d.investment_id: d for d in MutualFundDetails.objects.filter(investment__instrument__household=household)}
+    moves: dict = defaultdict(Decimal)
+    counts = {'assigned': 0, 'unchanged': 0}
+    with db_transaction.atomic():
+        investments = Investment.objects.filter(instrument__household=household, category_auto=True).select_related('instrument')
+        for inv in investments:
+            kind = inv.instrument.instrument_type
+            if kind == Instrument.InstrumentType.EQUITY:
+                target = caps.get(inv.market_cap)
+                if target is None and NON_EQUITY_ETF.search(inv.name or ''):
+                    target = gold if re.search(r'gold|gld', inv.name, re.I) else liquid if re.search(r'liq', inv.name, re.I) else None
+            elif kind in (Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP):
+                details = fund_details.get(inv.id)
+                target = caps.get(cap_for_fund(details.fund_sub_category, details.fund_category)) if details else None
+            else:
+                continue
+            new_id = target.id if target else None
+            if inv.asset_category_id == new_id:
+                counts['unchanged'] += 1
+                continue
+            inv.asset_category_id = new_id
+            inv.save(update_fields=['asset_category', 'updated_at'])
+            counts['assigned'] += 1
+            old_effective = category_before.get(inv.id)
+            new_effective = new_id or inv.instrument.asset_category_id
+            if inv.id in value_by_investment and old_effective != new_effective and new_effective:
+                moves[(old_effective, new_effective)] += value_by_investment[inv.id]
+
+        target_changes = _convert_targets(household, moves, value_by_category) if first_time and moves else []
+    return {**counts, 'target_changes': target_changes}
+
+
+def _convert_targets(household, moves: dict, value_by_category: dict) -> list[dict]:
+    """Share each old category's target out to the categories its holdings moved to,
+    in proportion to the value moved. Returns what changed."""
+    from collections import defaultdict
+    from decimal import Decimal
+
+    from instruments.models import AllocationTarget
+
+    targets = {t.asset_category_id: t for t in AllocationTarget.objects.filter(household=household).select_related('asset_category')}
+    shares: dict = defaultdict(Decimal)
+    for (old, new), value in moves.items():
+        target = targets.get(old)
+        if target is None or not value_by_category.get(old):
+            continue
+        shares[(old, new)] += target.target_percent * value / value_by_category[old]
+    # Don't create a new target for a sliver (e.g. 0.02% for one small liquid ETF);
+    # that share simply stays with the category it came from.
+    gained_total: dict = defaultdict(Decimal)
+    for (_old, new), share in shares.items():
+        gained_total[new] += share
+    gained: dict = defaultdict(Decimal)
+    lost: dict = defaultdict(Decimal)
+    for (old, new), share in shares.items():
+        if new not in targets and gained_total[new] < Decimal('0.05'):
+            continue
+        lost[old] += share
+        gained[new] += share
+
+    changes = []
+    cent = Decimal('0.01')
+    for cat_id, share in lost.items():
+        target = targets[cat_id]
+        before = target.target_percent
+        remaining = (before - share).quantize(cent)
+        if remaining <= Decimal('0.05'):
+            target.delete()
+            remaining = Decimal('0')
+        else:
+            target.target_percent = remaining
+            target.save(update_fields=['target_percent', 'updated_at'])
+        changes.append({'category': target.asset_category.name, 'from': str(before), 'to': str(remaining)})
+    for cat_id, share in gained.items():
+        target = targets.get(cat_id)
+        if target is not None and target.pk is not None:  # pk is None once deleted above
+            target.refresh_from_db(fields=['target_percent'])
+            before = target.target_percent
+            target.target_percent = (before + share).quantize(cent)
+            target.save(update_fields=['target_percent', 'updated_at'])
+        else:
+            before = Decimal('0')
+            target = AllocationTarget.objects.create(household=household, asset_category_id=cat_id, target_percent=share.quantize(cent))
+        changes.append({'category': target.asset_category.name, 'from': str(before), 'to': str(target.target_percent)})
+    return changes

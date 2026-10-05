@@ -155,6 +155,7 @@ class InvestmentSerializer(serializers.ModelSerializer):
         model = Investment
         fields = [
             'id', 'instrument', 'member', 'name', 'symbol', 'isin', 'folio_no', 'market_cap', 'market_cap_auto',
+            'asset_category', 'category_auto',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

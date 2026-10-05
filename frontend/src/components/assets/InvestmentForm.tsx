@@ -18,7 +18,7 @@ function firstErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-const CAP_LABEL: Record<string, string> = { large_cap: 'Large Cap', mid_cap: 'Mid Cap', small_cap: 'Small Cap' }
+const CAP_BY_CATEGORY_NAME: Record<string, Investment['market_cap']> = { 'large cap': 'large_cap', 'mid cap': 'mid_cap', 'small cap': 'small_cap' }
 
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -38,7 +38,7 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
   onSave: () => void
   onCancel: () => void
 }) {
-  const { members, instrumentsFull } = useApp()
+  const { members, instrumentsFull, categories } = useApp()
   const isStock = isEquityInvestment(investment, instrumentsFull)
   const [form, setForm] = useState<Omit<Investment, 'id'>>({
     instrument: investment.instrument,
@@ -49,8 +49,13 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
     folio_no: investment.folio_no,
     market_cap: investment.market_cap ?? '',
     market_cap_auto: investment.market_cap_auto ?? true,
+    asset_category: investment.asset_category ?? null,
+    category_auto: investment.category_auto ?? true,
     is_active: investment.is_active,
   })
+  // What "Auto" currently resolves to: the holding's own category if one was assigned automatically.
+  const autoCategoryName = investment.category_auto !== false && investment.asset_category
+    ? categories.find((c) => c.id === investment.asset_category)?.name : undefined
   const [mfForm, setMfForm] = useState<MfForm>(EMPTY_MF_FORM)
   const [existingMfDetailsId, setExistingMfDetailsId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
@@ -95,24 +100,35 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
         <input className={INP} value={form.symbol} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} /></div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">ISIN</label>
         <input className={INP} value={form.isin} onChange={(e) => setForm((p) => ({ ...p, isin: e.target.value }))} /></div>
-      {isStock && (
-        <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Market cap</label>
-          <select className={INP}
-            value={form.market_cap_auto ? 'auto' : form.market_cap || 'auto'}
-            onChange={(e) => {
-              const v = e.target.value
-              setForm((p) => v === 'auto'
-                ? { ...p, market_cap_auto: true }
-                : { ...p, market_cap: v as Investment['market_cap'], market_cap_auto: false })
-            }}>
-            <option value="auto">Auto{investment.market_cap_auto !== false && investment.market_cap ? ` (${CAP_LABEL[investment.market_cap]})` : ''}</option>
-            <option value="large_cap">Large Cap</option>
-            <option value="mid_cap">Mid Cap</option>
-            <option value="small_cap">Small Cap</option>
-          </select>
-          <p className="mt-1 text-[11px] text-[var(--text-muted)]">Auto follows NSE's Nifty 100 / Midcap 150 lists (SEBI bands), refreshed daily.</p>
-        </div>
-      )}
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Type</label>
+        <p className="rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-2)]">{isStock ? 'Equity' : 'Mutual Fund'}</p></div>
+      <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Category</label>
+        <select className={INP}
+          value={form.category_auto ? 'auto' : String(form.asset_category ?? '')}
+          onChange={(e) => {
+            const v = e.target.value
+            if (v === 'auto') {
+              setForm((p) => ({ ...p, category_auto: true, market_cap_auto: true }))
+              return
+            }
+            const id = v ? Number(v) : null
+            // Picking a cap category on a stock also fixes its market cap, so the cap split agrees.
+            const cap = isStock ? CAP_BY_CATEGORY_NAME[categories.find((c) => c.id === id)?.name.toLowerCase() ?? ''] : undefined
+            setForm((p) => ({
+              ...p, asset_category: id, category_auto: false,
+              ...(cap ? { market_cap: cap, market_cap_auto: false } : {}),
+            }))
+          }}>
+          <option value="auto">Auto{autoCategoryName ? ` (${autoCategoryName})` : ''}</option>
+          <option value="">— Group default ({isStock ? 'Equity' : 'Mutual Fund'} group) —</option>
+          {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+        </select>
+        <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+          {isStock
+            ? "Auto puts the stock in Large / Mid / Small Cap by NSE's Nifty 100 / Midcap 150 lists (SEBI bands), refreshed daily."
+            : 'Auto puts large, mid and small cap funds in those categories; other funds stay in their group (e.g. Mutual Fund).'}
+        </p>
+      </div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Owner</label>
         <select className={INP} value={form.member ?? ''} onChange={(e) => setForm((p) => ({ ...p, member: e.target.value ? Number(e.target.value) : null }))}>
           <option value="">— Unassigned —</option>

@@ -265,6 +265,10 @@ export type Investment = {
   market_cap?: '' | 'large_cap' | 'mid_cap' | 'small_cap'
   /** False once set by hand, so automatic refreshes leave it alone. */
   market_cap_auto?: boolean
+  /** This holding's own category (e.g. Large Cap), overriding its instrument's. */
+  asset_category?: number | null
+  /** False once the category is picked by hand. */
+  category_auto?: boolean
   is_active: boolean
   created_at?: string
   updated_at?: string
@@ -411,6 +415,8 @@ export type DashboardHolding = {
   instrument_name: string
   instrument_type: string
   asset_category: number | null
+  /** 'investment' when the holding has its own category (e.g. Large Cap), else 'instrument'. */
+  asset_category_source?: 'investment' | 'instrument'
   /** Set only for holdings backed by a specific Investment under a shared
    * shell Instrument (currently: mutual_fund/sip) — null for holdings where
    * the Instrument itself is the whole holding (FD/bond/equity/etc.). */

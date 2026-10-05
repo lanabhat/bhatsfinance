@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand
 
 from core.models import Household
 from fund_data.equity_prices import link_funds_by_isin, write_equity_snapshots
-from fund_data.market_cap import ensure_equities_category, update_stock_caps
+from fund_data.market_cap import assign_cap_categories, ensure_equities_category, update_stock_caps
 from fund_data.mfapi_client import MfApiError
 from fund_data.navs import sync_navs, write_nav_snapshots
 from valuations.services import bulk_snapshot
@@ -67,6 +67,11 @@ class Command(BaseCommand):
                     f"Market caps: {caps['large_cap']} large, {caps['mid_cap']} mid, {caps['small_cap']} small, "
                     f"{caps['unclassified']} unclassified"
                 )
+                for household in Household.objects.all():
+                    assigned = assign_cap_categories(household)
+                    self.stdout.write(f"{household.name}: {assigned['assigned']} holding(s) moved to cap categories")
+                    for change in assigned['target_changes']:
+                        self.stdout.write(f"  target {change['category']}: {change['from']}% -> {change['to']}%")
             except MfApiError as exc:
                 self.stdout.write(f'Market caps skipped: {exc}')
 

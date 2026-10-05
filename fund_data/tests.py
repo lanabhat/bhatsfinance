@@ -580,3 +580,66 @@ class MarketCapTests(TestCase):
         shell.refresh_from_db()
         self.assertEqual(shell.asset_category_id, existing.id)
         self.assertFalse(ensure_equities_category(household))  # already set
+
+
+class CapCategoryTests(TestCase):
+    def setUp(self):
+        from instruments.models import AllocationTarget, AssetCategory, MutualFundDetails
+        from instruments.services import get_or_create_equity_shell
+        from ledger.models import Transaction
+        self.household = Household.objects.create(name='Bhandary Family')
+        self.equities = AssetCategory.objects.create(household=self.household, name='Equities')
+        self.mf_category = AssetCategory.objects.create(household=self.household, name='Mutual Fund')
+        self.gold = AssetCategory.objects.create(household=self.household, name='Gold')
+        self.eq_shell = get_or_create_equity_shell(self.household)
+        self.eq_shell.asset_category = self.equities
+        self.eq_shell.save()
+        self.mf_shell = get_or_create_mf_shell(self.household)
+        self.mf_shell.asset_category = self.mf_category
+        self.mf_shell.save()
+        AllocationTarget.objects.create(household=self.household, asset_category=self.equities, target_percent=Decimal('20'))
+        AllocationTarget.objects.create(household=self.household, asset_category=self.mf_category, target_percent=Decimal('40'))
+
+        def holding(shell, name, amount, cap='', fund=None, **extra):
+            inv = Investment.objects.create(instrument=shell, name=name, market_cap=cap, **extra)
+            if fund:
+                MutualFundDetails.objects.create(investment=inv, fund_category=fund[0], fund_sub_category=fund[1])
+            Transaction.objects.create(household=self.household, instrument=shell, investment=inv, tx_date=date(2026, 9, 1),
+                                       amount=Decimal(amount), quantity=Decimal('1'), direction='outflow', transaction_type='buy')
+            return inv
+        self.itc = holding(self.eq_shell, 'ITC', '600', cap='large_cap')
+        self.polycab = holding(self.eq_shell, 'POLYCAB', '100', cap='mid_cap')
+        self.jash = holding(self.eq_shell, 'JASH', '300', cap='small_cap')
+        self.large_fund = holding(self.mf_shell, 'Axis Bluechip', '500', fund=('Equity', 'Large Cap'))
+        self.flexi = holding(self.mf_shell, 'PPFAS Flexi', '500', fund=('Equity', 'Flexi Cap'))
+        self.manual = holding(self.mf_shell, 'Kotak Small Cap', '0.01', fund=('Equity', 'Small Cap'),
+                              asset_category=self.gold, category_auto=False)
+
+    def _targets(self):
+        from instruments.models import AllocationTarget
+        return {t.asset_category.name: t.target_percent for t in AllocationTarget.objects.filter(household=self.household)}
+
+    def test_assigns_caps_and_converts_targets_once(self):
+        from fund_data.market_cap import assign_cap_categories
+        result = assign_cap_categories(self.household)
+        for inv in (self.itc, self.polycab, self.jash, self.large_fund, self.flexi, self.manual):
+            inv.refresh_from_db()
+        self.assertEqual([i.asset_category.name if i.asset_category else None for i in (self.itc, self.polycab, self.jash, self.large_fund, self.flexi)],
+                         ['Large Cap', 'Mid Cap', 'Small Cap', 'Large Cap', None])
+        self.assertEqual(self.manual.asset_category_id, self.gold.id)  # picked by hand: left alone
+        # Equities 20% split 60/10/30 by stock value; Mutual Fund 40% gives half to Large Cap.
+        self.assertEqual(self._targets(), {'Mutual Fund': Decimal('20.00'), 'Large Cap': Decimal('32.00'),
+                                           'Mid Cap': Decimal('2.00'), 'Small Cap': Decimal('6.00')})
+        self.assertTrue(result['target_changes'])
+        self.assertEqual(assign_cap_categories(self.household)['target_changes'], [])
+
+    def test_holdings_and_breakdown_use_the_holdings_own_category(self):
+        from fund_data.market_cap import assign_cap_categories
+        from insights.services import compute_category_breakdown, compute_holdings
+        assign_cap_categories(self.household)
+        by_inv = {h['investment_id']: h for h in compute_holdings(self.household.id, date(2026, 10, 1))}
+        self.assertEqual((by_inv[self.itc.id]['asset_category_source'], by_inv[self.flexi.id]['asset_category']),
+                         ('investment', self.mf_category.id))
+        breakdown = {r['category_name']: r['market_value'] for r in compute_category_breakdown(self.household.id, date(2026, 10, 1))}
+        self.assertEqual(breakdown['Large Cap'], '1100.00')
+        self.assertEqual(breakdown['Mutual Fund'], '500.00')

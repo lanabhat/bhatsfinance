@@ -250,7 +250,11 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
                 'instrument_id': tx.instrument_id,
                 'instrument_name': tx.instrument.name,
                 'instrument_type': tx.instrument.instrument_type,
-                'asset_category': tx.instrument.asset_category_id,
+                # A holding's own category (e.g. Large Cap for one stock) wins over its shared shell's.
+                'asset_category': (tx.investment.asset_category_id if tx.investment_id and tx.investment.asset_category_id
+                                   else tx.instrument.asset_category_id),
+                'asset_category_source': ('investment' if tx.investment_id and tx.investment.asset_category_id
+                                          else 'instrument'),
                 'investment_id': tx.investment_id,
                 'investment_name': tx.investment.name if tx.investment_id else None,
                 'quantity': Decimal('0'),
@@ -566,20 +570,19 @@ def compute_market_cap_split(household_id: int, as_of: date, member_id: int | No
 
 
 def compute_category_breakdown(household_id: int, as_of: date, member_id: int | None = None) -> list[dict]:
-    """Group holdings market_value by AssetCategory. Instruments with no category go to Uncategorised."""
-    from instruments.models import Instrument
+    """Group holdings market_value by AssetCategory — the holding's own category
+    (e.g. Large Cap for one stock) when set, else its instrument's. Holdings with
+    neither go to Uncategorised."""
+    from instruments.models import AssetCategory
     holdings = compute_holdings(household_id, as_of, member_id)
     if not holdings:
         return []
 
-    instrument_ids = [h['instrument_id'] for h in holdings]
-    cat_by_instrument: dict[int, object] = {}
-    for inst in Instrument.objects.filter(id__in=instrument_ids).select_related('asset_category'):
-        cat_by_instrument[inst.id] = inst.asset_category
+    categories = {c.id: c for c in AssetCategory.objects.filter(household_id=household_id)}
 
     grouped: dict = {}
     for h in holdings:
-        cat = cat_by_instrument.get(h['instrument_id'])
+        cat = categories.get(h['asset_category'])
         if cat:
             key = cat.id
             if key not in grouped:
@@ -644,10 +647,12 @@ def compute_rebalancing(household_id: int, as_of: date) -> dict:
             continue
         included_holdings.append(h)
 
+    from instruments.models import AssetCategory
+    categories = {c.id: c for c in AssetCategory.objects.filter(household_id=household_id)}
+
     grouped: dict = {}
     for h in included_holdings:
-        inst = instruments_by_id.get(h['instrument_id'])
-        cat = inst.asset_category if inst else None
+        cat = categories.get(h['asset_category'])  # the holding's own category, else its instrument's
         key = cat.id if cat else None
         if key not in grouped:
             grouped[key] = {

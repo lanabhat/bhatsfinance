@@ -153,9 +153,10 @@ class MarketPriceRefreshView(APIView):
         caps = None
         try:
             from core.models import Household
-            from fund_data.market_cap import ensure_equities_category, update_stock_caps
-            ensure_equities_category(Household.objects.get(pk=household_id))
-            caps = update_stock_caps(household_id)
+            from fund_data.market_cap import assign_cap_categories, ensure_equities_category, update_stock_caps
+            household = Household.objects.get(pk=household_id)
+            ensure_equities_category(household)
+            caps = {**update_stock_caps(household_id), **assign_cap_categories(household)}
         except MfApiError as exc:
             errors.append(str(exc))
         return Response({

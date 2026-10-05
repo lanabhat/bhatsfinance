@@ -26,7 +26,6 @@ import { fdDetailsApi } from '../api/fdDetailsApi'
 import { bondDetailsApi } from '../api/bondDetailsApi'
 import { insuranceApi } from '../api/insuranceApi'
 import { portfolioApi } from '../api/portfolioApi'
-import { investmentApi } from '../api/investmentApi'
 import { getJson, toQueryString } from '../api/http'
 import type { BondCouponDue, CategoryBreakdownItem, DashboardHolding, InsuranceSummary, MaturingBond, MaturingFD, MemberAccount, MutualFundDetails } from '../types/domain'
 
@@ -108,15 +107,6 @@ export function HomePage({ onNavigate }: Props) {
     portfolioApi.listMutualFundDetails()
       .then((rows) => { if (active) setMfDetails(rows) })
       .catch(() => { if (active) setMfDetails([]) })
-    return () => { active = false }
-  }, [householdId])
-
-  const [capByInvestment, setCapByInvestment] = useState<Map<number, string>>(new Map())
-  useEffect(() => {
-    let active = true
-    investmentApi.listInvestments({ household: householdId })
-      .then((rows) => { if (active) setCapByInvestment(new Map(rows.filter((r) => r.market_cap).map((r) => [r.id, r.market_cap as string]))) })
-      .catch(() => {})
     return () => { active = false }
   }, [householdId])
 
@@ -340,7 +330,6 @@ export function HomePage({ onNavigate }: Props) {
                       householdTotal={parseFloat(dashboard.networth)}
                       categories={categories}
                       mfDetailsByInvestment={mfDetailsByInvestment}
-                      capByInvestment={capByInvestment}
                     />
                   )}
                 </ExpandableGridCard>

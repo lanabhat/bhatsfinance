@@ -285,6 +285,16 @@ class Investment(TimeStampedModel):
     market_cap_auto = models.BooleanField(
         default=True, help_text='False once the user sets market_cap by hand, so refreshes leave it alone.',
     )
+    # Per-holding category, overriding the shared shell's (all stocks share one
+    # "Equity" Instrument, all funds one "Mutual Fund" Instrument). Assigned
+    # automatically from market cap (fund_data/market_cap.assign_cap_categories).
+    asset_category = models.ForeignKey(
+        'AssetCategory', on_delete=models.SET_NULL, null=True, blank=True, related_name='investments',
+        help_text="Overrides the instrument's category for this holding when set.",
+    )
+    category_auto = models.BooleanField(
+        default=True, help_text='False once the user picks the category by hand, so refreshes leave it alone.',
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
