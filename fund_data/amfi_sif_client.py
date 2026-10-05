@@ -18,14 +18,12 @@ from decimal import Decimal, InvalidOperation
 import requests
 
 from fund_data.mfapi_client import MfApiError
+from fund_data.mirror import mirror_url
 
 SIF_NAV_URL = 'https://www.amfiindia.com/spages/SIF_NAVAll.txt'
-# Copy of the same file kept by .github/workflows/sif-nav-mirror.yml, for hosts that
-# can't reach amfiindia.com (PythonAnywhere's free allowlist covers githubusercontent.com).
-SIF_NAV_MIRROR_URL = os.environ.get(
-    'SIF_NAV_MIRROR_URL',
-    'https://raw.githubusercontent.com/lanabhat/bhatsfinance/sif-nav-data/SIF_NAVAll.txt',
-)
+# Copy of the same file on the market-data branch, for hosts that can't reach
+# amfiindia.com (see fund_data/mirror.py).
+SIF_NAV_MIRROR_URL = os.environ.get('SIF_NAV_MIRROR_URL', mirror_url('SIF_NAVAll.txt'))
 TIMEOUT_SECONDS = 20
 CACHE_SECONDS = 30 * 60
 CODE_PREFIX = 'SIF-'

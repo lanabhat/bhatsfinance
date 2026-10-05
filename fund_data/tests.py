@@ -643,3 +643,50 @@ class CapCategoryTests(TestCase):
         breakdown = {r['category_name']: r['market_value'] for r in compute_category_breakdown(self.household.id, date(2026, 10, 1))}
         self.assertEqual(breakdown['Large Cap'], '1100.00')
         self.assertEqual(breakdown['Mutual Fund'], '500.00')
+
+
+class MarketDataMirrorTests(TestCase):
+    """PythonAnywhere's proxy refuses nsearchives.nseindia.com; the copies on the market-data branch take over."""
+
+    def setUp(self):
+        from fund_data import market_cap, nse_client
+        nse_client._cache.clear()
+        market_cap._cache.update({'at': 0.0, 'caps': None})
+        self.addCleanup(nse_client._cache.clear)
+        self.addCleanup(market_cap._cache.update, {'at': 0.0, 'caps': None})
+
+    @staticmethod
+    def _get(mirror_files):
+        import requests
+        from unittest.mock import MagicMock
+
+        def get(url, **kwargs):
+            if 'nsearchives.nseindia.com' in url:
+                raise requests.exceptions.ProxyError('Tunnel connection failed: 403 Forbidden')
+            body = next((v for k, v in mirror_files.items() if url.endswith(k)), None)
+            return MagicMock(ok=body is not None, status_code=200 if body is not None else 404, content=body or b'')
+        return get
+
+    def test_bhavcopy_falls_back_to_copy(self):
+        from unittest.mock import patch
+        from fund_data.nse_client import fetch_close_prices
+        with patch('fund_data.nse_client.requests.get', side_effect=self._get({'nse/bhavcopy_latest.csv.zip': _zipped(_BHAV_CSV)})):
+            result = fetch_close_prices(date(2026, 10, 5))
+        self.assertEqual(result['date'], date(2026, 10, 1))
+        self.assertEqual(result['prices']['INE154A01025']['close'], Decimal('257.00'))
+
+    def test_bhavcopy_copy_newer_than_as_of_is_not_used(self):
+        from unittest.mock import patch
+        from fund_data.mfapi_client import MfApiError
+        from fund_data.nse_client import fetch_close_prices
+        with patch('fund_data.nse_client.requests.get', side_effect=self._get({'nse/bhavcopy_latest.csv.zip': _zipped(_BHAV_CSV)})):
+            with self.assertRaises(MfApiError):
+                fetch_close_prices(date(2026, 9, 30))
+
+    def test_cap_lists_fall_back_to_copy(self):
+        from unittest.mock import patch
+        from fund_data.market_cap import fetch_cap_lists
+        files = {'nse/ind_nifty100list.csv': _NIFTY100_CSV.encode(), 'nse/ind_niftymidcap150list.csv': _MIDCAP150_CSV.encode()}
+        with patch('fund_data.market_cap.requests.get', side_effect=self._get(files)):
+            caps = fetch_cap_lists()
+        self.assertEqual((caps['INE154A01025'], caps['INE455K01017']), ('large_cap', 'mid_cap'))

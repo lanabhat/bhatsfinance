@@ -1,0 +1,84 @@
+name: Mirror market data
+
+# PythonAnywhere free accounts can't reach www.amfiindia.com or
+# nsearchives.nseindia.com, where SIF NAVs, NSE closing prices and the Nifty cap
+# lists are published. This copies them to the `market-data` branch, which the app
+# reads via raw.githubusercontent.com (on the free allowlist) when the source itself
+# is blocked — see fund_data/mirror.py. Pushing to that branch doesn't trigger the
+# main-branch deploy. A file that fails to download keeps its previous copy.
+
+on:
+  schedule:
+    - cron: '30 16 * * *'   # 22:00 IST, after AMFI/NSE publish the day's files
+    - cron: '30 1 * * *'    # 07:00 IST, catches late updates
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the market-data branch
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir publish && cd publish
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+          if git fetch -q --depth 1 origin market-data 2>/dev/null; then
+            git checkout -q -B market-data FETCH_HEAD
+          else
+            git checkout -q --orphan market-data
+          fi
+          mkdir -p nse
+
+      - name: Download files (each kept only if valid)
+        working-directory: publish
+        run: |
+          set -uo pipefail
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          ok=0
+
+          # AMFI SIF NAVs
+          if curl -sSfL --retry 3 -A "$UA" -o /tmp/sif.txt https://www.amfiindia.com/spages/SIF_NAVAll.txt \
+             && [ "$(grep -c '^SIF-' /tmp/sif.txt || true)" -ge 5 ]; then
+            cp /tmp/sif.txt SIF_NAVAll.txt; echo "SIF NAVs: ok"; ok=1
+          else echo "SIF NAVs: failed, keeping previous copy"; fi
+
+          # NSE bhavcopy for the latest trading day (non-trading days are 404)
+          for back in 0 1 2 3 4 5 6 7; do
+            d=$(TZ=Asia/Kolkata date -d "-${back} day" +%Y%m%d)
+            url="https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_${d}_F_0000.csv.zip"
+            if curl -sSfL --retry 2 -A "$UA" -o /tmp/bhav.zip "$url" && unzip -p /tmp/bhav.zip | head -1 | grep -q 'ISIN'; then
+              cp /tmp/bhav.zip nse/bhavcopy_latest.csv.zip; echo "NSE bhavcopy: ${d}"; ok=1; break
+            fi
+          done
+
+          # NSE cap lists (Nifty 100 = large cap, Nifty Midcap 150 = mid cap)
+          for f in ind_nifty100list ind_niftymidcap150list; do
+            if curl -sSfL --retry 3 -A "$UA" -o "/tmp/${f}.csv" "https://nsearchives.nseindia.com/content/indices/${f}.csv" \
+               && head -1 "/tmp/${f}.csv" | grep -q 'ISIN Code'; then
+              cp "/tmp/${f}.csv" "nse/${f}.csv"; echo "${f}: ok"; ok=1
+            else echo "${f}: failed, keeping previous copy"; fi
+          done
+
+          [ "$ok" = 1 ] || { echo "Every download failed."; exit 1; }
+
+      - name: Publish if anything changed
+        working-directory: publish
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No change since the last copy."
+            exit 0
+          fi
+          git commit -q -m "Market data $(TZ=Asia/Kolkata date +%Y-%m-%d)"
+          git push -q origin market-data
+          echo "Published."

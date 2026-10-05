@@ -18,6 +18,7 @@ from decimal import Decimal, InvalidOperation
 import requests
 
 from fund_data.mfapi_client import MfApiError
+from fund_data.mirror import mirror_url
 
 URL_TEMPLATE = 'https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{ymd}_F_0000.csv.zip'
 TIMEOUT_SECONDS = 20
@@ -77,11 +78,43 @@ def fetch_close_prices(as_of: date | None = None) -> dict:
     cached = _cache.get(as_of)
     if cached and time.monotonic() - cached[0] < CACHE_SECONDS:
         return cached[1]
+    try:
+        result = _from_nse(as_of)
+    except MfApiError as direct_error:  # e.g. PythonAnywhere's proxy refusing nsearchives
+        try:
+            result = _from_mirror(as_of)
+        except MfApiError as mirror_error:
+            raise MfApiError(f'{direct_error}; {mirror_error}') from mirror_error
+    _cache[as_of] = (time.monotonic(), result)
+    return result
+
+
+def _from_nse(as_of: date) -> dict:
     for back in range(MAX_DAYS_BACK + 1):
         day = as_of - timedelta(days=back)
         prices = _download(day)
         if prices:
-            result = {'date': day, 'prices': prices}
-            _cache[as_of] = (time.monotonic(), result)
-            return result
+            return {'date': day, 'prices': prices}
     raise MfApiError(f'No NSE bhavcopy found in the {MAX_DAYS_BACK} days up to {as_of}')
+
+
+def _from_mirror(as_of: date) -> dict:
+    """The latest bhavcopy copied to the market-data branch (fund_data/mirror.py)."""
+    url = mirror_url('nse/bhavcopy_latest.csv.zip')
+    try:
+        resp = requests.get(url, timeout=TIMEOUT_SECONDS)
+    except requests.RequestException as exc:
+        raise MfApiError(f'Bhavcopy copy download failed ({url}): {exc}') from exc
+    if not resp.ok:
+        raise MfApiError(f'Bhavcopy copy download failed ({url}): HTTP {resp.status_code}')
+    try:
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            prices = parse_bhavcopy(zf.read(zf.namelist()[0]).decode('utf-8-sig'))
+    except (zipfile.BadZipFile, IndexError) as exc:
+        raise MfApiError(f'Bhavcopy copy at {url} was not a zip file') from exc
+    if not prices:
+        raise MfApiError(f'Bhavcopy copy at {url} had no prices')
+    trade_date = max(p['date'] for p in prices.values())
+    if trade_date > as_of:
+        raise MfApiError(f'Bhavcopy copy is for {trade_date}, after {as_of}')
+    return {'date': trade_date, 'prices': prices}

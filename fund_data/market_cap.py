@@ -19,6 +19,7 @@ import time
 import requests
 
 from fund_data.mfapi_client import MfApiError
+from fund_data.mirror import mirror_url
 from fund_data.nse_client import HEADERS
 
 LARGE, MID, SMALL, MULTI = 'large_cap', 'mid_cap', 'small_cap', 'multi'
@@ -44,6 +45,17 @@ _FUND_SMALL = re.compile(r'small\s*cap|smallcap', re.I)
 
 
 def _download(url: str) -> list[dict]:
+    """The list from NSE, or its copy on the market-data branch when NSE is blocked."""
+    try:
+        return _download_one(url)
+    except MfApiError as direct_error:
+        try:
+            return _download_one(mirror_url('nse/' + url.rsplit('/', 1)[-1]))
+        except MfApiError as mirror_error:
+            raise MfApiError(f'{direct_error}; {mirror_error}') from mirror_error
+
+
+def _download_one(url: str) -> list[dict]:
     try:
         resp = requests.get(url, headers=HEADERS, timeout=20)
     except requests.RequestException as exc:
