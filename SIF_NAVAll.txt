@@ -143,15 +143,15 @@ Interval Fund Schemes(Hybrid Investment Strategies - Active Asset Allocator Long
  
 DynaSIF SIF
  
-SIF-88;INF579M30109;-;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;GROWTH OPTION;10.4414;01-Oct-2026
-SIF-86;INF579M30117;INF579M30125;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Option;10.4414;01-Oct-2026
-SIF-87;INF579M30075;-;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;GROWTH OPTION;10.3705;01-Oct-2026
-SIF-89;INF579M30083;INF579M30091;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Option;10.3705;01-Oct-2026
+SIF-88;INF579M30109;-;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;GROWTH OPTION;10.4551;05-Oct-2026
+SIF-86;INF579M30117;INF579M30125;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Option;10.4551;05-Oct-2026
+SIF-87;INF579M30075;-;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;GROWTH OPTION;10.3825;05-Oct-2026
+SIF-89;INF579M30083;INF579M30091;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Option;10.3825;05-Oct-2026
  
 iSIF SIF
  
-SIF-125;INF109K30067;-;iSIF Active Asset Allocator Long-Short Fund;;;10.2655;01-Oct-2026
-SIF-124;INF109K30059;-;iSIF Active Asset Allocator Long-Short Fund;;;10.2187;01-Oct-2026
+SIF-125;INF109K30067;-;iSIF Active Asset Allocator Long-Short Fund;;;10.2571;05-Oct-2026
+SIF-124;INF109K30059;-;iSIF Active Asset Allocator Long-Short Fund;;;10.2088;05-Oct-2026
  
 qsif SIF
  
