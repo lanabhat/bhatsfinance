@@ -18,15 +18,16 @@ from decimal import Decimal
 from insights.services import ZERO, compute_holdings
 
 
-def _snapshot_filter_kwargs(kind: str, raw_id: int) -> dict:
-    return {'investment_id': raw_id} if kind == 'investment' else {'instrument_id': raw_id, 'investment__isnull': True}
-
-
 def _latest_snapshot_holdings(kind: str, raw_id: int):
+    """{isin: weight} from the holding's latest uploaded portfolio, or None.
+    Snapshots belong to an Investment (migration 0016 dropped
+    FundHoldingsSnapshot.instrument), so a standalone Instrument never has one."""
     from instruments.models import FundHoldingsSnapshot
 
+    if kind != 'investment':
+        return None
     snapshot = (
-        FundHoldingsSnapshot.objects.filter(**_snapshot_filter_kwargs(kind, raw_id))
+        FundHoldingsSnapshot.objects.filter(investment_id=raw_id)
         .order_by('-as_of_date')
         .prefetch_related('holdings')
         .first()
@@ -60,10 +61,8 @@ def compute_fund_overlap(holding_a: tuple[str, int], holding_b: tuple[str, int])
 
     name_by_isin: dict[str, str] = {}
     if shared_isins:
-        def _fh_filter(kind, raw_id):
-            return {f'snapshot__{k}': v for k, v in _snapshot_filter_kwargs(kind, raw_id).items()}
-
-        snapshot_filter = Q(**_fh_filter(kind_a, id_a)) | Q(**_fh_filter(kind_b, id_b))
+        # Both have weights, so both are Investments (see _latest_snapshot_holdings).
+        snapshot_filter = Q(snapshot__investment_id=id_a) | Q(snapshot__investment_id=id_b)
         rows = FundHolding.objects.filter(snapshot_filter, isin__in=shared_isins).values('isin', 'instrument_name')
         for row in rows:
             name_by_isin.setdefault(row['isin'], row['instrument_name'])
@@ -115,10 +114,8 @@ def compute_portfolio_diversification(household_id: int, as_of) -> dict:
     instrument_candidate_ids = [raw_id for kind, raw_id in candidates if kind == 'instrument']
     investment_candidate_ids = [raw_id for kind, raw_id in candidates if kind == 'investment']
 
-    snapshotted_instrument_ids = set(
-        FundHoldingsSnapshot.objects.filter(instrument_id__in=instrument_candidate_ids, investment__isnull=True)
-        .values_list('instrument_id', flat=True).distinct()
-    ) if instrument_candidate_ids else set()
+    # Standalone Instruments (legacy per-stock rows) can't carry a snapshot — see _latest_snapshot_holdings.
+    snapshotted_instrument_ids: set = set()
     snapshotted_investment_ids = set(
         FundHoldingsSnapshot.objects.filter(investment_id__in=investment_candidate_ids)
         .values_list('investment_id', flat=True).distinct()

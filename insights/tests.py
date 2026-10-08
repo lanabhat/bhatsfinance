@@ -583,6 +583,39 @@ class OverlapServiceTests(TestCase):
         self.assertIn(self.fund_b.id, result['uncovered_investment_ids'])
         self.assertEqual(result['pairs'], [])  # need 2 covered funds to form a pair
 
+    def test_standalone_stock_instrument_is_uncovered_not_an_error(self):
+        # A legacy per-stock Instrument (no Investment under it) can't carry a holdings
+        # snapshot — FundHoldingsSnapshot is keyed to Investment only.
+        from insights.overlap import compute_portfolio_diversification
+        stock = Instrument.objects.create(household=self.household, name='ITC LTD', instrument_type=Instrument.InstrumentType.EQUITY)
+        Transaction.objects.create(
+            household=self.household, account=self.account, instrument=stock, tx_date=date(2026, 1, 1),
+            amount=Decimal('1000.00'), quantity=Decimal('10'),
+            direction=Transaction.Direction.OUTFLOW, transaction_type=Transaction.TransactionType.BUY,
+        )
+        self._upload_holdings(self.fund_a, [('ISIN1', 'Stock 1', 10)])
+        self._upload_holdings(self.fund_b, [('ISIN1', 'Stock 1', 4)])
+        result = compute_portfolio_diversification(self.household.id, date(2026, 2, 1))
+        self.assertIn(stock.id, result['uncovered_instrument_ids'])
+        self.assertEqual(result['pairs'][0]['overlap_percent'], '4.00')
+
+    def test_fund_comparison_endpoint_with_standalone_stock(self):
+        from core.models import UserProfile
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        stock = Instrument.objects.create(household=self.household, name='ITC LTD', instrument_type=Instrument.InstrumentType.EQUITY)
+        Transaction.objects.create(
+            household=self.household, account=self.account, instrument=stock, tx_date=date(2026, 1, 1),
+            amount=Decimal('1000.00'), quantity=Decimal('10'),
+            direction=Transaction.Direction.OUTFLOW, transaction_type=Transaction.TransactionType.BUY,
+        )
+        user = get_user_model().objects.create_user(username='nair', password='x')
+        UserProfile.objects.update_or_create(user=user, defaults={'household': self.household, 'role': 'admin', 'status': 'approved'})
+        client = APIClient()
+        client.force_authenticate(user)
+        response = client.get('/api/fund-comparison', {'household_id': self.household.id, 'as_of': '2026-02-01'})
+        self.assertEqual(response.status_code, 200, response.content[:300])
+
 
 class AllocationTemplateTests(TestCase):
     def setUp(self):
