@@ -860,12 +860,28 @@ class AllocationFactsTests(TestCase):
         rows = self._rows()
         by = {(r['member'], r['holding']): r for r in rows}
         self.assertEqual((by[('LN', 'ITC')]['type'], by[('LN', 'ITC')]['market_cap'], by[('LN', 'ITC')]['asset_class']),
-                         ('Equity', 'Large Cap', 'Equity'))
+                         ('Stock', 'Large Cap', 'Equity'))
         fund = by[('Anu', 'Axis Midcap')]
         self.assertEqual((fund['market_cap'], fund['provider'], fund['classification']), ('Mid Cap', 'Axis', 'Mid Cap'))
         self.assertEqual((by[('LN', 'Joint FD')]['value'], by[('Anu', 'Joint FD')]['value']), (3000.0, 2000.0))
         self.assertEqual(by[('Unassigned', 'Old Gold')]['value'], 300.0)  # no owner
         self.assertEqual((by[('Anu', 'SBI')]['type'], by[('Anu', 'SBI')]['value']), ('Savings & Cash', 700.0))
+
+    def test_etfs_typed_etf_with_asset_class_from_their_index(self):
+        from decimal import Decimal
+        from instruments.models import Investment
+        from instruments.services import get_or_create_etf_shell
+        from ledger.models import Transaction
+        etf = get_or_create_etf_shell(self.household)
+        for name, cap in (('ZEROD NIRL ETF D-GRW', ''), ('NIP ETF NIFTY50 BEES', 'large_cap')):
+            inv = Investment.objects.create(instrument=etf, name=name, member=self.ln, market_cap=cap)
+            Transaction.objects.create(household=self.household, instrument=etf, investment=inv, tx_date=self.date,
+                                       amount=Decimal('500'), quantity=Decimal('1'), direction='outflow', transaction_type='buy')
+        by = {r['holding']: r for r in self._rows() if r['member'] == 'LN'}
+        liquid, nifty = by['ZEROD NIRL ETF D-GRW'], by['NIP ETF NIFTY50 BEES']
+        self.assertEqual((liquid['type'], liquid['category'], liquid['asset_class'], liquid['classification']),
+                         ('ETF', 'ETF', 'Debt', 'Debt ETF'))
+        self.assertEqual((nifty['type'], nifty['asset_class'], nifty['market_cap']), ('ETF', 'Equity', 'Large Cap'))
 
     def test_liabilities_and_cards_left_out_and_total_matches(self):
         rows = self._rows()

@@ -134,6 +134,15 @@ class EquityInvestmentViewTests(TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(first.data['id'], second.data['id'])
 
+    def test_creates_etf_shell_in_etf_category(self):
+        response = self.client.post('/api/instruments/mf-investment/', {
+            'household': self.household.id, 'name': 'NIP ETF NIFTY50 BEES', 'instrument_type': 'etf',
+            'member': self.member_a.id, 'isin': 'INF204KB14I2',
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        shell = Investment.objects.get(id=response.data['id']).instrument
+        self.assertEqual((shell.name, shell.instrument_type, shell.asset_category.name), ('ETF', 'etf', 'ETF'))
+
 
 class AllocationTargetModelTests(TestCase):
     def setUp(self):

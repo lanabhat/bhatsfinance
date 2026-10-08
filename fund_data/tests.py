@@ -549,6 +549,16 @@ class MarketCapTests(TestCase):
         self.assertEqual(cap_for_stock('INF0R8F01042', 'ZERODHA GLD ETF D-GR', lists), '')
         self.assertEqual(cap_for_stock('INF732E01037', 'NIP ETNF1D RTLIQBEES', lists), '')
 
+    def test_etf_asset_class_from_abbreviated_names(self):
+        from fund_data.market_cap import etf_asset_class
+        self.assertEqual(etf_asset_class('ZEROD NIRL ETF D-GRW'), 'debt')  # Zerodha Nifty 1D Rate Liquid
+        self.assertEqual(etf_asset_class('NIP ETNF1D RTLIQBEES'), 'debt')
+        self.assertEqual(etf_asset_class('BHARAT BOND ETF APR30'), 'debt')
+        self.assertEqual(etf_asset_class('ZERODHA GLD ETF D-GR'), 'gold')
+        self.assertEqual(etf_asset_class('NIP ETF SILVER BEES'), 'other')
+        self.assertEqual(etf_asset_class('NIP ETF NIFTY50 BEES'), 'equity')
+        self.assertEqual(etf_asset_class('ICICI NFTOIL&GAS ETF'), 'equity')
+
     def test_fund_caps(self):
         from fund_data.market_cap import cap_for_fund
         self.assertEqual(cap_for_fund('Large Cap', 'Equity'), 'large_cap')
@@ -632,6 +642,35 @@ class CapCategoryTests(TestCase):
                                            'Mid Cap': Decimal('2.00'), 'Small Cap': Decimal('6.00')})
         self.assertTrue(result['target_changes'])
         self.assertEqual(assign_cap_categories(self.household)['target_changes'], [])
+
+    def test_etfs_move_to_etf_shell_and_category(self):
+        from fund_data.market_cap import assign_cap_categories
+        from instruments.models import Instrument
+        from ledger.models import Transaction
+        from valuations.models import ValuationSnapshot
+        nifty = Investment.objects.create(instrument=self.eq_shell, name='NIP ETF NIFTY50 BEES', isin='INF204KB14I2', market_cap='large_cap')
+        liquid = Investment.objects.create(instrument=self.eq_shell, name='ZEROD NIRL ETF D-GRW', symbol='INF0R8F01034')
+        for inv, amount in ((nifty, '400'), (liquid, '100')):
+            Transaction.objects.create(household=self.household, instrument=self.eq_shell, investment=inv, tx_date=date(2026, 9, 1),
+                                       amount=Decimal(amount), quantity=Decimal('1'), direction='outflow', transaction_type='buy')
+        ValuationSnapshot.objects.create(household=self.household, instrument=self.eq_shell, investment=liquid,
+                                         valuation_date=date(2026, 9, 2), market_value=Decimal('100'))
+
+        assign_cap_categories(self.household)
+
+        etf_shell = Instrument.objects.get(household=self.household, instrument_type='etf')
+        for inv in (nifty, liquid, self.itc):
+            inv.refresh_from_db()
+        self.assertEqual((nifty.instrument_id, liquid.instrument_id, self.itc.instrument_id),
+                         (etf_shell.id, etf_shell.id, self.eq_shell.id))
+        self.assertEqual((etf_shell.asset_category.name, nifty.asset_category.name, liquid.asset_category.name), ('ETF', 'ETF', 'ETF'))
+        self.assertEqual(nifty.market_cap, 'large_cap')  # still tracked
+        self.assertFalse(Transaction.objects.filter(investment__in=[nifty, liquid]).exclude(instrument=etf_shell).exists())
+        self.assertEqual(ValuationSnapshot.objects.get(investment=liquid).instrument_id, etf_shell.id)
+        # Equities' 20% is shared out by value (ETFs 500 of 1500), so the overall total is unchanged.
+        targets = self._targets()
+        self.assertEqual(targets['ETF'], Decimal('6.67'))
+        self.assertAlmostEqual(float(sum(targets.values())), 60.0, delta=0.02)
 
     def test_holdings_and_breakdown_use_the_holdings_own_category(self):
         from fund_data.market_cap import assign_cap_categories

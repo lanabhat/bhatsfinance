@@ -221,6 +221,7 @@ export type Instrument = {
   instrument_type:
     | 'cash'
     | 'equity'
+    | 'etf'
     | 'mutual_fund'
     | 'sip'
     | 'fd'

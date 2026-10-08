@@ -33,7 +33,7 @@ export const investmentApi = {
     member?: number | null
     symbol?: string
     isin?: string
-    /** 'mutual_fund' (default) or 'equity' — routes to the matching shared shell. */
+    /** 'mutual_fund' (default), 'equity' or 'etf' — routes to the matching shared shell. */
     instrument_type?: string
   }) {
     return postJson<Investment>('/api/instruments/mf-investment/', payload)

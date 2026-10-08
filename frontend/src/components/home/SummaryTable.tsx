@@ -5,7 +5,7 @@ import { SortableTh } from '../ui/SortableTh'
 import type { CategoryBreakdownItem, DashboardAccount, DashboardHolding, MemberNetWorth } from '../../types/domain'
 
 const TYPE_LABELS: Record<string, string> = {
-  equity: 'Equity', mutual_fund: 'Mutual Fund', fd: 'FD', rd: 'RD',
+  equity: 'Stock', etf: 'ETF', mutual_fund: 'Mutual Fund', fd: 'FD', rd: 'RD', bond: 'Bond',
   epf: 'EPF', ppf: 'PPF', nps: 'NPS', gold: 'Gold',
   real_estate: 'Real Estate', sip: 'SIP', insurance: 'Insurance',
   lending: 'Lending', cash: 'Cash', vehicle: 'Vehicle', liability: 'Liability', other: 'Other',

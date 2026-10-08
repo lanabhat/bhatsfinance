@@ -80,12 +80,59 @@ def get_or_create_equity_shell(household):
     return shell
 
 
+ETF_SHELL_NAME = 'ETF'
+
+
+def get_or_create_etf_shell(household):
+    """Get (or create) the household's single shared "ETF" Instrument shell —
+    every exchange-traded fund lives underneath it as an Investment row (one per
+    member), like stocks under the "Equity" shell. ETFs trade and are priced like
+    stocks but are funds: their asset class (equity, debt, gold…) comes from the
+    index they track — see fund_data/market_cap.etf_asset_class()."""
+    from fund_data.market_cap import etf_category
+    from instruments.models import Instrument
+
+    shell, created = Instrument.objects.get_or_create(
+        household=household, name=ETF_SHELL_NAME,
+        defaults={'instrument_type': Instrument.InstrumentType.ETF, 'sub_category': ''},
+    )
+    if created:
+        shell.asset_category = etf_category(household, create=True)
+        shell.save(update_fields=['asset_category', 'updated_at'])
+    return shell
+
+
+def is_etf_isin(isin: str, name: str = '') -> bool:
+    """True for an exchange-traded fund: a fund (INF) ISIN whose scrip name says
+    so ("…ETF", "…BEES")."""
+    upper_name = (name or '').upper()
+    return (isin or '').upper().startswith('INF') and ('ETF' in upper_name or 'BEES' in upper_name)
+
+
 def is_mutual_fund_isin(isin: str, name: str = '') -> bool:
     """True for a mutual fund unit held in demat (e.g. via an Upstox statement).
     INF ISINs are fund units — but ETFs are INF too and trade like stocks, and
     their scrip names always say so ("…ETF", "…BEES")."""
-    upper_name = (name or '').upper()
-    return (isin or '').upper().startswith('INF') and 'ETF' not in upper_name and 'BEES' not in upper_name
+    return (isin or '').upper().startswith('INF') and not is_etf_isin(isin, name)
+
+
+def split_etfs_from_equity_shell(household) -> int:
+    """Move ETFs that imports filed under the "Equity" shell (alongside stocks)
+    into the "ETF" shell, with their transactions and valuations. Returns how many moved."""
+    from instruments.models import Instrument, Investment
+
+    misfiled = [
+        inv for inv in Investment.objects.filter(
+            instrument__household=household, instrument__instrument_type=Instrument.InstrumentType.EQUITY,
+        )
+        if is_etf_isin(holding_isin(inv), inv.name)
+    ]
+    if not misfiled:
+        return 0
+    shell = get_or_create_etf_shell(household)
+    for inv in misfiled:
+        move_investment_to_shell(inv, shell)
+    return len(misfiled)
 
 
 def is_bond_isin(isin: str) -> bool:

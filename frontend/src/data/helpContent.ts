@@ -7,7 +7,7 @@ export const TOOLTIPS: Record<string, string> = {
 
   // Portfolio — Instruments
   instrument_type:
-    'The category of your investment:\n• fd = Fixed Deposit\n• rd = Recurring Deposit\n• mf = Mutual Fund\n• equity = Stocks\n• epf = Employee Provident Fund\n• ppf = Public Provident Fund\n• nps = National Pension System\n• gold = Physical / digital gold\n• real_estate = Property\n• bond = Bonds / debentures\n• loan = Money you lent to someone\n• other = Anything else',
+    'The category of your investment:\n• fd = Fixed Deposit\n• rd = Recurring Deposit\n• mf = Mutual Fund\n• equity = Stocks\n• etf = Exchange-traded funds\n• epf = Employee Provident Fund\n• ppf = Public Provident Fund\n• nps = National Pension System\n• gold = Physical / digital gold\n• real_estate = Property\n• bond = Bonds / debentures\n• loan = Money you lent to someone\n• other = Anything else',
   compounding:
     'How often the bank adds interest to your FD principal:\n• monthly — every month\n• quarterly — every 3 months\n• half_yearly — every 6 months\n• annually — once a year\n• simple — no compounding; interest is flat on the original amount only',
 

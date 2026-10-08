@@ -20,7 +20,7 @@ const RANGE_MONTHS: Record<Exclude<Range, 'All'>, number> = { '1M': 1, '3M': 3, 
 
 // Dashboard type labels back to instrument_type, for the value-over-time chart.
 const TYPE_KEYS: Record<string, string> = {
-  Equity: 'equity', 'Mutual Fund': 'mutual_fund', FD: 'fd', RD: 'rd', Bond: 'bond', EPF: 'epf', PPF: 'ppf', NPS: 'nps',
+  Stock: 'equity', ETF: 'etf', 'Mutual Fund': 'mutual_fund', FD: 'fd', RD: 'rd', Bond: 'bond', EPF: 'epf', PPF: 'ppf', NPS: 'nps',
   Gold: 'gold', 'Real Estate': 'real_estate', Lending: 'lending', Cash: 'cash', Vehicle: 'vehicle', Other: 'other',
 }
 

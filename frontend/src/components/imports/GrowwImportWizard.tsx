@@ -15,8 +15,9 @@ type Step = 'upload' | 'confirm' | 'result'
 // MF and SIP share one instrument-type "family" for matching purposes (both
 // live under the shared MF shell in existing_holdings_by_member), distinct
 // from equity — a stock must never be treated as satisfying an MF holding
-// with the same name, or vice versa.
-const typeFamily = (t: string) => (t === 'mutual_fund' || t === 'sip' ? 'mutual_fund' : t)
+// with the same name, or vice versa. ETFs arrive in the stock rows of a file,
+// so they match within the equity family.
+const typeFamily = (t: string) => (t === 'mutual_fund' || t === 'sip' ? 'mutual_fund' : t === 'etf' ? 'equity' : t)
 
 /**
  * Holdings the assigned member already has that this file's rows don't

@@ -3,7 +3,7 @@ import { investmentApi } from '../../api/investmentApi'
 import { portfolioApi } from '../../api/portfolioApi'
 import { useApp } from '../../context/AppContext'
 import { FundClassificationCard } from './InstrumentForm'
-import { isEquityInvestment } from './investmentKind'
+import { isEquityInvestment, isEtfInvestment } from './investmentKind'
 import type { ApiErrorMap, Investment } from '../../types/domain'
 
 function firstErrorMessage(err: unknown, fallback: string): string {
@@ -28,7 +28,7 @@ const EMPTY_MF_FORM: MfForm = { amc: '', fund_category: '', fund_sub_category: '
 /**
  * Edits one holding under a shared shell — an Investment (name/symbol/isin/
  * owner). For a mutual fund/SIP it also edits the folio and MutualFundDetails
- * (AMC/category/expense ratio); a stock/ETF under the "Equity" shell has neither.
+ * (AMC/category/expense ratio); a stock or ETF ("Equity"/"ETF" shells) has neither.
  * Unlike InstrumentForm, this is edit-only: new funds are created via
  * "Record Buy" on the Holdings page (investmentApi.getOrCreateMfInvestment),
  * matching how FD/Bond details are also only ever created via BuyForm.
@@ -40,6 +40,8 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
 }) {
   const { members, instrumentsFull, categories } = useApp()
   const isStock = isEquityInvestment(investment, instrumentsFull)
+  const isEtf = isEtfInvestment(investment, instrumentsFull)
+  const typeLabel = isEtf ? 'ETF' : isStock ? 'Stock' : 'Mutual Fund'
   const [form, setForm] = useState<Omit<Investment, 'id'>>({
     instrument: investment.instrument,
     member: investment.member,
@@ -101,7 +103,7 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">ISIN</label>
         <input className={INP} value={form.isin} onChange={(e) => setForm((p) => ({ ...p, isin: e.target.value }))} /></div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Type</label>
-        <p className="rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-2)]">{isStock ? 'Equity' : 'Mutual Fund'}</p></div>
+        <p className="rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-2)]">{typeLabel}</p></div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Category</label>
         <select className={INP}
           value={form.category_auto ? 'auto' : String(form.asset_category ?? '')}
@@ -120,11 +122,13 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
             }))
           }}>
           <option value="auto">Auto{autoCategoryName ? ` (${autoCategoryName})` : ''}</option>
-          <option value="">— Group default ({isStock ? 'Equity' : 'Mutual Fund'} group) —</option>
+          <option value="">— Group default ({isEtf ? 'ETF' : isStock ? 'Equity' : 'Mutual Fund'} group) —</option>
           {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
         </select>
         <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-          {isStock
+          {isEtf
+            ? 'Auto puts every ETF in the ETF category. Its market cap and asset class (equity, debt, gold) come from the index it tracks.'
+            : isStock
             ? "Auto puts the stock in Large / Mid / Small Cap by NSE's Nifty 100 / Midcap 150 lists (SEBI bands), refreshed daily."
             : 'Auto puts large, mid and small cap funds in those categories; other funds stay in their group (e.g. Mutual Fund).'}
         </p>

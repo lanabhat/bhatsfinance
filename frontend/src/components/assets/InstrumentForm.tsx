@@ -19,7 +19,7 @@ function firstErrorMessage(err: unknown, fallback: string): string {
 }
 
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
-const INSTRUMENT_TYPES = ['equity','mutual_fund','fd','rd','bond','epf','ppf','nps','gold','real_estate','insurance','cash','other','vehicle','liability','sip'] as const
+const INSTRUMENT_TYPES = ['equity','etf','mutual_fund','fd','rd','bond','epf','ppf','nps','gold','real_estate','insurance','cash','other','vehicle','liability','sip'] as const
 // A household has exactly one shared "Mutual Fund"/"SIP" shell Instrument
 // (auto-created lazily server-side — see instruments/services.py's
 // get_or_create_mf_shell) with each fund/folio living underneath it as an
@@ -29,7 +29,7 @@ const INSTRUMENT_TYPES = ['equity','mutual_fund','fd','rd','bond','epf','ppf','n
 // and editing a fund's AMC/category/folio/expense-ratio happens via
 // InvestmentForm.tsx. Still selectable when editing a pre-existing Instrument
 // of this type (legacy data from before the shell/Investment migration).
-const CREATE_HIDDEN_TYPES = new Set(['mutual_fund', 'sip'])
+const CREATE_HIDDEN_TYPES = new Set(['mutual_fund', 'sip', 'etf'])
 const SUB_CATEGORIES = ['', 'debt', 'equity', 'liquid', 'retirement', 'hybrid', 'gold', 'real_asset', 'other'] as const
 const SUB_CATEGORY_LABELS: Record<string, string> = {
   '': '— Unclassified —', debt: 'Debt', equity: 'Equity', liquid: 'Liquid',

@@ -31,8 +31,12 @@ LIST_URLS = {
 CACHE_SECONDS = 12 * 60 * 60
 _cache: dict = {'at': 0.0, 'caps': None}
 
-# ETF names (abbreviated by brokers, e.g. "ICICI NIFTY NXT50ETF", "NIP ETF NIFTY50 BEES").
-NON_EQUITY_ETF = re.compile(r'gold|gld|silver|liq|liquid|gilt|bond|g-?sec|overnight', re.I)
+# ETF names (abbreviated by brokers, e.g. "ICICI NIFTY NXT50ETF", "NIP ETF NIFTY50 BEES",
+# "ZEROD NIRL ETF D-GRW" = Zerodha Nifty 1D Rate Liquid, "NIP ETNF1D RTLIQBEES").
+_ETF_DEBT = r'liq|\bnirl\b|1d\b|overnight|money\s*market|gilt|g-?sec|\bsdl\b|bond|\bibx\b'
+_ETF_GOLD = r'gold|gld'
+_ETF_OTHER = r'silver|slv'
+NON_EQUITY_ETF = re.compile(f'{_ETF_DEBT}|{_ETF_GOLD}|{_ETF_OTHER}', re.I)
 _ETF_SMALL = re.compile(r'small', re.I)
 _ETF_MID = re.compile(r'mid', re.I)
 _ETF_LARGE = re.compile(r'nifty|n50|n100|nxt|next|sensex|bank|metal|oil|it\b|pharma|fmcg|auto|psu|cpse|bees|lv30|v20', re.I)
@@ -103,6 +107,19 @@ def cap_for_stock(isin: str, name: str, lists: dict[str, str]) -> str:
     return ''
 
 
+def etf_asset_class(name: str) -> str:
+    """An ETF's asset class from the index its (abbreviated) name tracks:
+    'debt' (liquid/overnight/gilt/bond), 'gold', 'other' (silver) or 'equity'."""
+    name = name or ''
+    if re.search(_ETF_DEBT, name, re.I):
+        return 'debt'
+    if re.search(_ETF_GOLD, name, re.I):
+        return 'gold'
+    if re.search(_ETF_OTHER, name, re.I):
+        return 'other'
+    return 'equity'
+
+
 def cap_for_fund(fund_sub_category: str, fund_category: str = '') -> str | None:
     """A fund's cap from its sub-category (falling back to category): a cap, 'multi'
     for diversified equity funds, '' when the fund isn't categorised yet, or None
@@ -129,7 +146,9 @@ def update_stock_caps(household_id: int | None = None) -> dict:
     from instruments.services import holding_isin
 
     lists = fetch_cap_lists()
-    stocks = Investment.objects.filter(instrument__instrument_type=Instrument.InstrumentType.EQUITY, market_cap_auto=True)
+    stocks = Investment.objects.filter(
+        instrument__instrument_type__in=(Instrument.InstrumentType.EQUITY, Instrument.InstrumentType.ETF), market_cap_auto=True,
+    )
     if household_id is not None:
         stocks = stocks.filter(instrument__household_id=household_id)
     counts = {LARGE: 0, MID: 0, SMALL: 0, 'unclassified': 0}
@@ -200,16 +219,29 @@ def _named_category(household, *names):
     return None
 
 
-def assign_cap_categories(household) -> dict:
-    """Put each stock/ETF and equity fund in its market-cap category (Large/Mid/Small
-    Cap), leaving holdings the user categorised by hand alone. Gold/liquid ETFs go to
-    the household's Gold / Liquid Cash category; diversified, debt and hybrid funds
-    keep their instrument's category ("Mutual Fund").
+def etf_category(household, create: bool = False):
+    """The household's "ETF" category (every ETF counts toward it, whatever index it tracks)."""
+    from django.db.models import Max
+    from instruments.models import AssetCategory
 
-    The first time any holding moves into a cap category, allocation targets are
-    re-expressed in the new categories at the current mix — an old category's target
-    is shared out in proportion to the value that moved — so the overall intended
-    allocation is unchanged. Targets are never changed automatically after that."""
+    found = _named_category(household, 'ETF', 'ETFs')
+    if found or not create:
+        return found
+    next_order = (AssetCategory.objects.filter(household=household).aggregate(m=Max('sort_order'))['m'] or 0) + 1
+    return AssetCategory.objects.create(household=household, name='ETF', color='#14b8a6', sort_order=next_order)
+
+
+def assign_cap_categories(household) -> dict:
+    """Put each stock and equity fund in its market-cap category (Large/Mid/Small
+    Cap) and every ETF in the "ETF" category, leaving holdings the user categorised
+    by hand alone. Diversified, debt and hybrid funds keep their instrument's
+    category ("Mutual Fund"). ETFs an import filed under the "Equity" shell are
+    first moved to the "ETF" shell.
+
+    The first time any holding moves into the cap categories (or the ETF category),
+    allocation targets are re-expressed in the new categories at the current mix — an
+    old category's target is shared out in proportion to the value that moved — so the
+    overall intended allocation is unchanged. Targets are never changed automatically after that."""
     from collections import defaultdict
     from datetime import date
     from decimal import Decimal
@@ -218,18 +250,29 @@ def assign_cap_categories(household) -> dict:
 
     from insights.services import compute_holdings
     from instruments.models import AllocationTarget, Instrument, Investment, MutualFundDetails
+    from instruments.services import split_etfs_from_equity_shell
 
     caps = cap_categories(household)
-    gold = _named_category(household, 'Gold')
-    liquid = _named_category(household, 'Liquid Cash', 'Liquid', 'Cash')
 
+    # Value and category of each holding before anything moves (moving an ETF to
+    # its shell keeps the Investment row, so these stay keyed correctly).
     holdings = compute_holdings(household.id, date.today())
     value_by_investment = {h['investment_id']: h['market_value'] for h in holdings if h['investment_id']}
     category_before = {h['investment_id']: h['asset_category'] for h in holdings if h['investment_id']}
     value_by_category: dict = defaultdict(Decimal)
     for h in holdings:
         value_by_category[h['asset_category']] += h['market_value']
-    first_time = not AllocationTarget.objects.filter(household=household, asset_category__in=caps.values()).exists()
+
+    split_etfs_from_equity_shell(household)
+    has_etfs = Instrument.objects.filter(household=household, instrument_type=Instrument.InstrumentType.ETF).exists()
+    etf = etf_category(household, create=has_etfs)
+
+    # Categories whose targets are re-expressed from the current mix (first time only).
+    convert_into = set()
+    if not AllocationTarget.objects.filter(household=household, asset_category__in=caps.values()).exists():
+        convert_into |= {c.id for c in caps.values()}
+    if etf is not None and not AllocationTarget.objects.filter(household=household, asset_category=etf).exists():
+        convert_into.add(etf.id)
 
     fund_details = {d.investment_id: d for d in MutualFundDetails.objects.filter(investment__instrument__household=household)}
     moves: dict = defaultdict(Decimal)
@@ -240,8 +283,8 @@ def assign_cap_categories(household) -> dict:
             kind = inv.instrument.instrument_type
             if kind == Instrument.InstrumentType.EQUITY:
                 target = caps.get(inv.market_cap)
-                if target is None and NON_EQUITY_ETF.search(inv.name or ''):
-                    target = gold if re.search(r'gold|gld', inv.name, re.I) else liquid if re.search(r'liq', inv.name, re.I) else None
+            elif kind == Instrument.InstrumentType.ETF:
+                target = etf
             elif kind in (Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP):
                 details = fund_details.get(inv.id)
                 target = caps.get(cap_for_fund(details.fund_sub_category, details.fund_category)) if details else None
@@ -256,10 +299,10 @@ def assign_cap_categories(household) -> dict:
             counts['assigned'] += 1
             old_effective = category_before.get(inv.id)
             new_effective = new_id or inv.instrument.asset_category_id
-            if inv.id in value_by_investment and old_effective != new_effective and new_effective:
+            if inv.id in value_by_investment and old_effective != new_effective and new_effective in convert_into:
                 moves[(old_effective, new_effective)] += value_by_investment[inv.id]
 
-        target_changes = _convert_targets(household, moves, value_by_category) if first_time and moves else []
+        target_changes = _convert_targets(household, moves, value_by_category) if moves else []
     return {**counts, 'target_changes': target_changes}
 
 

@@ -53,7 +53,7 @@ export function DiversificationPage() {
 
   useEffect(() => { void load() }, [householdId, asOf])
 
-  const mfInstruments = instruments.filter((i) => i.instrument_type === 'mutual_fund' || i.instrument_type === 'sip' || i.instrument_type === 'equity')
+  const mfInstruments = instruments.filter((i) => i.instrument_type === 'mutual_fund' || i.instrument_type === 'sip' || i.instrument_type === 'equity' || i.instrument_type === 'etf')
 
   if (loading && !diversification) {
     return (

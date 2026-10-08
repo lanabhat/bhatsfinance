@@ -1407,9 +1407,11 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
     # into one shared holding the way a plain per-name Instrument would (see
     # get_or_create_equity_shell()'s docstring and migration 0017 for the fix
     # to instruments that were already merged this way before this change).
-    from instruments.services import get_or_create_equity_shell
+    # ETFs in the stocks section go under the "ETF" shell instead.
+    from instruments.services import get_or_create_equity_shell, get_or_create_etf_shell, is_etf_isin
 
     equity_shell = None
+    etf_shell = None
     if parsed.get('stocks'):
         equity_shell = get_or_create_equity_shell(household)
         update_fields = []
@@ -1430,6 +1432,13 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                     continue
 
                 instrument = equity_shell
+                if is_etf_isin(stock.get('isin', ''), name):
+                    if etf_shell is None:
+                        etf_shell = get_or_create_etf_shell(household)
+                        if not etf_shell.default_account_id:
+                            etf_shell.default_account = groww_account
+                            etf_shell.save(update_fields=['default_account'])
+                    instrument = etf_shell
                 investment, inv_created = Investment.objects.get_or_create(
                     instrument=instrument,
                     name=name,
@@ -1598,8 +1607,8 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
     """
     Import a parsed Upstox holdings Excel file for a specific household member.
 
-    Each row is filed by what its ISIN says it is: stocks/ETFs as per-member
-    Investments under the shared "Equity" shell, demat mutual funds under the
+    Each row is filed by what its ISIN says it is: stocks as per-member
+    Investments under the shared "Equity" shell, ETFs under the "ETF" shell, demat mutual funds under the
     "Mutual Fund" shell, bonds as bond Instruments (or matched to the bond
     Instruments already tracking them, so they aren't counted twice).
 
@@ -1611,7 +1620,8 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
     from instruments.models import Instrument, Investment
     from instruments.services import (
         _ledger_units, create_bond_instrument, find_bond_instruments, get_or_create_equity_shell,
-        get_or_create_mf_shell, holding_isin, is_bond_isin, is_mutual_fund_isin, move_investment_to_shell,
+        get_or_create_etf_shell, get_or_create_mf_shell, holding_isin, is_bond_isin, is_etf_isin,
+        is_mutual_fund_isin, move_investment_to_shell,
         reclassify_bond_investment,
     )
     from insights.services import compute_holding_cost_basis
@@ -1647,6 +1657,7 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
         if update_fields:
             equity_shell.save(update_fields=update_fields)
     mf_shell = None
+    etf_shell = None
 
     def buy(instrument, investment, tx_date, units, rate, amount, reference=''):
         Transaction.objects.create(
@@ -1672,7 +1683,9 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                 same_isin = [
                     inv for inv in Investment.objects.filter(
                         instrument__household=household, member=member,
-                        instrument__instrument_type__in=[Instrument.InstrumentType.EQUITY, Instrument.InstrumentType.MUTUAL_FUND],
+                        instrument__instrument_type__in=[
+                            Instrument.InstrumentType.EQUITY, Instrument.InstrumentType.ETF, Instrument.InstrumentType.MUTUAL_FUND,
+                        ],
                     ).select_related('instrument')
                     if isin and holding_isin(inv) == isin
                 ]
@@ -1716,8 +1729,16 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                 if is_mutual_fund_isin(isin, name):
                     mf_shell = mf_shell or get_or_create_mf_shell(household)
                     instrument = mf_shell
+                elif is_etf_isin(isin, name):
+                    if etf_shell is None:
+                        etf_shell = get_or_create_etf_shell(household)
+                        if not etf_shell.default_account_id:
+                            etf_shell.default_account = upstox_account
+                            etf_shell.save(update_fields=['default_account'])
+                    instrument = etf_shell
                 else:
                     instrument = equity_shell
+                traded_like_stock = instrument in (equity_shell, etf_shell)
 
                 investment = next((inv for inv in same_isin if inv.instrument_id == instrument.id), None) \
                     or (same_isin[0] if same_isin else None) \
@@ -1726,7 +1747,7 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                 if inv_created:
                     investment = Investment.objects.create(
                         instrument=instrument, name=name, member=member, isin=isin,
-                        symbol='' if instrument != equity_shell else isin,
+                        symbol=isin if traded_like_stock else '',
                     )
                 else:
                     if investment.instrument_id != instrument.id:
@@ -1736,7 +1757,7 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                     if isin and not investment.isin:
                         investment.isin = isin
                         fields.append('isin')
-                    if instrument == equity_shell and isin and not investment.symbol:
+                    if traded_like_stock and isin and not investment.symbol:
                         investment.symbol = isin
                         fields.append('symbol')
                     if fields:

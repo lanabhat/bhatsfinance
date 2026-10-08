@@ -182,21 +182,21 @@ class InvestmentViewSet(viewsets.ModelViewSet):
 
 class MutualFundInvestmentView(APIView):
     """Get-or-create the household's shared shell Instrument (Mutual Fund by
-    default, or Equity when instrument_type='equity' is passed), then
+    default, Equity when instrument_type='equity', ETF when 'etf'), then
     get-or-create an Investment under it for the given holding name — the
     single round-trip a "record a buy / add a new holding" flow needs
     instead of separately looking up the shell and then creating/matching an
     Investment by hand.
 
     Equity has no natural folio to disambiguate two members holding the same
-    stock name, so for instrument_type='equity' the lookup is scoped by
+    stock name, so for instrument_type='equity'/'etf' the lookup is scoped by
     member instead of folio_no (matching how the Groww/Upstox importer
     creates equity Investments — see ingestion/universal_importer.py and
     instruments/services.py's get_or_create_equity_shell)."""
 
     def post(self, request):
         from core.models import Household
-        from instruments.services import get_or_create_equity_shell, get_or_create_mf_shell
+        from instruments.services import get_or_create_equity_shell, get_or_create_etf_shell, get_or_create_mf_shell
 
         household_id = request.data.get('household')
         name = (request.data.get('name') or '').strip()
@@ -211,8 +211,8 @@ class MutualFundInvestmentView(APIView):
 
         member_id = request.data.get('member') or None
 
-        if instrument_type == 'equity':
-            shell = get_or_create_equity_shell(household)
+        if instrument_type in ('equity', 'etf'):
+            shell = get_or_create_etf_shell(household) if instrument_type == 'etf' else get_or_create_equity_shell(household)
             investment, created = Investment.objects.get_or_create(
                 instrument=shell,
                 name=name,

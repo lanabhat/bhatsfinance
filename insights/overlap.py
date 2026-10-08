@@ -103,7 +103,10 @@ def compute_portfolio_diversification(household_id: int, as_of) -> dict:
     from instruments.models import FundHoldingsSnapshot, Instrument, Investment
 
     holdings = compute_holdings(household_id, as_of)
-    covered_types = {Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP, Instrument.InstrumentType.EQUITY}
+    covered_types = {
+        Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP,
+        Instrument.InstrumentType.EQUITY, Instrument.InstrumentType.ETF,
+    }
     candidates = [
         ('investment', h['investment_id']) if h['investment_id'] else ('instrument', h['instrument_id'])
         for h in holdings if h['instrument_type'] in covered_types

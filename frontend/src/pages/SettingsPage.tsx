@@ -19,7 +19,8 @@ const ENTITY_LABELS: Array<{ key: DeleteEntity; label: string; warning?: string 
 ]
 
 const INSTRUMENT_TYPE_OPTIONS = [
-  { value: 'equity', label: 'Equity' },
+  { value: 'equity', label: 'Stock' },
+  { value: 'etf', label: 'ETF' },
   { value: 'mutual_fund', label: 'Mutual Fund' },
   { value: 'fd', label: 'FD' },
   { value: 'rd', label: 'RD' },

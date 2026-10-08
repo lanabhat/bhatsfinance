@@ -955,7 +955,7 @@ class UpstoxImportTests(TestCase):
             ('INF174KA1HV3', 'KOTAK MTCF D-GROW', '471.52', '21.09'),
         )
         types = dict(Investment.objects.values_list('name', 'instrument__instrument_type'))
-        self.assertEqual(types, {'ITC LTD': 'equity', 'ICICI NIFTY NXT50ETF': 'equity', 'KOTAK MTCF D-GROW': 'mutual_fund'})
+        self.assertEqual(types, {'ITC LTD': 'equity', 'ICICI NIFTY NXT50ETF': 'etf', 'KOTAK MTCF D-GROW': 'mutual_fund'})
         self.assertEqual(Investment.objects.get(name='KOTAK MTCF D-GROW').isin, 'INF174KA1HV3')
 
     def test_reimport_matches_by_isin_and_adjusts_units(self):

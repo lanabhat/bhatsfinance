@@ -214,7 +214,7 @@ class GrowwPreviewView(APIView):
                     'quantity': str(r['quantity']),
                 }
                 for r in rows
-                if r['instrument_type'] in ('equity', 'mutual_fund', 'sip') and r['quantity'] != 0
+                if r['instrument_type'] in ('equity', 'etf', 'mutual_fund', 'sip') and r['quantity'] != 0
             ]
 
         results = []

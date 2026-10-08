@@ -74,7 +74,8 @@ class AssetCategory(TimeStampedModel):
 class Instrument(TimeStampedModel):
     class InstrumentType(models.TextChoices):
         CASH = 'cash', 'Cash'
-        EQUITY = 'equity', 'Equity'
+        EQUITY = 'equity', 'Stock'
+        ETF = 'etf', 'ETF'
         MUTUAL_FUND = 'mutual_fund', 'Mutual Fund'
         SIP = 'sip', 'SIP'
         FD = 'fd', 'Fixed Deposit'

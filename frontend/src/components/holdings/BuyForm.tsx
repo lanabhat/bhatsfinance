@@ -15,7 +15,7 @@ const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)]
 
 const MF_TYPES = new Set(['mutual_fund', 'sip'])
 
-const INSTRUMENT_TYPES_OPTS = ['equity','mutual_fund','fd','rd','bond','epf','ppf','nps','gold','real_estate','insurance','lending','cash','other','vehicle','liability','sip'] as const
+const INSTRUMENT_TYPES_OPTS = ['equity','etf','mutual_fund','fd','rd','bond','epf','ppf','nps','gold','real_estate','insurance','lending','cash','other','vehicle','liability','sip'] as const
 const COMPOUNDING_OPTIONS = ['simple', 'monthly', 'quarterly', 'half_yearly', 'annually'] as const
 const COUPON_FREQUENCY_OPTIONS = ['monthly', 'quarterly', 'half_yearly', 'annual', 'cumulative'] as const
 const BOND_TYPE_OPTIONS = ['government', 'corporate', 'tax_free', 'sgb', 'ncd', 'other'] as const
@@ -77,11 +77,11 @@ export function BuyForm({ householdId, instrumentId: initId, investmentId: initI
   const { members, categories, instrumentsFull } = useApp()
   // The single shared "Equity" shell Instrument (if it exists yet — older
   // households may still only have legacy per-stock Instruments, which stay
-  // directly pickable) is never picked directly, same as the MF shell —
-  // its holdings are picked via the investments list instead.
+  // directly pickable) is never picked directly, same as the MF and ETF
+  // shells — their holdings are picked via the investments list instead.
   const equityShell = useMemo(() => instrumentsFull.find((i) => i.instrument_type === 'equity' && i.label === 'Equity') ?? null, [instrumentsFull])
   const instruments = useMemo(
-    () => instrumentsFull.filter((i) => !MF_TYPES.has(i.instrument_type) && i.id !== equityShell?.id),
+    () => instrumentsFull.filter((i) => !MF_TYPES.has(i.instrument_type) && i.instrument_type !== 'etf' && i.id !== equityShell?.id),
     [instrumentsFull, equityShell],
   )
   const [investments, setInvestments] = useState<Investment[]>([])
@@ -114,8 +114,9 @@ export function BuyForm({ householdId, instrumentId: initId, investmentId: initI
   const [error, setError] = useState('')
 
   const isNewMf = showNewInst && MF_TYPES.has(newInstType)
-  const isNewEquity = showNewInst && newInstType === 'equity'
-  // Both MF and equity route new holdings through the same get-or-create-
+  const isNewEtf = showNewInst && newInstType === 'etf'
+  const isNewEquity = showNewInst && (newInstType === 'equity' || isNewEtf)
+  // MF, equity and ETF all route new holdings through the same get-or-create-
   // shell-then-Investment endpoint (investmentApi.getOrCreateMfInvestment,
   // which despite the name is generic — see instruments/views.py's
   // MutualFundInvestmentView).
@@ -157,11 +158,11 @@ export function BuyForm({ householdId, instrumentId: initId, investmentId: initI
       let finalInvestmentId = investmentId ? Number(investmentId) : null
 
       if (isNewShellType) {
-        if (!newInstName.trim()) { setError(isNewEquity ? 'Enter stock name.' : 'Enter fund name.'); setSaving(false); return }
+        if (!newInstName.trim()) { setError(isNewEtf ? 'Enter ETF name.' : isNewEquity ? 'Enter stock name.' : 'Enter fund name.'); setSaving(false); return }
         const investment = await investmentApi.getOrCreateMfInvestment({
           household: householdId, name: newInstName.trim(), folio_no: isNewEquity ? '' : newFundFolio.trim(),
           member: memberId ? Number(memberId) : null,
-          instrument_type: isNewEquity ? 'equity' : 'mutual_fund',
+          instrument_type: isNewEquity ? newInstType : 'mutual_fund',
         })
         finalId = investment.instrument
         finalInvestmentId = investment.id
@@ -291,8 +292,8 @@ export function BuyForm({ householdId, instrumentId: initId, investmentId: initI
             </div>
           ) : (
             <div className="rounded-xl border border-primary-200 bg-primary-50 dark:bg-primary-900/15 p-3 space-y-2">
-              <p className="text-xs font-medium text-primary-700 dark:text-primary-300">{isNewMf ? 'New Fund/Folio' : isNewEquity ? 'New Stock' : 'New Instrument'}</p>
-              <input placeholder={isNewMf ? 'Fund/scheme name' : isNewEquity ? 'Stock name' : 'Name'} value={newInstName} onChange={(e) => setNewInstName(e.target.value)} className={INP} />
+              <p className="text-xs font-medium text-primary-700 dark:text-primary-300">{isNewMf ? 'New Fund/Folio' : isNewEtf ? 'New ETF' : isNewEquity ? 'New Stock' : 'New Instrument'}</p>
+              <input placeholder={isNewMf ? 'Fund/scheme name' : isNewEtf ? 'ETF name (e.g. NIP ETF NIFTY50 BEES)' : isNewEquity ? 'Stock name' : 'Name'} value={newInstName} onChange={(e) => setNewInstName(e.target.value)} className={INP} />
               <select value={newInstType} onChange={(e) => setNewInstType(e.target.value as Instrument['instrument_type'])} className={INP}>
                 {INSTRUMENT_TYPES_OPTS.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
               </select>

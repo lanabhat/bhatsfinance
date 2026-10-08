@@ -56,6 +56,7 @@ const ACCOUNT_TYPES: OptionItem[] = [
 const INSTRUMENT_TYPES: OptionItem[] = [
   'cash',
   'equity',
+  'etf',
   'mutual_fund',
   'sip',
   'fd',

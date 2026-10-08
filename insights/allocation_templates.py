@@ -24,7 +24,7 @@ RULE_LABELS = {
 }
 
 
-def _holding_bucket(instrument, classification) -> str:
+def _holding_bucket(instrument, classification, name: str = '') -> str:
     """equity / debt / other — uses the AI classification (ai_insights.FundClassification)
     when this holding has one, since that's a real judgment call rather than a
     blunt type guess; falls back to the instrument_type heuristic otherwise. A
@@ -33,9 +33,13 @@ def _holding_bucket(instrument, classification) -> str:
     `classification` is the FundClassification for this specific holding —
     for MF/SIP holdings that's keyed by investment_id (FundClassification.investment),
     since the shared "Mutual Fund" Instrument shell can't itself be classified;
-    for other holding types it's always None and the instrument_type heuristic applies."""
+    for other holding types it's always None and the instrument_type heuristic applies.
+    ETFs are bucketed by the index they track (`name` is the holding's name)."""
     if classification is not None:
         return classification.bucket
+    if instrument.instrument_type == 'etf':
+        from fund_data.market_cap import etf_asset_class
+        return {'equity': 'equity', 'debt': 'debt'}.get(etf_asset_class(name), 'other')
     if instrument.instrument_type in EQUITY_TYPES:
         return 'equity'
     if instrument.instrument_type in DEBT_TYPES:
@@ -100,7 +104,7 @@ def suggest_category_targets(household_id: int, as_of: date, age: int, equity_ba
         cat_id = h['asset_category']
         entry = category_composition.setdefault(cat_id, {'equity_value': ZERO, 'debt_value': ZERO, 'other_value': ZERO})
         classification = classification_by_investment.get(h['investment_id']) if h['investment_id'] else None
-        bucket = _holding_bucket(inst, classification)
+        bucket = _holding_bucket(inst, classification, h['investment_name'] or '')
         if bucket == 'equity':
             entry['equity_value'] += h['market_value']
         elif bucket == 'debt':

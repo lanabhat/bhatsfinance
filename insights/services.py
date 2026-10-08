@@ -510,7 +510,7 @@ def compute_allocation(household_id: int, as_of: date) -> list[dict]:
 
 
 _FACT_TYPE_LABELS = {
-    'equity': 'Equity', 'mutual_fund': 'Mutual Fund', 'sip': 'Mutual Fund', 'fd': 'FD', 'rd': 'RD', 'bond': 'Bond',
+    'equity': 'Stock', 'etf': 'ETF', 'mutual_fund': 'Mutual Fund', 'sip': 'Mutual Fund', 'fd': 'FD', 'rd': 'RD', 'bond': 'Bond',
     'epf': 'EPF', 'ppf': 'PPF', 'nps': 'NPS', 'gold': 'Gold', 'real_estate': 'Real Estate', 'lending': 'Lending',
     'cash': 'Cash', 'vehicle': 'Vehicle', 'insurance': 'Insurance', 'other': 'Other',
 }
@@ -523,6 +523,7 @@ _TYPE_CLASS = {
     'nps': 'Retirement', 'gold': 'Gold', 'real_estate': 'Real estate', 'cash': 'Cash', 'equity': 'Equity',
 }
 _FUND_CLASS = {'equity': 'Equity', 'debt': 'Debt', 'hybrid': 'Hybrid', 'commodities': 'Gold', 'gold': 'Gold'}
+_ETF_CLASS = {'equity': 'Equity', 'debt': 'Debt', 'gold': 'Gold', 'other': 'Other'}
 _CAP_LABELS = {'large_cap': 'Large Cap', 'mid_cap': 'Mid Cap', 'small_cap': 'Small Cap', 'multi': 'Multi-cap'}
 
 
@@ -532,10 +533,8 @@ def compute_allocation_facts(household_id: int, as_of: date) -> dict:
     from positive account balances), each tagged with every dimension the dashboard
     cross-filters on: type, category, asset class, market cap, classification,
     provider. The browser does all filtering and aggregation on these rows."""
-    import re
-
     from core.models import Member
-    from fund_data.market_cap import NON_EQUITY_ETF, cap_for_fund
+    from fund_data.market_cap import cap_for_fund, etf_asset_class
     from instruments.models import Account, AssetCategory, Instrument, Investment, MutualFundDetails
 
     members = list(Member.objects.filter(household_id=household_id, is_active=True).order_by('id'))
@@ -568,12 +567,16 @@ def compute_allocation_facts(household_id: int, as_of: date) -> dict:
         elif kind == 'equity':
             cap = inv.market_cap if inv else ''
             market_cap = _CAP_LABELS.get(cap, '—')
-            if not cap and NON_EQUITY_ETF.search(name or ''):
-                asset_class = 'Gold' if re.search(r'gold|gld', name, re.I) else 'Cash'
-                classification = 'Gold ETF' if asset_class == 'Gold' else 'Liquid ETF'
+            asset_class = 'Equity'
+            classification = market_cap if cap else 'Stocks (unclassified)'
+        elif kind == 'etf':
+            cap = inv.market_cap if inv else ''
+            market_cap = _CAP_LABELS.get(cap, '—')
+            asset_class = _ETF_CLASS[etf_asset_class(name)]
+            if asset_class == 'Equity':
+                classification = f'{market_cap} ETF' if cap else 'Equity ETF'
             else:
-                asset_class = 'Equity'
-                classification = market_cap if cap else 'Stocks (unclassified)'
+                classification = f'{asset_class} ETF'
         else:
             sub = inst.sub_category if inst else ''
             asset_class = _SUB_CATEGORY_CLASS.get(sub) or _TYPE_CLASS.get(kind, 'Other')
@@ -665,7 +668,7 @@ def compute_market_cap_split(household_id: int, as_of: date, member_id: int | No
     fund_data/market_cap.py); funds use their MutualFundDetails sub-category —
     flexi/multi-cap, ELSS and sectoral funds count as "multi". Debt, liquid,
     hybrid and gold holdings aren't equity and are left out of the total."""
-    from fund_data.market_cap import NON_EQUITY_ETF, cap_for_fund
+    from fund_data.market_cap import cap_for_fund, etf_asset_class
     from instruments.models import Investment, MutualFundDetails
 
     holdings = [h for h in compute_holdings(household_id, as_of, member_id) if h['market_value'] > 0]
@@ -677,11 +680,11 @@ def compute_market_cap_split(household_id: int, as_of: date, member_id: int | No
 
     rows = {key: {'key': key, 'label': label, 'stocks': ZERO, 'funds': ZERO, 'holdings': []} for key, label in MARKET_CAP_ROWS}
     for h in holdings:
-        if h['instrument_type'] == 'equity':
+        if h['instrument_type'] in ('equity', 'etf'):
             kind = 'stock'
             cap = stock_caps.get(h['investment_id'], '') if h['investment_id'] else ''
-            if not cap and NON_EQUITY_ETF.search(h['investment_name'] or ''):
-                continue  # gold/liquid ETF: not equity exposure
+            if h['instrument_type'] == 'etf' and etf_asset_class(h['investment_name'] or '') != 'equity':
+                continue  # debt/gold ETF: not equity exposure
         elif h['instrument_type'] in ('mutual_fund', 'sip'):
             kind = 'fund'
             details = fund_details.get(h['investment_id'])
@@ -1497,7 +1500,7 @@ def compute_fund_performance(household_id: int, as_of: date) -> list[dict]:
 
 
 _DUP_FILLER_WORDS = {'fund', 'plan', 'option', 'the', 'ltd', 'limited', 'scheme'}
-QUANTITY_TRACKED_TYPES = {'equity', 'mutual_fund', 'sip', 'bond'}
+QUANTITY_TRACKED_TYPES = {'equity', 'etf', 'mutual_fund', 'sip', 'bond'}
 STALE_AFTER_DAYS = 30
 
 

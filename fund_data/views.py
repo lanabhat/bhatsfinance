@@ -192,7 +192,7 @@ class FundComparisonView(APIView):
             instrument__instrument_type__in=[Instrument.InstrumentType.MUTUAL_FUND, Instrument.InstrumentType.SIP],
         ).select_related('mf_details', 'external_fund')
         equities = Instrument.objects.filter(
-            household_id=household_id, instrument_type=Instrument.InstrumentType.EQUITY,
+            household_id=household_id, instrument_type__in=[Instrument.InstrumentType.EQUITY, Instrument.InstrumentType.ETF],
         )
 
         diversification = compute_portfolio_diversification(int(household_id), as_of)

@@ -44,12 +44,14 @@ def link_funds_by_isin(household_id: int | None = None) -> dict:
 
 
 def _equity_holdings(household_id: int | None):
-    """(household_id, instrument, investment-or-None, name, isin) for every active equity holding:
+    """(household_id, instrument, investment-or-None, name, isin) for every active stock or ETF holding:
     Investments under equity shells, plus standalone equity Instruments with no Investments."""
     from instruments.models import Instrument, Investment
     from instruments.services import holding_isin
 
-    instruments = Instrument.objects.filter(instrument_type=Instrument.InstrumentType.EQUITY, is_active=True)
+    instruments = Instrument.objects.filter(
+        instrument_type__in=(Instrument.InstrumentType.EQUITY, Instrument.InstrumentType.ETF), is_active=True,
+    )
     if household_id is not None:
         instruments = instruments.filter(household_id=household_id)
     for instrument in instruments.prefetch_related('investments'):

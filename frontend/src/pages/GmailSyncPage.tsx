@@ -55,7 +55,7 @@ type AddInstrumentModalProps = {
 const INSTRUMENT_TYPES = [
   { value: 'mutual_fund', label: 'Mutual Fund' },
   { value: 'sip', label: 'SIP' },
-  { value: 'equity', label: 'Equity' },
+  { value: 'equity', label: 'Stock' },
   { value: 'fd', label: 'Fixed Deposit' },
   { value: 'rd', label: 'Recurring Deposit' },
   { value: 'epf', label: 'EPF' },

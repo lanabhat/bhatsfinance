@@ -115,7 +115,7 @@ type HoldingSortBy = 'value' | 'gain' | 'gainPct' | 'name' | 'invested'
 
 const MARKET_CAP_LABELS: Record<string, string> = { large_cap: 'Large Cap', mid_cap: 'Mid Cap', small_cap: 'Small Cap' }
 const MF_TYPES = new Set(['mutual_fund', 'sip'])
-const QUANTITY_TRACKED_TYPES = new Set(['equity', 'mutual_fund', 'sip', 'bond'])
+const QUANTITY_TRACKED_TYPES = new Set(['equity', 'etf', 'mutual_fund', 'sip', 'bond'])
 
 // Filler words that differ between import sources without changing the holding.
 // direct/regular and growth/idcw/dividend are deliberately kept: they ARE different holdings.
