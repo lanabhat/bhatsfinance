@@ -4,8 +4,13 @@ import type { ReactNode } from 'react'
 
 type Props = {
   title: string
+  /** Small line under the title, e.g. what the form is for ("SBI RD · due 2026-08-19"). */
+  subtitle?: ReactNode
   onClose: () => void
   children: ReactNode
+  /** Action buttons pinned below the scrolling body, so they stay reachable on a phone
+   *  however long the form is (or while the keyboard is open). */
+  footer?: ReactNode
   /** Kept for API compatibility; the sheet always scrolls when content overflows. */
   tall?: boolean
   /** Wider panel (max-w-xl instead of max-w-lg) for forms with denser content, e.g. a searchable picker. */
@@ -20,7 +25,7 @@ let openCount = 0
  * Assets…). Bottom-sheet on mobile, centered modal on desktop. Portaled to
  * document.body so it always paints above page content and other overlays.
  */
-export function Sheet({ title, onClose, children, wide }: Props) {
+export function Sheet({ title, subtitle, onClose, children, footer, wide }: Props) {
   const [dragY, setDragY] = useState(0)
   const startY = useRef<number | null>(null)
   const [layer, setLayer] = useState(50)
@@ -84,7 +89,10 @@ export function Sheet({ title, onClose, children, wide }: Props) {
 
           {/* Header */}
           <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3 md:py-4">
-            <h3 className="text-base font-semibold text-[var(--text)]">{title}</h3>
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-[var(--text)]">{title}</h3>
+              {subtitle && <div className="mt-0.5 text-xs text-[var(--text-muted)]">{subtitle}</div>}
+            </div>
             <button
               type="button"
               onClick={onClose}
@@ -99,6 +107,12 @@ export function Sheet({ title, onClose, children, wide }: Props) {
           <div className="main-content-sheet flex-1 overflow-y-auto overflow-x-clip px-5 py-4 min-w-0">
             {children}
           </div>
+
+          {footer && (
+            <div className="flex shrink-0 gap-2 border-t border-[var(--border)] px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+              {footer}
+            </div>
+          )}
         </div>
       </div>
     </>,

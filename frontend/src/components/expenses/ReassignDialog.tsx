@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { ExpenseCategory } from '../../types/domain'
 
 type Props = {
@@ -18,9 +19,10 @@ export function ReassignDialog({ open, deletingCategory, allCategories, expenseC
 
   const options = allCategories.filter(c => c.key !== deletingCategory.key)
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-6 shadow-xl">
+  // Portaled so it covers the mobile bottom nav (page transforms would otherwise trap it).
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-6 shadow-xl max-h-[90dvh] overflow-y-auto">
         <div className="mb-1 flex items-center gap-2">
           <span className="text-2xl">{deletingCategory.icon}</span>
           <h2 className="text-base font-semibold text-[var(--text)]">Delete "{deletingCategory.label}"</h2>
@@ -70,6 +72,7 @@ export function ReassignDialog({ open, deletingCategory, allCategories, expenseC
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

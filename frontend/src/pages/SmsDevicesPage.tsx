@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { SmsApiKey } from '../types/domain'
 import { smsApi } from '../api/smsApi'
 import { useAuth } from '../context/AuthContext'
@@ -185,9 +186,10 @@ export function SmsDevicesPage({ householdId }: Props) {
         </div>
       )}
 
-      {revealedKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-[var(--surface,white)] p-6 shadow-xl">
+      {/* Portaled so it covers the mobile bottom nav (page transforms would otherwise trap it). */}
+      {revealedKey && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--surface,white)] p-6 shadow-xl max-h-[90dvh] overflow-y-auto">
             <h2 className="mb-1 text-base font-semibold text-[var(--text)]">Device registered</h2>
             <p className="mb-4 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/15 border border-amber-200 rounded-lg px-3 py-2">
               ⚠️ This API key is shown only once. Copy it into the forwarder app now — you won't be able to view it again.
@@ -226,7 +228,8 @@ export function SmsDevicesPage({ householdId }: Props) {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

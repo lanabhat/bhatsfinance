@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 type Props = {
   open: boolean
@@ -25,16 +26,17 @@ export function ConfirmDialog({
 
   if (!open) return null
 
-  return (
+  // Portaled above everything, including a Sheet it may be opened from.
+  return createPortal(
     <>
-      <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onCancel} aria-hidden="true" />
+      <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm" onClick={onCancel} aria-hidden="true" />
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-title"
       >
-        <div className="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-6 shadow-[var(--shadow-modal)]">
+        <div className="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-6 shadow-[var(--shadow-modal)] max-h-[90dvh] overflow-y-auto">
           <h3 id="confirm-title" className="mb-2 text-base font-semibold text-[var(--text)]">{title}</h3>
           <p className="mb-6 text-sm text-[var(--text-muted)]">{message}</p>
           <div className="flex justify-end gap-3">
@@ -57,6 +59,7 @@ export function ConfirmDialog({
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }

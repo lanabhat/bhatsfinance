@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import type { Member, OptionItem } from '../types/domain'
 import { householdApi } from '../api/householdApi'
@@ -115,9 +116,10 @@ function AddInstrumentModal({ proposal, accountOptions, memberOptions, fullMembe
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="w-full max-w-lg rounded-2xl bg-[var(--surface)] shadow-xl">
+  // Portaled so it covers the mobile bottom nav (page transforms would otherwise trap it).
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="w-full max-w-lg rounded-2xl bg-[var(--surface)] shadow-xl max-h-[90dvh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
           <h2 className="text-base font-semibold text-[var(--text)]">Add Instrument</h2>
@@ -206,7 +208,8 @@ function AddInstrumentModal({ proposal, accountOptions, memberOptions, fullMembe
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

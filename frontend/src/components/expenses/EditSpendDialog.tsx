@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { expenseApi } from '../../api/expenseApi'
 import { tagApi } from '../../api/tagApi'
 import { TagPicker } from './TagPicker'
@@ -81,9 +82,10 @@ export function EditSpendDialog({ open, householdId, transaction, categories, me
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+  // Portaled so it covers the mobile bottom nav (page transforms would otherwise trap it).
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-[var(--surface)] p-6 shadow-xl max-h-[90dvh] overflow-y-auto">
         <h2 className="mb-1 text-base font-semibold text-[var(--text)]">Edit transaction</h2>
         <p className="mb-4 text-xs text-[var(--text-muted)]">
           Changing amount or account creates a corrected replacement. Other fields update in place.
@@ -226,6 +228,7 @@ export function EditSpendDialog({ open, householdId, transaction, categories, me
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
