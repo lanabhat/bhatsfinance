@@ -13,6 +13,13 @@ from alerts.services import generate_coupon_reminders, generate_missed_rd_instal
 from ledger.models import Transaction
 
 
+def _already_recorded(household_id: int, idempotency_key: str):
+    """The transaction an earlier "Mark paid" created for this instalment, if any —
+    so clicking again (e.g. on an alert that hadn't cleared) succeeds instead of
+    failing the unique idempotency-key check with a 400."""
+    return Transaction.objects.filter(household_id=household_id, idempotency_key=idempotency_key).first()
+
+
 class SIPMandateViewSet(viewsets.ModelViewSet):
     queryset = SIPMandate.objects.select_related('household', 'member', 'account', 'instrument').all()
     serializer_class = SIPMandateSerializer
@@ -40,6 +47,11 @@ class SIPMandateViewSet(viewsets.ModelViewSet):
                 {'ack_id': ack.id, 'cleared_due_date': due_date.isoformat(), 'mode': 'ack', 'created': created},
                 status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
             )
+
+        existing = _already_recorded(mandate.household_id, f'sip-paid-{mandate.id}-{due_date.isoformat()}')
+        if existing:
+            return Response({'transaction_id': existing.id, 'cleared_due_date': due_date.isoformat(), 'mode': 'transaction',
+                             'created': False}, status=status.HTTP_200_OK)
 
         account_id = int(payload.get('account_id') or mandate.account_id)
         amount = Decimal(str(payload.get('amount') or mandate.expected_amount))
@@ -124,6 +136,12 @@ class SIPMandateViewSet(viewsets.ModelViewSet):
                 })
                 continue
 
+            existing = _already_recorded(mandate.household_id, f'sip-paid-{mandate.id}-{due_date.isoformat()}')
+            if existing:
+                results.append({'mandate_id': mandate_id, 'due_date': due_date.isoformat(), 'ok': True,
+                                'mode': 'transaction', 'transaction_id': existing.id, 'created': False})
+                continue
+
             account_id = int(item.get('account_id') or global_account_id or mandate.account_id)
             amount = Decimal(str(item.get('amount') or mandate.expected_amount))
             try:
@@ -195,6 +213,11 @@ class RDMandateViewSet(viewsets.ModelViewSet):
         # The instalment always goes into the RD (nothing else records RD deposits);
         # `deduct` only decides whether the paying account's balance goes down — off
         # when it was paid from an account whose balance already reflects it.
+        existing = _already_recorded(mandate.household_id, f'rd-paid-{mandate.id}-{due_date.isoformat()}')
+        if existing:
+            return Response({'transaction_id': existing.id, 'cleared_due_date': due_date.isoformat(), 'mode': 'transaction',
+                             'created': False}, status=status.HTTP_200_OK)
+
         account_id = int(payload.get('account_id') or mandate.account_id)
         amount = Decimal(str(payload.get('amount') or mandate.installment_amount))
 
@@ -254,6 +277,12 @@ class RDMandateViewSet(viewsets.ModelViewSet):
                 mandate = RDMandate.objects.get(pk=mandate_id)
             except RDMandate.DoesNotExist:
                 results.append({'item': item, 'ok': False, 'error': 'mandate not found.'})
+                continue
+
+            existing = _already_recorded(mandate.household_id, f'rd-paid-{mandate.id}-{due_date.isoformat()}')
+            if existing:
+                results.append({'mandate_id': mandate_id, 'due_date': due_date.isoformat(), 'ok': True,
+                                'mode': 'transaction', 'transaction_id': existing.id, 'created': False})
                 continue
 
             account_id = int(item.get('account_id') or global_account_id or mandate.account_id)

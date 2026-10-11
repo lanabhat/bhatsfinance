@@ -18,6 +18,22 @@ def _increment_date(base: date, frequency: str) -> date:
     return date(year, month, day)
 
 
+def _marked_paid(household_id: int, mandate_key: str, due_key: str) -> set:
+    """(mandate_id, due_date) of every instalment recorded via "Mark paid". Those
+    transactions are dated when it was paid (often after the grace period) and may
+    come from a different account, so the date-window check alone misses them."""
+    rows = Transaction.objects.filter(
+        household_id=household_id, **{f'metadata__{mandate_key}__isnull': False},
+    ).values_list('metadata', flat=True)
+    paid = set()
+    for meta in rows:
+        try:
+            paid.add((int(meta[mandate_key]), date.fromisoformat(meta[due_key])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return paid
+
+
 def generate_missed_sip_alerts(household_id: int, as_of: date) -> list[dict]:
     from alerts.models import SIPMandate, SIPPaymentAck
 
@@ -27,7 +43,7 @@ def generate_missed_sip_alerts(household_id: int, as_of: date) -> list[dict]:
     # Preload acknowledgements for all mandates in this household — avoids N queries.
     acked = set(
         SIPPaymentAck.objects.filter(mandate__household_id=household_id).values_list('mandate_id', 'due_date')
-    )
+    ) | _marked_paid(household_id, 'sip_mandate_id', 'sip_due_date')
 
     for mandate in mandates:
         current = mandate.start_date
@@ -124,7 +140,7 @@ def generate_missed_rd_installments(household_id: int, as_of: date) -> list[dict
 
     acked = set(
         RDPaymentAck.objects.filter(mandate__household_id=household_id).values_list('mandate_id', 'due_date')
-    )
+    ) | _marked_paid(household_id, 'rd_mandate_id', 'rd_due_date')
 
     for mandate in mandates:
         current = mandate.start_date

@@ -174,3 +174,22 @@ class RDMarkPaidTests(TestCase):
             'items': [{'mandate_id': self.mandate.id, 'due_date': '2026-08-19'}], 'paid_on': '2026-08-19', 'deduct': True,
         }, format='json')
         self.assertEqual(self._balance(), '40000.00')
+
+    def test_paid_late_from_another_account_clears_the_alert_and_retry_succeeds(self):
+        # Mark-paid records the deposit on the day it's marked (after the grace period)
+        # and possibly from another account; the alert must still clear, and clicking
+        # again must not fail on the duplicate idempotency key.
+        other = Account.objects.create(household=self.household, name='HDFC', account_type='bank')
+        payload = {'due_date': '2026-08-19', 'paid_on': '2026-10-05', 'deduct': True, 'account_id': other.id}
+        first = self.client.post(f'/api/rd-mandates/{self.mandate.id}/mark-paid/', payload, format='json')
+        self.assertEqual(first.status_code, 201, first.data)
+        self.assertNotIn('2026-08-19', [a['due_date'] for a in generate_missed_rd_installments(self.household.id, date(2026, 10, 10))])
+
+        again = self.client.post(f'/api/rd-mandates/{self.mandate.id}/mark-paid/', payload, format='json')
+        self.assertEqual(again.status_code, 200, again.data)
+        self.assertEqual(again.data['transaction_id'], first.data['transaction_id'])
+        bulk = self.client.post('/api/rd-mandates/mark-all-paid/', {
+            'items': [{'mandate_id': self.mandate.id, 'due_date': '2026-08-19'}], 'deduct': True,
+        }, format='json')
+        self.assertTrue(bulk.data['results'][0]['ok'])
+        self.assertEqual(Transaction.objects.filter(instrument=self.rd).count(), 1)
