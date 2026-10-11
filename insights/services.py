@@ -320,6 +320,9 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
         holdings.append(
             {
                 **item,
+                # Date of the latest valuation used above (None = never valued) — what
+                # the Home "never valued / stale" counts and the Holdings filter both read.
+                'last_valued_on': valuation.valuation_date if valuation else None,
                 'quantity': quantity.quantize(Decimal('0.000001')),
                 'market_value': market_value.quantize(Decimal('0.01')),
                 'realized_gain_total': item['realized_gain_total'].quantize(Decimal('0.01')),
@@ -1559,8 +1562,6 @@ def _pending_sms_breakdown(household_id: int) -> dict:
 
 def compute_attention(household_id: int, as_of: date) -> dict:
     """Counts of things that need the user, for the Home "Needs attention" card."""
-    from django.db.models import Max
-
     from gmail_ingestion.models import GmailProcessedMessage
     from instruments.models import Instrument, Investment
     from sms_ingestion.models import SmsMessage
@@ -1570,18 +1571,10 @@ def compute_attention(household_id: int, as_of: date) -> dict:
         if not (h['instrument_type'] in QUANTITY_TRACKED_TYPES and h['quantity'] == 0)
     ]
 
-    latest_by_investment = dict(
-        ValuationSnapshot.objects.filter(household_id=household_id, investment__isnull=False)
-        .values_list('investment_id').annotate(m=Max('valuation_date'))
-    )
-    latest_by_instrument = dict(
-        ValuationSnapshot.objects.filter(household_id=household_id, instrument__isnull=False, investment__isnull=True)
-        .values_list('instrument_id').annotate(m=Max('valuation_date'))
-    )
     stale_cutoff = as_of - timedelta(days=STALE_AFTER_DAYS)
     stale = never = 0
     for h in holdings:
-        last = latest_by_investment.get(h['investment_id']) if h['investment_id'] else latest_by_instrument.get(h['instrument_id'])
+        last = h['last_valued_on']
         if last is None:
             never += 1
         elif last < stale_cutoff:

@@ -788,6 +788,27 @@ class ComputeAttentionTests(TestCase):
         result = compute_attention(self.household.id, date(2026, 10, 2))
         self.assertEqual((result['stale_holdings'], result['never_valued']), (1, 0))
 
+    def test_holdings_carry_last_valued_on_matching_the_counts(self):
+        # The Holdings page's "Valuation" filter reads last_valued_on; the Home counts
+        # must come from the same field so "Review" shows exactly what was counted.
+        from insights.services import compute_attention, compute_holdings
+        fresh = Investment.objects.create(instrument=self.shell, name='Fresh Fund', folio_no='F1')
+        stale = Investment.objects.create(instrument=self.shell, name='Stale Fund', folio_no='S1')
+        for inv in (fresh, stale):
+            Transaction.objects.create(
+                household=self.household, instrument=self.shell, investment=inv, tx_date=date(2026, 1, 5),
+                amount=Decimal('500'), quantity=Decimal('5'),
+                direction=Transaction.Direction.OUTFLOW, transaction_type=Transaction.TransactionType.BUY,
+            )
+        for inv, day in ((fresh, date(2026, 9, 25)), (stale, date(2026, 5, 1)), (stale, date(2026, 6, 1))):
+            ValuationSnapshot.objects.create(household=self.household, instrument=self.shell, investment=inv,
+                                             valuation_date=day, unit_price=Decimal('105'))
+        as_of = date(2026, 10, 2)
+        by_inv = {h['investment_id']: h['last_valued_on'] for h in compute_holdings(self.household.id, as_of)}
+        self.assertEqual((by_inv[self.fund.id], by_inv[fresh.id], by_inv[stale.id]), (None, date(2026, 9, 25), date(2026, 6, 1)))
+        result = compute_attention(self.household.id, as_of)
+        self.assertEqual((result['never_valued'], result['stale_holdings']), (1, 1))
+
 
 class PendingSmsBreakdownTests(TestCase):
     def test_pending_sms_grouped_by_kind_newest_first(self):

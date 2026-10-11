@@ -115,6 +115,25 @@ type HoldingSortBy = 'value' | 'gain' | 'gainPct' | 'name' | 'invested'
 
 const MARKET_CAP_LABELS: Record<string, string> = { large_cap: 'Large Cap', mid_cap: 'Mid Cap', small_cap: 'Small Cap' }
 const MF_TYPES = new Set(['mutual_fund', 'sip'])
+// Mirrors insights/services.py STALE_AFTER_DAYS — the Home "Needs attention" counts.
+const STALE_AFTER_DAYS = 30
+const VALUATION_NEVER = 'Never valued'
+const VALUATION_STALE = `Not valued in ${STALE_AFTER_DAYS}+ days`
+const VALUATION_FRESH = `Valued in last ${STALE_AFTER_DAYS} days`
+const VALUATION_CLOSED = 'Sold (closed position)'
+// #/holdings?valuation=never|stale (from the Home card's "Review") opens with that filter.
+const VALUATION_LINKS: Record<string, string> = { never: VALUATION_NEVER, stale: VALUATION_STALE }
+
+function valuationStatus(h: DashboardHolding, asOf: string): string {
+  // Fully-sold positions aren't counted on Home either — nothing left to value.
+  if (QUANTITY_TRACKED_TYPES.has(h.instrument_type) && parseFloat(h.quantity) === 0) return VALUATION_CLOSED
+  const lastValuedOn = h.last_valued_on
+  if (!lastValuedOn) return VALUATION_NEVER
+  const cutoff = new Date(`${asOf}T00:00:00`)
+  cutoff.setDate(cutoff.getDate() - STALE_AFTER_DAYS)
+  return new Date(`${lastValuedOn}T00:00:00`) < cutoff ? VALUATION_STALE : VALUATION_FRESH
+}
+
 const QUANTITY_TRACKED_TYPES = new Set(['equity', 'etf', 'mutual_fund', 'sip', 'bond'])
 
 // Filler words that differ between import sources without changing the holding.
@@ -308,6 +327,7 @@ export function HoldingsPage() {
       get: (h) => (h.investment_id ? mfDetailsByInvestment.get(h.investment_id)?.fund_category : null),
     },
     { key: 'sub_category', label: 'Sub-category', get: subCategoryOf },
+    { key: 'valuation', label: 'Valuation', get: (h) => valuationStatus(h, asOf) },
     {
       key: 'owner', label: 'Owner',
       get: (h) => {
@@ -318,9 +338,20 @@ export function HoldingsPage() {
         return ownerLabelsByInstrument.get(h.instrument_id) ?? []
       },
     },
-  ], [categories, mfDetailsByInvestment, subCategoryOf, investmentOwnerMap, ownerLabelsByInstrument])
+  ], [categories, mfDetailsByInvestment, subCategoryOf, investmentOwnerMap, ownerLabelsByInstrument, asOf])
 
   const [holdingFilters, setHoldingFilters] = useFilterState('holdings')
+
+  // Deep link from Home's "Review": show exactly the flagged holdings, then drop the
+  // query so a reload doesn't re-apply it (the filter itself is remembered as usual).
+  useEffect(() => {
+    const status = VALUATION_LINKS[new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('valuation') ?? '']
+    if (!status) return
+    setHoldingFilters({ valuation: [status] })
+    setSearch('')
+    setActiveMemberId(null)
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/holdings`)
+  }, [setHoldingFilters])
 
   // Member pills (server-side, proportional share) and name search first; the filter bar narrows from there.
   const baseHoldings = useMemo(() => {

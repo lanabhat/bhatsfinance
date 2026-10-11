@@ -433,6 +433,8 @@ export type DashboardHolding = {
    * == "0.000000" with prior activity) is still included in the holdings
    * list, not filtered out. */
   realized_gain_total: string
+  /** Date of the latest valuation (YYYY-MM-DD), or null if never valued. */
+  last_valued_on: string | null
 }
 
 export type MemberAccount = {
