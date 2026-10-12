@@ -47,27 +47,27 @@ function BuyHistoryEditor({ transaction, onSave, onCancel }: {
     setSaving(true)
     setError('')
     try {
-      await ledgerApi.updateTransaction(transaction.id, {
-        household: transaction.household,
-        member: transaction.member,
-        account: transaction.account,
-        instrument: transaction.instrument,
-        tx_date: form.tx_date,
-        amount: form.amount,
-        quantity: form.quantity || null,
-        price_per_unit: form.price_per_unit || null,
-        fees: transaction.fees,
-        taxes: transaction.taxes,
-        currency: transaction.currency,
-        direction: transaction.direction,
-        transaction_type: transaction.transaction_type,
-        external_reference: form.external_reference,
-        idempotency_key: transaction.idempotency_key,
-        metadata: transaction.metadata,
-      })
+      const same = (a: string | null | undefined, b: string | null | undefined) =>
+        (a === '' || a == null ? null : Number(a)) === (b === '' || b == null ? null : Number(b))
+      const moneyChanged = !same(form.amount, transaction.amount) || !same(form.quantity, transaction.quantity)
+        || !same(form.price_per_unit, transaction.price_per_unit)
+        || form.external_reference !== (transaction.external_reference ?? '')
+      if (moneyChanged) {
+        // Amounts and units can't be edited in place (the ledger is append-only), so the
+        // server swaps the entry for a corrected copy.
+        await ledgerApi.replaceTransaction(transaction.id, {
+          tx_date: form.tx_date,
+          amount: form.amount,
+          quantity: form.quantity || null,
+          price_per_unit: form.price_per_unit || null,
+          external_reference: form.external_reference,
+        })
+      } else if (form.tx_date !== transaction.tx_date) {
+        await ledgerApi.updateTransaction(transaction.id, { tx_date: form.tx_date })
+      }
       await onSave()
-    } catch {
-      setError('Failed to update buy entry.')
+    } catch (e) {
+      setError(normalizeApiError(e) || 'Failed to update buy entry.')
     } finally {
       setSaving(false)
     }

@@ -18,6 +18,9 @@ MUTABLE_FIELDS = {'tx_date', 'member', 'spend_category', 'description', 'notes',
 # dates and direction stay immutable.
 BULK_MUTABLE_FIELDS = {'classification', 'spend_category', 'affects_balance'}
 BULK_UPDATE_LIMIT = 500
+# What the replace action may change on a buy/sell/deposit — the money and units,
+# which can't be edited in place (see Transaction.save()).
+CORRECTABLE_FIELDS = {'tx_date', 'amount', 'quantity', 'price_per_unit', 'external_reference', 'notes'}
 
 
 class TagViewSet(viewsets.ModelViewSet):
@@ -76,6 +79,70 @@ class TransactionViewSet(viewsets.ModelViewSet):
             instance.tags.set(request.data['tags'])
         instance.refresh_from_db()
         return Response(TransactionSerializer(instance).data)
+
+    @action(detail=True, methods=['post'], url_path='replace')
+    def replace(self, request, pk=None):
+        """Correct a transaction's amount / units / price / date, which can't be edited
+        in place: swap it for a corrected copy in one step. A reversing entry doesn't
+        work for buys — units are signed by transaction_type, not direction, so a
+        "reverse buy" would add the units again.
+
+        The copy keeps every other field, the tags and the original's idempotency key
+        (so a re-import still recognises it); FD/bond details and import rows that
+        pointed at the original are moved to it, and metadata records what changed."""
+        from datetime import date
+
+        from django.core.exceptions import ValidationError
+
+        from ingestion.models import ImportRow
+        from instruments.models import BondDetails, FDDetails
+
+        original = self.get_object()
+        unknown = set(request.data) - CORRECTABLE_FIELDS
+        if unknown:
+            return Response({'detail': f'Fields that can’t be corrected: {", ".join(sorted(unknown))}'}, status=400)
+
+        values = {
+            f.attname: getattr(original, f.attname)
+            for f in Transaction._meta.concrete_fields if f.name not in ('id', 'created_at', 'updated_at')
+        }
+        for field in CORRECTABLE_FIELDS & set(request.data):
+            value = request.data[field]
+            values[field] = None if value in ('', None) and field in ('quantity', 'price_per_unit') else value
+        key = values.pop('idempotency_key')
+        values['metadata'] = {
+            **(original.metadata or {}),
+            'corrected_from': original.id,
+            'corrected_on': date.today().isoformat(),
+            'original_values': {f: str(getattr(original, f)) if getattr(original, f) is not None else None
+                                for f in ('tx_date', 'amount', 'quantity', 'price_per_unit')},
+        }
+        tags = list(original.tags.all())
+        for_members = list(original.for_members.all())
+        fd_ids = list(FDDetails.objects.filter(funding_transaction=original).values_list('id', flat=True))
+        bond_ids = list(BondDetails.objects.filter(funding_transaction=original).values_list('id', flat=True))
+        row_ids = list(ImportRow.objects.filter(transaction=original).values_list('id', flat=True))
+
+        try:
+            with db_transaction.atomic():
+                # The key is unique per household, so the copy takes it only once the
+                # original is gone; tags go on first so the unused-tag sweep on delete
+                # (ledger/signals.py) doesn't remove them.
+                corrected = Transaction.objects.create(**values, idempotency_key='')
+                corrected.tags.set(tags)
+                corrected.for_members.set(for_members)
+                original.delete()
+                if key:
+                    Transaction.objects.filter(pk=corrected.pk).update(idempotency_key=key)
+                FDDetails.objects.filter(id__in=fd_ids).update(funding_transaction=corrected)
+                BondDetails.objects.filter(id__in=bond_ids).update(funding_transaction=corrected)
+                ImportRow.objects.filter(id__in=row_ids).update(transaction=corrected)
+        except ValidationError as e:
+            detail = '; '.join(f'{k}: {", ".join(v)}' for k, v in e.message_dict.items()) if hasattr(e, 'message_dict') else ' '.join(e.messages)
+            return Response({'detail': detail}, status=400)
+
+        corrected.refresh_from_db()
+        return Response(TransactionSerializer(corrected).data, status=201)
 
     @action(detail=False, methods=['get'], url_path='summary')
     def summary(self, request, *args, **kwargs):

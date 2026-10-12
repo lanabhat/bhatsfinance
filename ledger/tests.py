@@ -261,3 +261,58 @@ class TransactionBulkUpdateTests(TestCase):
             'household': self.household.id, 'ids': [self.txs[0].id], 'fields': {'affects_balance': 'no'},
         }, format='json')
         self.assertEqual(response.status_code, 400)
+
+
+class TransactionReplaceTests(TestCase):
+    """Correcting a buy's amount/units — what "Edit Buy Entry" on a holding does."""
+
+    def setUp(self):
+        from instruments.models import FDDetails
+        from ledger.models import Tag
+        self.household = Household.objects.create(name='Pai Family')
+        self.client = _approved_client(self.household)
+        self.land = Instrument.objects.create(household=self.household, name='RE Assaigoli', instrument_type='real_estate')
+        self.buy = Transaction.objects.create(
+            household=self.household, instrument=self.land, tx_date=date(2026, 6, 16), amount=Decimal('1375000'),
+            quantity=Decimal('2.75'), price_per_unit=Decimal('500000'), direction='outflow', transaction_type='buy',
+            idempotency_key='groww-row-7',
+        )
+        self.tag = Tag.objects.create(household=self.household, name='land')
+        self.buy.tags.add(self.tag)
+        self.fd = Instrument.objects.create(household=self.household, name='SBI FD', instrument_type='fd')
+        self.deposit = Transaction.objects.create(
+            household=self.household, instrument=self.fd, tx_date=date(2026, 1, 1), amount=Decimal('100000'),
+            direction='outflow', transaction_type='deposit',
+        )
+        self.fd_details = FDDetails.objects.create(
+            instrument=self.fd, funding_transaction=self.deposit, principal=Decimal('100000'), annual_rate=Decimal('7'),
+            investment_date=date(2026, 1, 1), maturity_date=date(2027, 1, 1),
+        )
+
+    def test_corrects_units_and_amount_keeping_key_and_tags(self):
+        from insights.services import compute_holdings
+        response = self.client.post(f'/api/transactions/{self.buy.id}/replace/', {
+            'amount': '1500000', 'quantity': '3', 'price_per_unit': '500000', 'tx_date': '2026-06-16',
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertFalse(Transaction.objects.filter(pk=self.buy.id).exists())
+        corrected = Transaction.objects.get(pk=response.data['id'])
+        self.assertEqual((corrected.amount, corrected.quantity, corrected.idempotency_key),
+                         (Decimal('1500000.00'), Decimal('3.000000'), 'groww-row-7'))
+        self.assertEqual(list(corrected.tags.all()), [self.tag])  # not swept as unused
+        self.assertEqual(corrected.metadata['corrected_from'], self.buy.id)
+        holding = next(h for h in compute_holdings(self.household.id, date(2026, 10, 1)) if h['instrument_id'] == self.land.id)
+        self.assertEqual((holding['quantity'], holding['net_invested']), (Decimal('3.000000'), Decimal('1500000.00')))
+
+    def test_fd_funding_link_follows_the_correction(self):
+        response = self.client.post(f'/api/transactions/{self.deposit.id}/replace/', {'amount': '120000'}, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.fd_details.refresh_from_db()
+        self.assertEqual(self.fd_details.funding_transaction_id, response.data['id'])
+
+    def test_rejects_fields_it_cannot_correct_and_invalid_amounts(self):
+        bad_field = self.client.post(f'/api/transactions/{self.buy.id}/replace/', {'direction': 'inflow'}, format='json')
+        self.assertEqual(bad_field.status_code, 400)
+        bad_amount = self.client.post(f'/api/transactions/{self.buy.id}/replace/', {'amount': '0'}, format='json')
+        self.assertEqual(bad_amount.status_code, 400)
+        self.assertTrue(Transaction.objects.filter(pk=self.buy.id).exists())  # untouched

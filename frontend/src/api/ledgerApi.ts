@@ -108,6 +108,12 @@ export const ledgerApi = {
   async updateTransaction(id: number, payload: Partial<Omit<Transaction, 'id' | 'source'>>) {
     return patchJson<Transaction>(`/api/transactions/${id}/`, payload)
   },
+  /** Correct a buy/sell's amount, units, price or date — swapped server-side for a
+   *  corrected copy (these can't be edited in place). See TransactionViewSet.replace. */
+  async replaceTransaction(id: number, fields: Partial<Pick<Transaction,
+    'tx_date' | 'amount' | 'quantity' | 'price_per_unit' | 'external_reference' | 'notes'>>) {
+    return postJson<Transaction>(`/api/transactions/${id}/replace/`, fields)
+  },
   async correctTransaction(input: TransactionCorrectionInput) {
     const transactions = await this.listTransactions(input.corrected.household)
     const original = transactions.find((item) => item.id === input.originalTransactionId)
