@@ -632,7 +632,7 @@ export function HoldingsPage() {
         const sorted = [...group].sort(sortFn)
         const total = group.reduce((s, h) => s + parseFloat(h.market_value), 0).toFixed(2)
         return (
-          <CategorySection key={label} name={label} color="#b4521f" totalValue={total} count={group.length} gridChildren>
+          <CategorySection key={label} name={label} color="#2563eb" totalValue={total} count={group.length} gridChildren>
             {sorted.map(h => renderRow(h))}
           </CategorySection>
         )
