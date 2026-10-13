@@ -30,3 +30,7 @@ Account statement files/
 
 # Local DB snapshots / migration exports — not fixtures, not canonical
 backup/
+
+# Pre-compressed frontend copies made by deploy.sh on the server
+frontend/dist/**/*.gz
+frontend/dist/**/*.br

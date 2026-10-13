@@ -20,4 +20,8 @@ class FrontendAppView(View):
             return HttpResponseNotFound(
                 'Frontend build not found — run `npm run build` in frontend/ and redeploy.'
             )
-        return HttpResponse(html, content_type='text/html')
+        response = HttpResponse(html, content_type='text/html')
+        # Always revalidate the shell so a deploy's new chunk names are picked up at once
+        # (the hashed /assets/* files it points to are cached long-term).
+        response['Cache-Control'] = 'no-cache'
+        return response

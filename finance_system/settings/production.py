@@ -42,6 +42,20 @@ STORAGES = {
 }
 STATICFILES_DIRS = [BASE_DIR / 'frontend' / 'dist']
 
+# The built React app is served from the site root by WhiteNoise: /assets/*, /sw.js,
+# /icons/*, /splash/*, /manifest.json … (index.html itself comes from FrontendAppView).
+# deploy.sh pre-compresses these files so WhiteNoise can send gzip/brotli.
+WHITENOISE_ROOT = BASE_DIR / 'frontend' / 'dist'
+
+
+def _is_hashed_frontend_asset(path, url):
+    """Vite's content-hashed build files never change, so browsers may cache them for a year."""
+    import re
+    return re.match(r'^/assets/.+-[A-Za-z0-9_-]{8}\.(?:js|css|woff2?|svg|png)$', url) is not None
+
+
+WHITENOISE_IMMUTABLE_FILE_TEST = _is_hashed_frontend_asset
+
 # ── Security headers (PythonAnywhere terminates TLS at its proxy) ───────────
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = True

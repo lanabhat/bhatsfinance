@@ -27,4 +27,10 @@ python manage.py migrate --noinput
 echo "==> collectstatic"
 python manage.py collectstatic --noinput -c
 
+echo "==> compress frontend build (gzip/brotli copies for WhiteNoise)"
+# Drop copies from the previous deploy first: a stale sw.js.gz would otherwise be
+# served in place of the new sw.js.
+find frontend/dist \( -name '*.gz' -o -name '*.br' \) -delete
+python -m whitenoise.compress frontend/dist
+
 echo "Done. Restart the web app from the PythonAnywhere dashboard to apply changes."

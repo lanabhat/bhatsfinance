@@ -14,9 +14,10 @@ urlpatterns = [
     path('api/auth/logout/', LogoutView.as_view()),
     path('api/auth/select-household/', SelectHouseholdView.as_view()),
     path('api/', include('finance_system.api_urls')),
-    # Built frontend assets (Vite emits these at the dist root: assets/, favicon.svg, etc.)
+    # Built frontend files at the dist root (assets/, sw.js, icons/, splash/, manifest…).
+    # In production WhiteNoise (WHITENOISE_ROOT) answers these before they reach here.
     re_path(
-        r'^(?P<path>assets/.*|favicon\.svg|icons\.svg|manifest\.json|vite\.svg)$',
+        r'^(?P<path>assets/.*|icons/.*|splash/.*|sw\.js|favicon\.svg|icons\.svg|manifest\.json)$',
         static_serve,
         {'document_root': FRONTEND_DIST},
     ),

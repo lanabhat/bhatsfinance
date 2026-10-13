@@ -9,8 +9,9 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-// Register the service worker for PWA install + offline shell (network-first).
-if ('serviceWorker' in navigator) {
+// Service worker (public/sw.js): PWA install, cached build files, offline shell.
+// Production only — in dev it would cache Vite's modules.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => { /* non-fatal */ })
   })
