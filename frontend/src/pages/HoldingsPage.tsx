@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { investmentEditTitle } from '../components/assets/investmentKind'
 import { CoinSpinner } from '../components/common/CoinSpinner'
-import { postJson } from '../api/http'
+import { getJson, postJson, toQueryString } from '../api/http'
 import { investmentApi } from '../api/investmentApi'
 import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
@@ -185,17 +185,32 @@ export function HoldingsPage() {
     try { localStorage.setItem(VIEW_MODE_KEY, mode) } catch { /* ignore */ }
   }
 
-  const loadInstruments = () => portfolioApi.listInstruments(householdId).then(setInstruments).catch(() => {})
-  const loadInvestments = () => investmentApi.listInvestments({ household: householdId }).then(setInvestments).catch(() => {})
-  const loadOwnerships = () => portfolioApi.listInstrumentOwnerships(undefined, 200).then(setOwnerships).catch(() => {})
-  const loadMfDetails = () => portfolioApi.listMutualFundDetails().then(setMfDetails).catch(() => {})
-  const loadFdDetails = () => fdDetailsApi.list().then(setFdDetails).catch(() => {})
-  const loadBondDetails = () => portfolioApi.listBondDetails().then(setBondDetails).catch(() => {})
+  const toast = useToast()
+  const showLoadError = useCallback((e: unknown) => toast.error(`Couldn’t load holding details: ${normalizeApiError(e)}`), [toast])
+  const loadInstruments = useCallback(
+    () => portfolioApi.listInstruments(householdId).then(setInstruments).catch(showLoadError), [householdId, showLoadError])
+  const loadInvestments = useCallback(
+    () => investmentApi.listInvestments({ household: householdId }).then(setInvestments).catch(showLoadError), [householdId, showLoadError])
+  const loadOwnerships = useCallback(
+    () => portfolioApi.listInstrumentOwnerships(undefined, 200).then(setOwnerships).catch(showLoadError), [showLoadError])
+  const loadMfDetails = useCallback(
+    () => portfolioApi.listMutualFundDetails().then(setMfDetails).catch(showLoadError), [showLoadError])
 
-  useEffect(() => { void loadInstruments(); void loadInvestments(); void loadOwnerships(); void loadMfDetails(); void loadFdDetails(); void loadBondDetails() }, [householdId])
-
-  // Resync instruments/investments whenever holdings change (e.g. after an import adds new ones)
-  useEffect(() => { void loadInstruments(); void loadInvestments(); void loadMfDetails(); void loadFdDetails(); void loadBondDetails() }, [dashboard.holdings])
+  // Everything the list needs besides the holdings themselves. Runs once per household and again
+  // when holdings change (e.g. an import added some) — previously two effects both fired on mount.
+  useEffect(() => {
+    let active = true
+    const keep = <T,>(set: (v: T) => void) => (v: T) => { if (active) set(v) }
+    Promise.all([
+      portfolioApi.listInstruments(householdId).then(keep(setInstruments)),
+      investmentApi.listInvestments({ household: householdId }).then(keep(setInvestments)),
+      portfolioApi.listInstrumentOwnerships(undefined, 200).then(keep(setOwnerships)),
+      portfolioApi.listMutualFundDetails().then(keep(setMfDetails)),
+      fdDetailsApi.list().then(keep(setFdDetails)),
+      portfolioApi.listBondDetails().then(keep(setBondDetails)),
+    ]).catch((e) => { if (active) showLoadError(e) })
+    return () => { active = false }
+  }, [householdId, dashboard.holdings, showLoadError])
 
   const mfDetailsByInvestment = useMemo(() => {
     const m = new Map<number, MutualFundDetails>()
@@ -244,13 +259,22 @@ export function HoldingsPage() {
 
   useEffect(() => {
     if (activeMemberId === null) { setMemberHoldings(null); return }
+    // Abort the previous member's request so a slow response can't overwrite a newer pick.
+    const controller = new AbortController()
     setHoldingsLoading(true)
-    const q = new URLSearchParams({ household_id: String(householdId), as_of: asOf, member_id: String(activeMemberId) })
-    fetch(`/api/holdings?${q}`).then((r) => r.json()).then((d) => setMemberHoldings(d.holdings ?? [])).catch(() => setMemberHoldings([])).finally(() => setHoldingsLoading(false))
-  }, [activeMemberId, householdId, asOf])
+    const q = toQueryString({ household_id: householdId, as_of: asOf, member_id: activeMemberId })
+    getJson<{ holdings: DashboardHolding[] }>(`/api/holdings?${q}`, { signal: controller.signal })
+      .then((d) => setMemberHoldings(d.holdings ?? []))
+      .catch((e) => {
+        if (controller.signal.aborted) return
+        setMemberHoldings([])
+        toast.error(`Couldn’t load holdings: ${normalizeApiError(e)}`)
+      })
+      .finally(() => { if (!controller.signal.aborted) setHoldingsLoading(false) })
+    return () => controller.abort()
+  }, [activeMemberId, householdId, asOf, toast])
 
   const close = () => setSheet({ type: 'none' })
-  const toast = useToast()
   const [updatingPrices, setUpdatingPrices] = useState(false)
   const updatePrices = async () => {
     setUpdatingPrices(true)

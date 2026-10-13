@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { getJson, postJson } from '../../api/http'
+import { getJson, patchJson, postJson } from '../../api/http'
+import { normalizeApiError } from '../../hooks/errorUtils'
 import { Button } from '../ui/Button'
 import type { OptionItem } from '../../types/domain'
 
@@ -78,15 +79,11 @@ export function UpstoxConnect({ memberOptions }: Props) {
 
   const handleMemberChange = async (credId: number, memberId: string) => {
     try {
-      await fetch(`/api/upstox/credentials/${credId}/member`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
-        body: JSON.stringify({ member_id: memberId ? Number(memberId) : null }),
-      })
+      // Was a raw fetch that never checked res.ok, so a failed save looked like success.
+      await patchJson(`/api/upstox/credentials/${credId}/member`, { member_id: memberId ? Number(memberId) : null })
       load()
-    } catch {
-      setError('Failed to update member')
+    } catch (e) {
+      setError(normalizeApiError(e) || 'Failed to update member')
     }
   }
 
@@ -173,13 +170,4 @@ export function UpstoxConnect({ memberOptions }: Props) {
       )}
     </div>
   )
-}
-
-function getCsrf(): string {
-  const name = 'csrftoken='
-  for (const part of document.cookie.split(';')) {
-    const p = part.trim()
-    if (p.startsWith(name)) return decodeURIComponent(p.slice(name.length))
-  }
-  return ''
 }

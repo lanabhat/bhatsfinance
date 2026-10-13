@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { CategoryBreakdownCard } from '../components/home/CategoryBreakdownCard'
 import { MaturingFDsCard } from '../components/home/MaturingFDsCard'
@@ -50,13 +50,14 @@ function saveExcluded(s: Set<string>) {
 
 type Props = { onNavigate: (route: string) => void }
 
+type MemberData = { key: string; holdings: Record<number, DashboardHolding[]>; accounts: Record<number, MemberAccount[]> }
+const emptyMemberData = (key: string): MemberData => ({ key, holdings: {}, accounts: {} })
+
 export function HomePage({ onNavigate }: Props) {
   const { householdId, dashboard, dashboardLoading, asOf, setAsOf, refreshDashboard, accounts, categories } = useApp()
   const [excluded, setExcluded] = useState<Set<string>>(loadExcluded)
   const [viewMemberId, setViewMemberId] = useState<number | null>(null)
   const memberExpand = useExpandable<number>()
-  const [allMemberHoldings, setAllMemberHoldings] = useState<Record<number, DashboardHolding[]>>({})
-  const [allMemberAccounts, setAllMemberAccounts] = useState<Record<number, MemberAccount[]>>({})
   const [maturingFDs, setMaturingFDs] = useState<MaturingFD[]>([])
   const [maturingBonds, setMaturingBonds] = useState<MaturingBond[]>([])
   const MATURING_WINDOW_DAYS = 180
@@ -116,25 +117,36 @@ export function HomePage({ onNavigate }: Props) {
     return m
   }, [mfDetails])
 
-  const requestMemberHoldings = (memberId: number) => {
-    if (allMemberHoldings[memberId] !== undefined) return
+  // Per-member holdings for the summary table and the "Viewing" selector, for the current
+  // household + date. Cleared when either changes (so no figures from the old date linger)
+  // and refetched whenever the dashboard reloads; responses for an older key are dropped.
+  const memberKey = `${householdId}|${asOf}`
+  const [memberData, setMemberData] = useState<MemberData>(() => emptyMemberData(memberKey))
+  const current = memberData.key === memberKey ? memberData : emptyMemberData(memberKey)
+  const allMemberHoldings = current.holdings
+  const allMemberAccounts = current.accounts
+
+  const requestMemberHoldings = useCallback((memberId: number) => {
     const q = toQueryString({ household_id: householdId, as_of: asOf, member_id: memberId })
     getJson<{ holdings: DashboardHolding[]; accounts: MemberAccount[] }>(`/api/holdings?${q}`)
-      .then((d) => {
-        setAllMemberHoldings(prev => ({ ...prev, [memberId]: d.holdings ?? [] }))
-        setAllMemberAccounts(prev => ({ ...prev, [memberId]: d.accounts ?? [] }))
-      })
-      .catch(() => {
-        setAllMemberHoldings(prev => ({ ...prev, [memberId]: [] }))
-        setAllMemberAccounts(prev => ({ ...prev, [memberId]: [] }))
-      })
-  }
+      .then((d) => ({ holdings: d.holdings ?? [], accounts: d.accounts ?? [] }))
+      .catch(() => ({ holdings: [], accounts: [] }))
+      .then(({ holdings, accounts }) => setMemberData((prev) => {
+        // Data for an older household/date is replaced, never merged into.
+        const base = prev.key === memberKey ? prev : emptyMemberData(memberKey)
+        return {
+          key: memberKey,
+          holdings: { ...base.holdings, [memberId]: holdings },
+          accounts: { ...base.accounts, [memberId]: accounts },
+        }
+      }))
+  }, [householdId, asOf, memberKey])
 
   // Pre-fetch all member holdings so Summary Table shows real data without clicking
   useEffect(() => {
-    if (!householdId || dashboard.membersNetworth.length === 0) return
+    if (!householdId) return
     dashboard.membersNetworth.forEach(m => requestMemberHoldings(m.member_id))
-  }, [householdId, asOf, dashboard.membersNetworth])
+  }, [householdId, dashboard.membersNetworth, requestMemberHoldings])
 
   // Member-scoped base holdings/accounts: when a member is selected via the
   // "Viewing" selector, every downstream figure (KPI, donut, type filter,
@@ -393,7 +405,7 @@ export function HomePage({ onNavigate }: Props) {
           memberAccounts={allMemberAccounts}
           membersNetworth={dashboard.membersNetworth}
           categoryBreakdown={dashboard.categoryBreakdown}
-          onRequestMemberHoldings={requestMemberHoldings}
+          onRequestMemberHoldings={(id) => { if (allMemberHoldings[id] === undefined) requestMemberHoldings(id) }}
         />
       )}
 

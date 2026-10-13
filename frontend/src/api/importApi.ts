@@ -1,4 +1,4 @@
-import { getJson as httpGet, postJson as httpPost } from './http'
+import { getJson as httpGet, postForm as httpPostForm, postJson as httpPost } from './http'
 import type { ImportApplyPayload, ImportPreviewResult, ImportResult, ImportSchema } from '../types/domain'
 
 export type GrowwMemberPreview = { id: number; name: string; relation?: string }
@@ -393,34 +393,14 @@ export type SbiStatementApplyResult = {
 
 const BASE = '/api'
 
-async function getCsrf(): Promise<string> {
-  const name = 'csrftoken='
-  for (const part of document.cookie.split(';')) {
-    const p = part.trim()
-    if (p.startsWith(name)) return decodeURIComponent(p.slice(name.length))
-  }
-  // fetch the CSRF cookie if not yet set
-  await fetch(`${BASE}/csrf/`, { credentials: 'include' })
-  for (const part of document.cookie.split(';')) {
-    const p = part.trim()
-    if (p.startsWith(name)) return decodeURIComponent(p.slice(name.length))
-  }
-  return ''
-}
-
+// Upload callers show `e.message`, so the server's error body becomes an Error here.
 async function postForm<T>(url: string, formData: FormData): Promise<T> {
-  const csrf = await getCsrf()
-  const res = await fetch(url, {
-    method: 'POST',
-    body: formData,
-    credentials: 'include',
-    headers: { 'X-CSRFToken': csrf },
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string }
-    throw new Error(body.error || `HTTP ${res.status}`)
+  try {
+    return await httpPostForm<T>(url, formData)
+  } catch (e) {
+    const body = e as { error?: string; detail?: unknown }
+    throw new Error(body.error || (typeof body.detail === 'string' ? body.detail : '') || 'Upload failed')
   }
-  return res.json() as Promise<T>
 }
 
 export const importApi = {
