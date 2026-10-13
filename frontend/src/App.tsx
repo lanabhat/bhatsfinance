@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { lazyPage } from './lib/lazyPage'
+import { PageErrorBoundary } from './components/PageErrorBoundary'
 import { AppLayout } from './components/layout/AppLayout'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -6,37 +8,39 @@ import { PrivacyProvider } from './context/PrivacyContext'
 import { TermsProvider } from './context/TermsContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './components/ui/Toast'
-import { AlertsPage } from './pages/AlertsPage'
-import { AssetAllocationPage } from './pages/AssetAllocationPage'
-import { DiversificationPage } from './pages/DiversificationPage'
-import { FundPerformancePage } from './pages/FundPerformancePage'
-import { HoldingsPage } from './pages/HoldingsPage'
-import { AddHoldingPage } from './pages/AddHoldingPage'
-import { SmsReviewPage } from './pages/SmsReviewPage'
-import { AccountsPage } from './pages/AccountsPage'
-import { InstrumentsPage } from './pages/InstrumentsPage'
-import { InstrumentDetailPage } from './pages/InstrumentDetailPage'
-import { ExpensePage } from './pages/ExpensePage'
-import { SpendTrendsPage } from './pages/SpendTrendsPage'
-import { HelpPage } from './pages/HelpPage'
 import { HomePage } from './pages/HomePage'
-import { HouseholdPage } from './pages/HouseholdPage'
-import { ImportPage } from './pages/ImportPage'
-import { InsurancePage } from './pages/InsurancePage'
-import { LedgerPage } from './pages/LedgerPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { TaxPage } from './pages/TaxPage'
-import { ValuationPage } from './pages/ValuationPage'
-import { ReportsPage } from './pages/ReportsPage'
-import { MaintenancePage } from './pages/MaintenancePage'
-import { AdminPage } from './pages/AdminPage'
-import { GmailPage } from './pages/GmailPage'
-import { SmsPage } from './pages/SmsPage'
-import { AnalyticsPage } from './pages/AnalyticsPage'
 import { LoginPage } from './pages/LoginPage'
 import { PendingPage } from './pages/PendingPage'
 import { DeniedPage } from './pages/DeniedPage'
 import { CoinSpinner } from './components/common/CoinSpinner'
+
+// Each page is its own chunk, loaded when first visited (Home stays in the main bundle).
+const AlertsPage = lazyPage(() => import('./pages/AlertsPage'), 'AlertsPage')
+const AssetAllocationPage = lazyPage(() => import('./pages/AssetAllocationPage'), 'AssetAllocationPage')
+const DiversificationPage = lazyPage(() => import('./pages/DiversificationPage'), 'DiversificationPage')
+const FundPerformancePage = lazyPage(() => import('./pages/FundPerformancePage'), 'FundPerformancePage')
+const HoldingsPage = lazyPage(() => import('./pages/HoldingsPage'), 'HoldingsPage')
+const AddHoldingPage = lazyPage(() => import('./pages/AddHoldingPage'), 'AddHoldingPage')
+const SmsReviewPage = lazyPage(() => import('./pages/SmsReviewPage'), 'SmsReviewPage')
+const AccountsPage = lazyPage(() => import('./pages/AccountsPage'), 'AccountsPage')
+const InstrumentsPage = lazyPage(() => import('./pages/InstrumentsPage'), 'InstrumentsPage')
+const InstrumentDetailPage = lazyPage(() => import('./pages/InstrumentDetailPage'), 'InstrumentDetailPage')
+const ExpensePage = lazyPage(() => import('./pages/ExpensePage'), 'ExpensePage')
+const SpendTrendsPage = lazyPage(() => import('./pages/SpendTrendsPage'), 'SpendTrendsPage')
+const HelpPage = lazyPage(() => import('./pages/HelpPage'), 'HelpPage')
+const HouseholdPage = lazyPage(() => import('./pages/HouseholdPage'), 'HouseholdPage')
+const ImportPage = lazyPage(() => import('./pages/ImportPage'), 'ImportPage')
+const InsurancePage = lazyPage(() => import('./pages/InsurancePage'), 'InsurancePage')
+const LedgerPage = lazyPage(() => import('./pages/LedgerPage'), 'LedgerPage')
+const SettingsPage = lazyPage(() => import('./pages/SettingsPage'), 'SettingsPage')
+const TaxPage = lazyPage(() => import('./pages/TaxPage'), 'TaxPage')
+const ValuationPage = lazyPage(() => import('./pages/ValuationPage'), 'ValuationPage')
+const ReportsPage = lazyPage(() => import('./pages/ReportsPage'), 'ReportsPage')
+const MaintenancePage = lazyPage(() => import('./pages/MaintenancePage'), 'MaintenancePage')
+const AdminPage = lazyPage(() => import('./pages/AdminPage'), 'AdminPage')
+const GmailPage = lazyPage(() => import('./pages/GmailPage'), 'GmailPage')
+const SmsPage = lazyPage(() => import('./pages/SmsPage'), 'SmsPage')
+const AnalyticsPage = lazyPage(() => import('./pages/AnalyticsPage'), 'AnalyticsPage')
 
 type RouteKey = 'home' | 'holdings' | 'accounts' | 'allocation' | 'diversification' | 'fund-performance' | 'expenses' | 'spend-trends' | 'analytics' | 'settings' | 'instruments' | 'ledger' | 'alerts' | 'tax' | 'valuation' | 'insurance' | 'reports' | 'help' | 'import' | 'household' | 'maintenance' | 'admin' | 'gmail' | 'sms'
 
@@ -173,7 +177,11 @@ function AppInner() {
       {error ? (
         <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</p>
       ) : null}
-      {renderPage()}
+      <PageErrorBoundary key={route}>
+        <Suspense fallback={<div className="flex justify-center py-16"><CoinSpinner size={48} /></div>}>
+          {renderPage()}
+        </Suspense>
+      </PageErrorBoundary>
     </AppLayout>
   )
 }

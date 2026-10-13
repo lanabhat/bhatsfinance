@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazyPage } from '../lib/lazyPage'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { CategoryBreakdownCard } from '../components/home/CategoryBreakdownCard'
 import { MaturingFDsCard } from '../components/home/MaturingFDsCard'
@@ -16,8 +17,6 @@ import { MarketCapSplitCard } from '../components/home/MarketCapSplitCard'
 import { NetWorthHero } from '../components/home/NetWorthHero'
 import { RecentHoldings } from '../components/home/RecentHoldings'
 import { SummaryTable } from '../components/home/SummaryTable'
-import { NetWorthTrendChart } from '../components/charts/NetWorthTrendChart'
-import { AllocationDonutChart } from '../components/charts/AllocationDonutChart'
 import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
 import { useExpandable } from '../hooks/useExpandable'
 import { Money } from '../components/common/Money'
@@ -45,6 +44,10 @@ function saveExcluded(s: Set<string>) {
 }
 
 type Props = { onNavigate: (route: string) => void }
+
+// Charts pull in Recharts (~100 KB); load them after the rest of Home has rendered.
+const NetWorthTrendChart = lazyPage(() => import('../components/charts/NetWorthTrendChart'), 'NetWorthTrendChart')
+const AllocationDonutChart = lazyPage(() => import('../components/charts/AllocationDonutChart'), 'AllocationDonutChart')
 
 type MemberData = { key: string; holdings: Record<number, DashboardHolding[]>; accounts: Record<number, MemberAccount[]> }
 const emptyMemberData = (key: string): MemberData => ({ key, holdings: {}, accounts: {} })
@@ -249,7 +252,9 @@ export function HomePage({ onNavigate }: Props) {
           label={isMemberView ? `${dashboard.membersNetworth.find((m) => m.member_id === viewMemberId)?.member_name}'s Net Worth` : 'Total Net Worth'}
         />
         {filteredBreakdown.length > 0 && (
-          <AllocationDonutChart items={filteredBreakdown} />
+          <Suspense fallback={<div className="h-[180px]" aria-hidden="true" />}>
+            <AllocationDonutChart items={filteredBreakdown} />
+          </Suspense>
         )}
       </div>
 
@@ -300,7 +305,9 @@ export function HomePage({ onNavigate }: Props) {
         <div>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Net Worth Trend</h2>
           <div className="min-w-0 w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-            <NetWorthTrendChart data={dashboard.networthHistory} />
+            <Suspense fallback={<div className="h-[220px]" aria-hidden="true" />}>
+              <NetWorthTrendChart data={dashboard.networthHistory} />
+            </Suspense>
           </div>
         </div>
       )}
