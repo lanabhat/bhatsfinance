@@ -39,7 +39,7 @@ function load(): Record<DeleteEntity, boolean> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return { ...DEFAULTS, ...JSON.parse(raw) }
-  } catch {}
+  } catch { /* storage unavailable or corrupt: fall back to defaults */ }
   return { ...DEFAULTS }
 }
 

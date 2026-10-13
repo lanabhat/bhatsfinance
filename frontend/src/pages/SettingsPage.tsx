@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { useTerms } from '../context/TermsContext'
 import { deleteJsonResult } from '../api/http'
+import { toggled } from '../lib/sets'
 
 const ENTITY_LABELS: Array<{ key: DeleteEntity; label: string; warning?: string }> = [
   { key: 'transaction', label: 'Transactions', warning: 'Deleting transactions affects net worth and XIRR calculations' },
@@ -51,7 +52,7 @@ export function SettingsPage({ deleteConfig, toggleDelete, householdId }: Props)
   const [confirmText, setConfirmText] = useState('')
 
   const toggleType = (v: string) =>
-    setSelectedTypes(prev => { const n = new Set(prev); n.has(v) ? n.delete(v) : n.add(v); return n })
+    setSelectedTypes(prev => toggled(prev, v))
 
   const handleBulkDelete = async () => {
     if (selectedTypes.size === 0) return

@@ -7,6 +7,7 @@ import { tagApi } from '../../api/tagApi'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import type { Account, AccountBalance, ExpenseCategory, Tag, Transaction } from '../../types/domain'
+import { TX_TYPE_LABELS } from '../../lib/labels'
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })
@@ -23,12 +24,6 @@ type Props = {
 
 const RECENT_TX_LIMIT = 8
 
-const TX_TYPE_LABELS: Record<string, string> = {
-  deposit: 'Deposit', withdrawal: 'Withdrawal', buy: 'Buy', sell: 'Sell',
-  dividend: 'Dividend', interest: 'Interest', salary: 'Salary',
-  tax_payment: 'Tax Payment', tax_refund: 'Tax Refund', emi: 'EMI',
-  loan_disbursal: 'Loan Disbursal', premium: 'Premium', cc_bill_payment: 'CC Bill Payment', other: 'Other',
-}
 
 function TxRow({ tx, categories, tagName, memberName }: {
   tx: Transaction

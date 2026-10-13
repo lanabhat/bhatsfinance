@@ -34,7 +34,6 @@ export function useOptionLoaders(householdId: number, refreshKey = 0) {
       const data = await householdApi.listHouseholds()
       return data.map((x) => ({ id: x.id, label: x.name }))
     }).then(setHouseholds)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey])
 
   useEffect(() => {
@@ -67,7 +66,6 @@ export function useOptionLoaders(householdId: number, refreshKey = 0) {
         setInstruments(full)
       })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [householdId, refreshKey])
 
   return { households, members, accounts, instruments, instrumentsFull }

@@ -5,6 +5,7 @@ import { useExpandable } from '../../hooks/useExpandable'
 import { MarkBondCouponReceivedSheet } from './MarkBondCouponReceivedSheet'
 import { bondDetailsApi } from '../../api/bondDetailsApi'
 import type { BondCouponDue, OptionItem } from '../../types/domain'
+import { useErrorToast } from '../../hooks/useErrorToast'
 
 type Props = {
   items: BondCouponDue[]
@@ -44,6 +45,7 @@ export function BondCouponsCard({ items, accountOptions, onReceived }: Props) {
   const [ignoringId, setIgnoringId] = useState<string | null>(null)
   const [ignoringBondId, setIgnoringBondId] = useState<number | null>(null)
   const groupExpand = useExpandable<number>()
+  const errorToast = useErrorToast()
 
   if (items.length === 0) return null
 
@@ -59,7 +61,9 @@ export function BondCouponsCard({ items, accountOptions, onReceived }: Props) {
         note: 'Ignored from dashboard',
       })
       await onReceived()
-    } catch { /* silent — onReceived refresh will re-show if failed */ }
+    } catch (e) {
+      errorToast('Couldn’t ignore the coupon')(e)
+    }
     setIgnoringId(null)
   }
 
@@ -76,7 +80,9 @@ export function BondCouponsCard({ items, accountOptions, onReceived }: Props) {
         )
       )
       await onReceived()
-    } catch { /* silent */ }
+    } catch (e) {
+      errorToast('Couldn’t ignore the coupons')(e)
+    }
     setIgnoringBondId(null)
   }
 

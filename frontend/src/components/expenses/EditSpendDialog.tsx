@@ -4,6 +4,7 @@ import { expenseApi } from '../../api/expenseApi'
 import { tagApi } from '../../api/tagApi'
 import { TagPicker } from './TagPicker'
 import type { ExpenseCategory, OptionItem, Tag, Transaction } from '../../types/domain'
+import { useErrorToast } from '../../hooks/useErrorToast'
 
 type Props = {
   open: boolean
@@ -44,7 +45,8 @@ export function EditSpendDialog({ open, householdId, transaction, categories, me
   const [newCatError, setNewCatError] = useState('')
 
   useEffect(() => { setLocalCategories(categories) }, [categories])
-  useEffect(() => { tagApi.list(householdId).then(setTags).catch(() => {}) }, [householdId])
+  const errorToast = useErrorToast()
+  useEffect(() => { tagApi.list(householdId).then(setTags).catch(errorToast('Couldn’t load tags')) }, [householdId, errorToast])
 
   if (!open) return null
 

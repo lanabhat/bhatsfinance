@@ -19,5 +19,15 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Context/component files export their own hook alongside the provider/component
+      // (useApp next to AppProvider, …). That's the usual React pattern; listed by name so
+      // any other non-component export still gets flagged.
+      'react-refresh/only-export-components': ['error', {
+        allowConstantExport: true,
+        allowExportNames: ['useApp', 'useAuth', 'usePrivacy', 'useTerms', 'useTheme', 'useToast',
+          'hasModePreference', 'useMaskedFmt', 'useChartTheme'],
+      }],
+    },
   },
 ])

@@ -8,12 +8,14 @@ import { normalizeApiError } from '../hooks/errorUtils'
 import { CashFlowChart, type CashFlowBucket, type CashFlowPoint } from '../components/charts/CashFlowChart'
 import { Money, useMaskedFmt } from '../components/common/Money'
 import { Sheet } from '../components/ui/Sheet'
-import { TxFormFields, blankTxForm, txFormFromTransaction } from '../components/ledger/TransactionEditForm'
+import { TxFormFields } from '../components/ledger/TransactionEditForm'
+import { blankTxForm, txFormFromTransaction } from '../components/ledger/txForm'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import { useChartTheme, ChartTooltip } from '../components/charts/chartTheme'
 import type { SpendAnalytics, Transaction } from '../types/domain'
+import { useErrorToast } from '../hooks/useErrorToast'
 
 type Props = { householdId: number }
 
@@ -680,13 +682,14 @@ function SpendCategoryBreakdown({
   householdId, granularity, periods, onSelectCategory,
 }: { householdId: number; granularity: Granularity; periods: number; onSelectCategory: (category: string, label: string) => void }) {
   const [data, setData] = useState<SpendAnalytics | null>(null)
+  const errorToast = useErrorToast()
   useEffect(() => {
     let active = true
     expenseApi.fetchSpendAnalytics(householdId, periods, 'spend', granularity, periods)
       .then(r => { if (active) setData(r) })
-      .catch(() => {})
+      .catch((e) => { if (active) errorToast('Couldn’t load spend analytics')(e) })
     return () => { active = false }
-  }, [householdId, granularity, periods])
+  }, [householdId, granularity, periods, errorToast])
 
   if (!data || data.by_category.length === 0) return null
   const total = data.total

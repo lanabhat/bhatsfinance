@@ -5,6 +5,7 @@ import { useApp } from '../../context/AppContext'
 import { FundClassificationCard } from './InstrumentForm'
 import { isEquityInvestment, isEtfInvestment } from './investmentKind'
 import type { ApiErrorMap, Investment } from '../../types/domain'
+import { useErrorToast } from '../../hooks/useErrorToast'
 
 function firstErrorMessage(err: unknown, fallback: string): string {
   if (err && typeof err === 'object') {
@@ -63,13 +64,14 @@ export function InvestmentForm({ investment, onSave, onCancel }: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const errorToast = useErrorToast()
   useEffect(() => {
     portfolioApi.getMutualFundDetails(investment.id).then((d) => {
       if (!d) return
       setExistingMfDetailsId(d.id)
       setMfForm({ amc: d.amc, fund_category: d.fund_category, fund_sub_category: d.fund_sub_category, expense_ratio: d.expense_ratio })
-    }).catch(() => {})
-  }, [investment.id])
+    }).catch(errorToast('Couldn’t load fund details'))
+  }, [investment.id, errorToast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setError('')

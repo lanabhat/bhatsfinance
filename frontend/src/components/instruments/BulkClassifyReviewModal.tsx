@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { aiInsightsApi } from '../../api/aiInsightsApi'
 import type { FundClassificationProposal } from '../../types/domain'
+import { ALLOCATION_RULE_LABELS, FUND_BUCKET_LABELS } from '../../lib/labels'
 
 type Props = {
   householdId: number
@@ -11,8 +12,6 @@ type Props = {
 
 type ReviewRow = FundClassificationProposal & { approved: boolean }
 
-const BUCKET_LABELS: Record<string, string> = { equity: 'Equity', debt: 'Debt', hybrid: 'Hybrid' }
-const RULE_LABELS: Record<string, string> = { growth: 'Growth (60%)', stability: 'Stability (40%)' }
 const BUCKET_OPTIONS = ['equity', 'debt', 'hybrid'] as const
 const RULE_OPTIONS = ['growth', 'stability'] as const
 
@@ -118,16 +117,16 @@ export function BulkClassifyReviewModal({ householdId, onClose, onApplied }: Pro
                       ) : (
                         <>
                           <td className="py-2.5 pr-3 text-xs text-[var(--text-muted)]">
-                            {r.current_bucket ? `${BUCKET_LABELS[r.current_bucket]} / ${RULE_LABELS[r.current_rule_60_40_category ?? '']}` : '—'}
+                            {r.current_bucket ? `${FUND_BUCKET_LABELS[r.current_bucket]} / ${ALLOCATION_RULE_LABELS[r.current_rule_60_40_category ?? '']}` : '—'}
                           </td>
                           <td className="py-2.5 pr-3">
                             <select className={sel} value={r.bucket} onChange={(e) => updateRow(r.instrument_id, { bucket: e.target.value as ReviewRow['bucket'] })}>
-                              {BUCKET_OPTIONS.map((b) => <option key={b} value={b}>{BUCKET_LABELS[b]}</option>)}
+                              {BUCKET_OPTIONS.map((b) => <option key={b} value={b}>{FUND_BUCKET_LABELS[b]}</option>)}
                             </select>
                           </td>
                           <td className="py-2.5 pr-3">
                             <select className={sel} value={r.rule_60_40_category} onChange={(e) => updateRow(r.instrument_id, { rule_60_40_category: e.target.value as ReviewRow['rule_60_40_category'] })}>
-                              {RULE_OPTIONS.map((c) => <option key={c} value={c}>{RULE_LABELS[c]}</option>)}
+                              {RULE_OPTIONS.map((c) => <option key={c} value={c}>{ALLOCATION_RULE_LABELS[c]}</option>)}
                             </select>
                           </td>
                           <td className="max-w-[220px] py-2.5 pr-3 text-xs text-[var(--text-muted)]">{r.reasoning}</td>

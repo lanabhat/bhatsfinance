@@ -35,6 +35,7 @@ import { TYPE_ICONS, TYPE_LABELS } from '../lib/instrumentTypes'
 import { fdDetailsApi } from '../api/fdDetailsApi'
 import type { MaturityInfo } from '../components/assets/InstrumentRow'
 import type { AssetCategory, BondDetails, DashboardHolding, FDDetails, Instrument, InstrumentOwnership, Investment, MutualFundDetails } from '../types/domain'
+import { SUB_CATEGORY_LABELS } from '../lib/labels'
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -107,10 +108,6 @@ type DisplayRow =
   | { kind: 'holding'; holding: DashboardHolding }
   | { kind: 'fund_rollup'; key: string; fundName: string; folios: DashboardHolding[]; totalInvested: number; totalValue: number }
 
-const SUB_CATEGORY_LABELS: Record<string, string> = {
-  debt: 'Debt', equity: 'Equity', liquid: 'Liquid', retirement: 'Retirement',
-  hybrid: 'Hybrid', gold: 'Gold', real_asset: 'Real Asset', other: 'Other',
-}
 type HoldingSortBy = 'value' | 'gain' | 'gainPct' | 'name' | 'invested'
 
 const MARKET_CAP_LABELS: Record<string, string> = { large_cap: 'Large Cap', mid_cap: 'Mid Cap', small_cap: 'Small Cap' }

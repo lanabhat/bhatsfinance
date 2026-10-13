@@ -3,18 +3,11 @@ import { Money, useMaskedFmt } from '../common/Money'
 import { useSortableColumn } from '../../hooks/useSortableColumn'
 import { SortableTh } from '../ui/SortableTh'
 import type { CategoryBreakdownItem, DashboardAccount, DashboardHolding, MemberNetWorth } from '../../types/domain'
+import { toggled } from '../../lib/sets'
+import { ACCOUNT_TYPE_LABELS } from '../../lib/labels'
+import { TYPE_LABELS } from '../../lib/instrumentTypes'
 
-const TYPE_LABELS: Record<string, string> = {
-  equity: 'Stock', etf: 'ETF', mutual_fund: 'Mutual Fund', fd: 'FD', rd: 'RD', bond: 'Bond',
-  epf: 'EPF', ppf: 'PPF', nps: 'NPS', gold: 'Gold',
-  real_estate: 'Real Estate', sip: 'SIP', insurance: 'Insurance',
-  lending: 'Lending', cash: 'Cash', vehicle: 'Vehicle', liability: 'Liability', other: 'Other',
-}
 
-const ACCT_TYPE_LABELS: Record<string, string> = {
-  savings: 'Savings', current: 'Current', salary: 'Salary',
-  credit_card: 'Credit Card', fixed_deposit: 'Fixed Deposit', other: 'Other',
-}
 
 type Dimension = 'type' | 'member' | 'category'
 type SortCol = 'name' | 'current' | 'invested' | 'gain' | 'gainPct' | 'alloc'
@@ -98,7 +91,7 @@ function InstrumentLeafRows({ instruments, totalCurrent, q }: { instruments: Das
 // Leaf rows for accounts (no gain columns)
 function AccountLeafRows({ accounts, totalCurrent, q }: { accounts: DashboardAccount[]; totalCurrent: number; q: string }) {
   const filtered = q
-    ? accounts.filter(a => matchesSearch(a.account_name, q) || matchesSearch(ACCT_TYPE_LABELS[a.account_type] ?? a.account_type, q))
+    ? accounts.filter(a => matchesSearch(a.account_name, q) || matchesSearch(ACCOUNT_TYPE_LABELS[a.account_type] ?? a.account_type, q))
     : accounts
   if (filtered.length === 0) return null
   return (
@@ -187,14 +180,14 @@ function ByTypeView({
   const filtered = useMemo(() => {
     if (!q) return allRows
     return allRows.filter(r => {
-      if (r.key === 'type:__accounts__') return accounts.some(a => matchesSearch(a.account_name, q) || matchesSearch(ACCT_TYPE_LABELS[a.account_type] ?? a.account_type, q))
+      if (r.key === 'type:__accounts__') return accounts.some(a => matchesSearch(a.account_name, q) || matchesSearch(ACCOUNT_TYPE_LABELS[a.account_type] ?? a.account_type, q))
       const type = r.key.replace('type:', '')
       return matchesSearch(r.label, q) || (byType.get(type) ?? []).some(h => matchesSearch(h.instrument_name, q))
     })
   }, [allRows, q, byType, accounts])
 
-  const toggle = (key: string) => setExpandedTypes(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
-  const toggleSub = (key: string) => setExpandedSub(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+  const toggle = (key: string) => setExpandedTypes(prev => toggled(prev, key))
+  const toggleSub = (key: string) => setExpandedSub(prev => toggled(prev, key))
 
   const allMembersLoaded = membersNetworth.every(m => memberHoldings[m.member_id] !== undefined && memberAccounts[m.member_id] !== undefined)
 
@@ -330,7 +323,7 @@ function ByMemberView({
       return n
     })
   }
-  const toggleSub = (key: string) => setExpandedSub(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+  const toggleSub = (key: string) => setExpandedSub(prev => toggled(prev, key))
 
   return (
     <>
@@ -457,8 +450,8 @@ function ByCategoryView({
     })
   }, [sorted, q, byCategory, accounts])
 
-  const toggle = (key: string) => setExpandedCats(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
-  const toggleSub = (key: string) => setExpandedSub(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+  const toggle = (key: string) => setExpandedCats(prev => toggled(prev, key))
+  const toggleSub = (key: string) => setExpandedSub(prev => toggled(prev, key))
 
   return (
     <>

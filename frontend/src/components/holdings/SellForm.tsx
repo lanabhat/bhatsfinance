@@ -3,6 +3,7 @@ import { ledgerApi } from '../../api/ledgerApi'
 import { portfolioApi } from '../../api/portfolioApi'
 import { useApp } from '../../context/AppContext'
 import type { Account } from '../../types/domain'
+import { useErrorToast } from '../../hooks/useErrorToast'
 
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -41,7 +42,8 @@ export function SellForm({ householdId, instrumentId, investmentId, holdingName,
   const [error, setError] = useState('')
   const [savedGain, setSavedGain] = useState<string | null>(null)
 
-  useEffect(() => { portfolioApi.listAccounts(householdId).then(setAccounts).catch(() => {}) }, [householdId])
+  const errorToast = useErrorToast()
+  useEffect(() => { portfolioApi.listAccounts(householdId).then(setAccounts).catch(errorToast('Couldn’t load accounts')) }, [householdId, errorToast])
 
   useEffect(() => {
     if (quantity && pricePerUnit) setAmount((parseFloat(quantity) * parseFloat(pricePerUnit)).toFixed(2))

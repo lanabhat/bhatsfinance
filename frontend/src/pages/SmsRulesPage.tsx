@@ -4,6 +4,7 @@ import type { ConditionGroup, ConditionLeaf, ConditionNode, SmsRule, SmsRuleExpo
 import type { OptionItem } from '../types/domain'
 import { Drawer } from '../components/ui/Drawer'
 import { useAuth } from '../context/AuthContext'
+import { useErrorToast } from '../hooks/useErrorToast'
 
 type Props = {
   householdId: number
@@ -1295,6 +1296,7 @@ type PageTab = 'rules' | 'test'
 export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Props) {
   const { user } = useAuth()
   const canWrite = user.authenticated && (user.role === 'admin' || user.role === 'super_admin')
+  const errorToast = useErrorToast()
 
   const [tab, setTab] = useState<PageTab>('rules')
   const [rules, setRules] = useState<SmsRule[]>([])
@@ -1332,7 +1334,7 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
     })
     // If this save came from a suggestion, confirm it accepted and remove the card
     if (activeSuggestionId !== null) {
-      smsRuleSuggestionsApi.confirmAccepted(activeSuggestionId).catch(() => {})
+      smsRuleSuggestionsApi.confirmAccepted(activeSuggestionId).catch(errorToast('Couldn’t mark the suggestion as accepted'))
       setSuggestions((prev) => prev.filter((s) => s.id !== activeSuggestionId))
       setActiveSuggestionId(null)
     }
@@ -1534,7 +1536,7 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
         onClose={() => setImportOpen(false)}
         onImported={() => {
           setImportOpen(false)
-          smsRulesApi.list(householdId).then(setRules).catch(() => {})
+          smsRulesApi.list(householdId).then(setRules).catch(errorToast('Couldn’t reload rules'))
         }}
       />
 

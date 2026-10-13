@@ -14,7 +14,7 @@ export function FundDistributionChart({ rows }: Props) {
   const ct = useChartTheme()
 
   const data = rows.map((r, i) => ({
-    id: r.instrument_id,
+    id: r.investment_id ?? `i${r.instrument_id}`,
     name: r.instrument_name,
     value: parseFloat(r.market_value),
     pct: r.allocation_percent,

@@ -27,27 +27,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return stored === 'dark' || stored === 'light' || stored === 'system' ? stored : 'system'
   })
 
-  const [isDark, setIsDark] = useState(() => resolveIsDark(
-    (localStorage.getItem('ui:theme') as Theme | null) ?? 'system'
-  ))
+  // The OS preference, kept live; only matters while theme is 'system'.
+  const [systemDark, setSystemDark] = useState(() => resolveIsDark('system'))
+  const isDark = theme === 'system' ? systemDark : theme === 'dark'
 
   useEffect(() => {
-    const dark = resolveIsDark(theme)
-    setIsDark(dark)
-    document.documentElement.classList.toggle('dark', dark)
-  }, [theme])
-
-  useEffect(() => {
-    if (theme !== 'system') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = () => {
-      const dark = mq.matches
-      setIsDark(dark)
-      document.documentElement.classList.toggle('dark', dark)
-    }
+    const handler = () => setSystemDark(mq.matches)
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
-  }, [theme])
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark)
+  }, [isDark])
 
   const setTheme = (t: Theme) => {
     setThemeState(t)

@@ -11,6 +11,7 @@ import { DataTable } from '../components/ui/DataTable'
 import type { DataTableColumn } from '../components/ui/DataTable'
 import { LabeledSelect } from '../components/ui/LabeledSelect'
 import type { InsurancePolicy, OptionItem, VehicleClaim } from '../types/domain'
+import { daysUntil } from '../lib/fmt'
 
 const POLICY_TYPE_OPTIONS: OptionItem[] = [
   { id: 1, label: 'Life' },
@@ -597,9 +598,7 @@ function PolicyCard({
   onEdit: () => void
   onDelete: () => Promise<void>
 }) {
-  const maturityDays = policy.maturity_date
-    ? Math.ceil((new Date(policy.maturity_date).getTime() - Date.now()) / 86_400_000)
-    : null
+  const maturityDays = policy.maturity_date ? daysUntil(policy.maturity_date) : null
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">

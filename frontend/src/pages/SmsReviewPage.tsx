@@ -11,6 +11,7 @@ import { TagPicker } from '../components/expenses/TagPicker'
 import { SmsAccountPicker } from '../components/sms/SmsAccountPicker'
 import { getReviewQueue, openReview, removeFromReviewQueue } from '../components/sms/reviewQueue'
 import type { Account, ExpenseCategory, InstrumentOption, OptionItem, SmsMessage, Tag, TransactionClassification } from '../types/domain'
+import { useErrorToast } from '../hooks/useErrorToast'
 
 type Props = {
   householdId: number
@@ -77,11 +78,12 @@ export function SmsReviewPage({ householdId, messageId, memberOptions, instrumen
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
   const [tags, setTags] = useState<Tag[]>([])
 
+  const errorToast = useErrorToast()
   useEffect(() => {
-    portfolioApi.listAccounts(householdId).then(setAccounts).catch(() => {})
-    expenseApi.listCategories(householdId).then(setCategories).catch(() => {})
-    tagApi.list(householdId).then(setTags).catch(() => {})
-  }, [householdId])
+    portfolioApi.listAccounts(householdId).then(setAccounts).catch(errorToast('Couldn’t load accounts'))
+    expenseApi.listCategories(householdId).then(setCategories).catch(errorToast('Couldn’t load categories'))
+    tagApi.list(householdId).then(setTags).catch(errorToast('Couldn’t load tags'))
+  }, [householdId, errorToast])
 
   useEffect(() => {
     let active = true

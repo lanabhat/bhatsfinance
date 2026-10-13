@@ -6,6 +6,7 @@ import { EmojiPicker } from './EmojiPicker'
 import { TagPicker } from './TagPicker'
 import type { Account, AccountOwnership, ExpenseCategory, OptionItem, Tag, TransactionClassification } from '../../types/domain'
 import type { RecordTransactionPayload } from '../../api/expenseApi'
+import { useErrorToast } from '../../hooks/useErrorToast'
 
 export type CategoryKey = string
 
@@ -325,6 +326,7 @@ export function QuickExpenseForm({
     setLocalCategories(categories)
   }, [categories])
 
+  const errorToast = useErrorToast()
   useEffect(() => {
     portfolioApi.listAccounts(householdId).then(accs => {
       setFullAccounts(accs)
@@ -332,10 +334,10 @@ export function QuickExpenseForm({
       if (accountIds.length === 0) { setOwnerships([]); return }
       Promise.all(accountIds.map(id => portfolioApi.listAccountOwnerships(id)))
         .then(results => setOwnerships(results.flat()))
-        .catch(() => {})
-    }).catch(() => {})
-    tagApi.list(householdId).then(setTags).catch(() => {})
-  }, [householdId, refreshKey])
+        .catch(errorToast('Couldn’t load account owners'))
+    }).catch(errorToast('Couldn’t load accounts'))
+    tagApi.list(householdId).then(setTags).catch(errorToast('Couldn’t load tags'))
+  }, [householdId, refreshKey, errorToast])
 
   const memberAccounts = useMemo((): Account[] => {
     if (!form.member) return fullAccounts

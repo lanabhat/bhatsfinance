@@ -28,12 +28,8 @@ import { insuranceApi } from '../api/insuranceApi'
 import { portfolioApi } from '../api/portfolioApi'
 import { getJson, toQueryString } from '../api/http'
 import type { BondCouponDue, CategoryBreakdownItem, DashboardHolding, InsuranceSummary, MaturingBond, MaturingFD, MemberAccount, MutualFundDetails } from '../types/domain'
+import { TYPE_ICONS } from '../lib/instrumentTypes'
 
-const TYPE_ICONS: Record<string, string> = {
-  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', bond: '📜', epf: '🛡',
-  ppf: '🛡', nps: '🛡', gold: '🪙', real_estate: '🏠', sip: '🔄',
-  insurance: '☂️', cash: '💵', other: '💼', vehicle: '🚗', liability: '⚠️',
-}
 
 const STORAGE_KEY = 'hw_excluded_types'
 

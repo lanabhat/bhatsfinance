@@ -1,16 +1,12 @@
 import { Money } from '../common/Money'
 import type { DashboardHolding } from '../../types/domain'
+import { TYPE_ICONS } from '../../lib/instrumentTypes'
 
 type Props = {
   holdings: DashboardHolding[]
   onViewAll: () => void
 }
 
-const TYPE_ICONS: Record<string, string> = {
-  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', bond: '📜', epf: '🛡',
-  ppf: '🛡', nps: '🛡', gold: '🪙', real_estate: '🏠', sip: '🔄',
-  insurance: '☂️', other: '💼',
-}
 
 
 export function RecentHoldings({ holdings, onViewAll }: Props) {

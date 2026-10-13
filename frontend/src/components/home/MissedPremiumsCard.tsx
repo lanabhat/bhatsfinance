@@ -6,6 +6,7 @@ import { MarkPremiumPaidSheet } from '../insurance/MarkPremiumPaidSheet'
 import { BulkPremiumSheet } from '../insurance/BulkPremiumSheet'
 import { insuranceApi } from '../../api/insuranceApi'
 import type { MissedPremiumAlert, OptionItem } from '../../types/domain'
+import { useErrorToast } from '../../hooks/useErrorToast'
 
 type Props = {
   items: MissedPremiumAlert[]
@@ -50,6 +51,7 @@ export function MissedPremiumsCard({ items, accountOptions, onPaid }: Props) {
   const [ignoringId, setIgnoringId] = useState<string | null>(null)
   const [ignoringPolicyId, setIgnoringPolicyId] = useState<number | null>(null)
   const groupExpand = useExpandable<number>()
+  const errorToast = useErrorToast()
 
   if (items.length === 0) return null
 
@@ -65,7 +67,9 @@ export function MissedPremiumsCard({ items, accountOptions, onPaid }: Props) {
         note: 'Ignored from dashboard',
       })
       await onPaid()
-    } catch { /* silent — onPaid refresh will re-show if failed */ }
+    } catch (e) {
+      errorToast('Couldn’t ignore the premium')(e)
+    }
     setIgnoringId(null)
   }
 
@@ -82,7 +86,9 @@ export function MissedPremiumsCard({ items, accountOptions, onPaid }: Props) {
         )
       )
       await onPaid()
-    } catch { /* silent */ }
+    } catch (e) {
+      errorToast('Couldn’t ignore the premiums')(e)
+    }
     setIgnoringPolicyId(null)
   }
 

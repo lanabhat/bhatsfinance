@@ -18,6 +18,7 @@ import { applyFilters, filterFieldsFrom, useFilterState } from '../hooks/useFilt
 import type { FilterAccessor } from '../hooks/useFilters'
 import { FilterBar } from '../components/ui/FilterBar'
 import { LabeledSelect } from '../components/ui/LabeledSelect'
+import { toggled } from '../lib/sets'
 
 // ── shared ownership row ──────────────────────────────────────────────────────
 function OwnershipRow({ name, subtitle, currentMemberId, memberOptions, onSave }: {
@@ -282,7 +283,7 @@ export function AccountsPage() {
   }, [dashboard.accounts])
 
   const toggleGroup = (key: string) =>
-    setCollapsed((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+    setCollapsed((prev) => toggled(prev, key))
 
   const load = async () => {
     setLoading(true)

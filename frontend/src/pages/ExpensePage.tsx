@@ -19,6 +19,7 @@ import { useFilterState } from '../hooks/useFilters'
 import type { FilterField } from '../hooks/useFilters'
 import { FilterBar } from '../components/ui/FilterBar'
 import { tagApi } from '../api/tagApi'
+import { useErrorToast } from '../hooks/useErrorToast'
 
 type Props = {
   householdId: number
@@ -116,6 +117,7 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
     }
   }
 
+  const errorToast = useErrorToast()
   const loadCategories = async () => {
     try {
       const [cats, unm] = await Promise.all([
@@ -124,13 +126,17 @@ export function ExpensePage({ householdId, memberOptions, accountOptions, canDel
       ])
       setCategories(cats)
       setUnmapped(unm)
-    } catch { /* non-fatal */ }
+    } catch (e) {
+      errorToast('Couldn’t load categories')(e)
+    }
   }
 
   const loadTags = async () => {
     try {
       setAllTags(await tagApi.list(householdId))
-    } catch { /* non-fatal */ }
+    } catch (e) {
+      errorToast('Couldn’t load tags')(e)
+    }
   }
 
   const cleanupUnusedTags = async () => {

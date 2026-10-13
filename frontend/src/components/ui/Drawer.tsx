@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
 
@@ -19,25 +19,27 @@ export function Drawer({ open, onClose, title, children, width = 'w-full max-w-m
   // Vertical drag offset for the mobile bottom-sheet (swipe-down-to-dismiss)
   const [dragY, setDragY] = useState(0)
   const startY = useRef<number | null>(null)
-  // z-index layer assigned when this dialog opens
-  const [layer, setLayer] = useState(50)
+  const [dragging, setDragging] = useState(false)
+  // z-index layer: above every sheet already open when this one opens.
+  const layer = useMemo(() => (open ? 50 + (openCount + 1) * 10 : 50), [open])
+  // Inline onClose from callers would otherwise re-run the effect below on every render.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose })
 
   useEffect(() => {
     if (!open) return
     openCount += 1
-    setLayer(50 + openCount * 10)
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
     document.addEventListener('keydown', handler)
-    setDragY(0)
     return () => {
       document.removeEventListener('keydown', handler)
       openCount = Math.max(0, openCount - 1)
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
-  const onTouchStart = (e: React.TouchEvent) => { startY.current = e.touches[0].clientY }
+  const onTouchStart = (e: React.TouchEvent) => { startY.current = e.touches[0].clientY; setDragging(true) }
   const onTouchMove = (e: React.TouchEvent) => {
     if (startY.current === null) return
     const delta = e.touches[0].clientY - startY.current
@@ -45,8 +47,9 @@ export function Drawer({ open, onClose, title, children, width = 'w-full max-w-m
   }
   const onTouchEnd = () => {
     if (dragY > 110) onClose()
-    else setDragY(0)
+    setDragY(0)  // also resets after a swipe-to-close, so it reopens in place
     startY.current = null
+    setDragging(false)
   }
 
   return createPortal(
@@ -69,7 +72,7 @@ export function Drawer({ open, onClose, title, children, width = 'w-full max-w-m
           }
           style={{
             transform: dragY ? `translateY(${dragY}px)` : undefined,
-            transition: startY.current === null ? 'transform 0.22s ease-out' : 'none',
+            transition: dragging ? 'none' : 'transform 0.22s ease-out',
           }}
           role="dialog"
           aria-modal="true"

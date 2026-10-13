@@ -5,6 +5,7 @@ import type { FDAdviceConfirmedItem, FDAdviceFilePreview, FDAdviceFileResult, FD
 import type { Account } from '../../types/domain'
 import { Button } from '../ui/Button'
 import { useApp } from '../../context/AppContext'
+import { useErrorToast } from '../../hooks/useErrorToast'
 
 type Props = { householdId: number }
 
@@ -45,9 +46,10 @@ export function FDAdviceImportWizard({ householdId }: Props) {
   const [bulkRdMemberId, setBulkRdMemberId] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const errorToast = useErrorToast()
   useEffect(() => {
-    portfolioApi.listAccounts(householdId).then(setAccounts).catch(() => {})
-  }, [householdId])
+    portfolioApi.listAccounts(householdId).then(setAccounts).catch(errorToast('Couldn’t load accounts'))
+  }, [householdId, errorToast])
 
   const bankAccounts = accounts.filter(a => a.account_type === 'bank')
 

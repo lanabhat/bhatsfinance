@@ -4,6 +4,8 @@ import type { StagedTransaction, StagedTransactionPatch } from '../api/gmailApi'
 import { expenseApi } from '../api/expenseApi'
 import { useApp } from '../context/AppContext'
 import type { ExpenseCategory, OptionItem } from '../types/domain'
+import { useErrorToast } from '../hooks/useErrorToast'
+import { apiErrorText } from '../hooks/errorUtils'
 
 const CLASSIFICATIONS = [
   { value: '', label: '— none —' },
@@ -170,8 +172,8 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
     try {
       const result = await gmailApi.approveStaged(msg.id, patch)
       onApproved(result)
-    } catch (e: any) {
-      setError(e?.error ?? e?.message ?? 'Failed to approve')
+    } catch (e) {
+      setError(apiErrorText(e, 'Failed to approve'))
     } finally {
       setBusy(false)
       setEditing(false)
@@ -184,8 +186,8 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
     try {
       await gmailApi.rejectStaged(msg.id)
       onRejected(msg.id)
-    } catch (e: any) {
-      setError(e?.error ?? e?.message ?? 'Failed to reject')
+    } catch (e) {
+      setError(apiErrorText(e, 'Failed to reject'))
     } finally {
       setBusy(false)
     }
@@ -197,8 +199,8 @@ function StagedRow({ msg, accountOptions, spendCategories, onApproved, onRejecte
     try {
       await gmailApi.deleteStaged(msg.id)
       onDeleted(msg.id)
-    } catch (e: any) {
-      setError(e?.error ?? e?.message ?? 'Failed to delete')
+    } catch (e) {
+      setError(apiErrorText(e, 'Failed to delete'))
     } finally {
       setBusy(false)
       setConfirmDelete(false)
@@ -384,8 +386,8 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
     try {
       const res = await gmailApi.getStaged(status)
       setItems(res.results)
-    } catch (e: any) {
-      setError(e?.error ?? 'Failed to load staged transactions')
+    } catch (e) {
+      setError(apiErrorText(e, 'Failed to load staged transactions'))
     } finally {
       setLoading(false)
     }
@@ -393,10 +395,11 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
 
   useEffect(() => { load() }, [statusFilter])
 
+  const errorToast = useErrorToast()
   useEffect(() => {
     if (!householdId) return
-    expenseApi.listCategories(householdId).then(setSpendCategories).catch(() => {})
-  }, [householdId])
+    expenseApi.listCategories(householdId).then(setSpendCategories).catch(errorToast('Couldn’t load categories'))
+  }, [householdId, errorToast])
 
   function handleApproved(updated: StagedTransaction) {
     if (statusFilter === 'pending') {
@@ -439,8 +442,8 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
       setBulkMsg(`Approved ${approved} transaction${approved !== 1 ? 's' : ''}${failed ? `, ${failed} failed` : ''}.`)
       await load()
       void refreshAll()
-    } catch (e: any) {
-      setBulkMsg(e?.error ?? 'Bulk approve failed')
+    } catch (e) {
+      setBulkMsg(apiErrorText(e, 'Bulk approve failed'))
     } finally {
       setBulkBusy(false)
     }
@@ -452,7 +455,9 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
       await gmailApi.bulkDeleteStaged()
       setItems([])
       setConfirmDeleteAll(false)
-    } catch { /* ignore */ } finally {
+    } catch (e) {
+      errorToast('Couldn’t delete staged emails')(e)
+    } finally {
       setDangerBusy(false)
     }
   }
@@ -462,7 +467,9 @@ export function GmailStagingPage({ accountOptions }: { accountOptions: OptionIte
     try {
       await gmailApi.resetImportHistory(true)
       setConfirmClearSync(false)
-    } catch { /* ignore */ } finally {
+    } catch (e) {
+      errorToast('Couldn’t clear the sync history')(e)
+    } finally {
       setDangerBusy(false)
     }
   }

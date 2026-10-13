@@ -89,7 +89,7 @@ export function FundComparisonTable({ rows }: Props) {
     <DataTable
       columns={columns}
       rows={rows}
-      rowKey={(r) => r.instrument_id}
+      rowKey={(r) => r.investment_id ?? `i${r.instrument_id}`}
       defaultSortCol="sharpe"
       defaultSortDir="desc"
       minWidth="min-w-[980px]"

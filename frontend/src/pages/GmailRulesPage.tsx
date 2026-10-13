@@ -3,6 +3,7 @@ import { gmailApi, type GmailAccountRule, type GmailRuleTemplate } from '../api/
 import { portfolioApi } from '../api/portfolioApi'
 import type { Account, OptionItem } from '../types/domain'
 import { useAuth } from '../context/AuthContext'
+import { apiErrorText } from '../hooks/errorUtils'
 
 type Props = {
   householdId: number | null
@@ -596,8 +597,8 @@ function TemplateForm({
     setError('')
     try {
       await onSave(draft)
-    } catch (e: any) {
-      setError(e?.error ?? e?.detail?.[0] ?? 'Save failed.')
+    } catch (e) {
+      setError(apiErrorText(e, 'Save failed.'))
     } finally {
       setSaving(false)
     }
@@ -732,8 +733,8 @@ function TemplatesSection({
       // Re-fetch to get the restored built-in or remove truly custom
       const updated = await gmailApi.getTemplates()
       setTemplates(updated)
-    } catch (e: any) {
-      setDeleteError(e?.error ?? 'Delete failed.')
+    } catch (e) {
+      setDeleteError(apiErrorText(e, 'Delete failed.'))
     }
   }
 

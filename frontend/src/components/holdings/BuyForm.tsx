@@ -10,6 +10,7 @@ import { InvestmentForm } from '../assets/InvestmentForm'
 import { useApp } from '../../context/AppContext'
 import { TYPE_ICONS, TYPE_LABELS } from '../../lib/instrumentTypes'
 import type { Account, BondDetails, FDDetails, Instrument, Investment } from '../../types/domain'
+import { useErrorToast } from '../../hooks/useErrorToast'
 
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -122,9 +123,10 @@ export function BuyForm({ householdId, instrumentId: initId, investmentId: initI
   // MutualFundInvestmentView).
   const isNewShellType = isNewMf || isNewEquity
 
-  useEffect(() => { investmentApi.listInvestments({ household: householdId }).then(setInvestments).catch(() => {}) }, [householdId])
-  useEffect(() => { portfolioApi.listAccounts(householdId).then(setAccounts).catch(() => {}) }, [householdId])
-  const loadFullInstruments = () => portfolioApi.listInstruments(householdId).then(setFullInstruments).catch(() => {})
+  const errorToast = useErrorToast()
+  useEffect(() => { investmentApi.listInvestments({ household: householdId }).then(setInvestments).catch(errorToast('Couldn’t load holdings')) }, [householdId, errorToast])
+  useEffect(() => { portfolioApi.listAccounts(householdId).then(setAccounts).catch(errorToast('Couldn’t load accounts')) }, [householdId, errorToast])
+  const loadFullInstruments = () => portfolioApi.listInstruments(householdId).then(setFullInstruments).catch(errorToast('Couldn’t load instruments'))
   useEffect(() => { void loadFullInstruments() }, [householdId])
 
   useEffect(() => {

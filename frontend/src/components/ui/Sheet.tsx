@@ -28,20 +28,25 @@ let openCount = 0
 export function Sheet({ title, subtitle, onClose, children, footer, wide }: Props) {
   const [dragY, setDragY] = useState(0)
   const startY = useRef<number | null>(null)
-  const [layer, setLayer] = useState(50)
+  const [dragging, setDragging] = useState(false)
+  // Above every sheet already open when this one mounts.
+  const [layer] = useState(() => 50 + (openCount + 1) * 10)
+  // Callers usually pass an inline onClose; reading it through a ref keeps the effect below
+  // to one run per open (re-running it re-counted openCount and pushed the layer up).
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose })
 
   useEffect(() => {
     openCount += 1
-    setLayer(50 + openCount * 10)
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
     document.addEventListener('keydown', handler)
     return () => {
       document.removeEventListener('keydown', handler)
       openCount = Math.max(0, openCount - 1)
     }
-  }, [onClose])
+  }, [])
 
-  const onTouchStart = (e: React.TouchEvent) => { startY.current = e.touches[0].clientY }
+  const onTouchStart = (e: React.TouchEvent) => { startY.current = e.touches[0].clientY; setDragging(true) }
   const onTouchMove = (e: React.TouchEvent) => {
     if (startY.current === null) return
     const delta = e.touches[0].clientY - startY.current
@@ -51,6 +56,7 @@ export function Sheet({ title, subtitle, onClose, children, footer, wide }: Prop
     if (dragY > 110) onClose()
     else setDragY(0)
     startY.current = null
+    setDragging(false)
   }
 
   return createPortal(
@@ -70,7 +76,7 @@ export function Sheet({ title, subtitle, onClose, children, footer, wide }: Prop
           className={`dialog-panel relative flex max-h-[90dvh] w-full flex-col bg-[var(--surface)] shadow-[var(--shadow-modal)] rounded-t-2xl md:rounded-2xl md:max-h-[88vh] ${wide ? 'max-w-xl' : 'max-w-lg'}`}
           style={{
             transform: dragY ? `translateY(${dragY}px)` : undefined,
-            transition: startY.current === null ? 'transform 0.22s ease-out' : 'none',
+            transition: dragging ? 'none' : 'transform 0.22s ease-out',
           }}
           role="dialog"
           aria-modal="true"

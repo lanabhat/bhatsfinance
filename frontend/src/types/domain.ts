@@ -963,6 +963,8 @@ export type BenchmarkComparison = {
 
 export type FundComparisonRow = {
   instrument_id: number
+  /** The fund itself — funds share one "Mutual Fund" instrument, so instrument_id isn't unique. Null for a standalone instrument. */
+  investment_id: number | null
   instrument_name: string
   fund_category: string
   expense_ratio: string | null
@@ -988,6 +990,8 @@ export type CagrByPeriod = {
 
 export type FundPerformanceRow = {
   instrument_id: number
+  /** The fund itself — funds share one "Mutual Fund" instrument, so instrument_id isn't unique. Null for a standalone instrument. */
+  investment_id: number | null
   instrument_name: string
   fund_category: string
   fund_sub_category: string

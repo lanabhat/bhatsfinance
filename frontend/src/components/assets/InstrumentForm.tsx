@@ -5,6 +5,10 @@ import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { AiInsightCard } from '../common/AiInsightCard'
 import type { ApiErrorMap, Instrument } from '../../types/domain'
+import { useErrorToast } from '../../hooks/useErrorToast'
+import { ALLOCATION_RULE_LABELS, FUND_BUCKET_LABELS, SUB_CATEGORY_LABELS } from '../../lib/labels'
+
+const SUB_CATEGORY_OPTION_LABELS: Record<string, string> = { '': '— Unclassified —', ...SUB_CATEGORY_LABELS }
 
 function firstErrorMessage(err: unknown, fallback: string): string {
   if (err && typeof err === 'object') {
@@ -31,13 +35,7 @@ const INSTRUMENT_TYPES = ['equity','etf','mutual_fund','fd','rd','bond','epf','p
 // of this type (legacy data from before the shell/Investment migration).
 const CREATE_HIDDEN_TYPES = new Set(['mutual_fund', 'sip', 'etf'])
 const SUB_CATEGORIES = ['', 'debt', 'equity', 'liquid', 'retirement', 'hybrid', 'gold', 'real_asset', 'other'] as const
-const SUB_CATEGORY_LABELS: Record<string, string> = {
-  '': '— Unclassified —', debt: 'Debt', equity: 'Equity', liquid: 'Liquid',
-  retirement: 'Retirement', hybrid: 'Hybrid', gold: 'Gold', real_asset: 'Real Asset', other: 'Other',
-}
 
-const BUCKET_LABELS: Record<string, string> = { equity: 'Equity', debt: 'Debt', hybrid: 'Hybrid' }
-const RULE_LABELS: Record<string, string> = { growth: 'Growth (60%)', stability: 'Stability (40%)' }
 
 /** AI classification entry point — manual trigger only, cached result. */
 export function FundClassificationCard({ instrumentId }: { instrumentId: number }) {
@@ -53,7 +51,7 @@ export function FundClassificationCard({ instrumentId }: { instrumentId: number 
       {(c) => (
         <div className="space-y-1">
           <p className="text-sm font-medium text-[var(--text)]">
-            {BUCKET_LABELS[c.bucket] ?? c.bucket} · {RULE_LABELS[c.rule_60_40_category] ?? c.rule_60_40_category}
+            {FUND_BUCKET_LABELS[c.bucket] ?? c.bucket} · {ALLOCATION_RULE_LABELS[c.rule_60_40_category] ?? c.rule_60_40_category}
           </p>
           <p className="text-xs text-[var(--text-muted)]">{c.reasoning}</p>
         </div>
@@ -91,6 +89,7 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const errorToast = useErrorToast()
   useEffect(() => {
     if (!instrument) return
     portfolioApi.listInstrumentOwnerships(instrument.id).then((owns) => {
@@ -98,8 +97,8 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
         setOwnerId(String(owns[0].member))
         setExistingOwnershipId(owns[0].id)
       }
-    }).catch(() => {})
-  }, [instrument])
+    }).catch(errorToast('Couldn’t load the owner'))
+  }, [instrument, errorToast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setError('')
@@ -134,7 +133,7 @@ export function InstrumentForm({ householdId, instrument, onSave, onCancel, onDe
         </select></div>
       <div><label className="mb-1 block text-xs font-medium text-[var(--text-2)]">Sub-category</label>
         <select className={INP} value={form.sub_category} onChange={(e) => setForm((p) => ({ ...p, sub_category: e.target.value as Instrument['sub_category'] }))}>
-          {SUB_CATEGORIES.map((s) => <option key={s} value={s}>{SUB_CATEGORY_LABELS[s]}</option>)}
+          {SUB_CATEGORIES.map((s) => <option key={s} value={s}>{SUB_CATEGORY_OPTION_LABELS[s]}</option>)}
         </select>
         <p className="mt-1 text-[11px] text-[var(--text-muted)]">Cross-cutting risk/liquidity grouping (e.g. group FDs + EPF + debt funds together as "Debt").</p>
       </div>

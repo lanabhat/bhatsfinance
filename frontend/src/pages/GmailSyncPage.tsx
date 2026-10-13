@@ -17,6 +17,7 @@ import {
 } from '../api/gmailApi'
 import { useAuth } from '../context/AuthContext'
 import { useApp } from '../context/AppContext'
+import { apiErrorText } from '../hooks/errorUtils'
 
 type Props = {
   householdId: number
@@ -110,8 +111,8 @@ function AddInstrumentModal({ proposal, accountOptions, memberOptions, fullMembe
         default_account_id: defaultAccountId ? Number(defaultAccountId) : null,
       })
       onCreated(res.instrument.id, res.instrument.name)
-    } catch (e: any) {
-      setError(e?.error ?? e?.detail?.[0] ?? 'Failed to create instrument.')
+    } catch (e) {
+      setError(apiErrorText(e, 'Failed to create instrument.'))
       setSaving(false)
     }
   }
@@ -509,8 +510,8 @@ function GroupCard({ group, templates, accountOptions, instrumentOptions, mappin
         notes: `Auto-updated from Gmail: ${latestEmail.subject?.slice(0, 80) ?? ''}`,
       })
       setBalanceMsg(`Balance updated to â‚¹${balanceStr} as of ${date}.`)
-    } catch (e: any) {
-      setBalanceMsg(e?.balance?.[0] ?? e?.error ?? 'Failed to update balance.')
+    } catch (e) {
+      setBalanceMsg(apiErrorText(e, 'Failed to update balance.'))
     } finally {
       setBalanceUpdating(false)
     }
@@ -858,8 +859,8 @@ function ResetImportHistoryButton({ canWrite, onReset }: { canWrite: boolean; on
       setResult(`Cleared ${res.deleted} record${res.deleted !== 1 ? 's' : ''}. Next sync will re-import all matching emails.`)
       setConfirm(false)
       onReset(res.deleted)
-    } catch (e: any) {
-      setError(e?.error ?? e?.detail?.[0] ?? 'Failed to reset.')
+    } catch (e) {
+      setError(apiErrorText(e, 'Failed to reset.'))
     } finally {
       setLoading(false)
     }
@@ -933,7 +934,7 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
   const [importResults, setImportResults] = useState<GmailGroupImportResult[] | null>(null)
 
   const [syncLoading, setSyncLoading] = useState(false)
-  const [syncResult, setSyncResult] = useState<{ created_transactions: number; created_valuations: number; skipped_duplicates: number; errors: any[] } | null>(null)
+  const [syncResult, setSyncResult] = useState<{ created_transactions: number; created_valuations: number; skipped_duplicates: number; errors: { error: string }[] } | null>(null)
   const [syncError, setSyncError] = useState('')
   const [disconnectId, setDisconnectId] = useState<number | null>(null)
 
@@ -1020,8 +1021,8 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
       // Init sender filter â€” select all by default
       const allSenders = new Set(res.groups.map((g: GmailGroup) => g.sender_domain))
       setSelectedSenders(allSenders)
-    } catch (e: any) {
-      setFetchError(e?.error ?? e?.detail?.[0] ?? 'Fetch failed.')
+    } catch (e) {
+      setFetchError(apiErrorText(e, 'Fetch failed.'))
     } finally {
       setFetchLoading(false)
     }
@@ -1126,8 +1127,8 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
     try {
       const res = await gmailApi.importGroups({ groups: importGroups, save_rules: saveRules })
       setImportResults(res.group_results)
-    } catch (e: any) {
-      setImportError(e?.error ?? e?.detail?.[0] ?? 'Import failed.')
+    } catch (e) {
+      setImportError(apiErrorText(e, 'Import failed.'))
     } finally {
       setImportLoading(false)
     }
@@ -1141,8 +1142,8 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
       const res = await gmailApi.sync()
       setSyncResult(res)
       setLastSyncedAt(res.last_synced_at)
-    } catch (e: any) {
-      setSyncError(e?.error ?? e?.detail?.[0] ?? 'Sync failed.')
+    } catch (e) {
+      setSyncError(apiErrorText(e, 'Sync failed.'))
     } finally {
       setSyncLoading(false)
     }
@@ -1706,8 +1707,8 @@ export function GmailSyncPage({ householdId, accountOptions, instrumentOptions, 
                     query_override: cfgQuery,
                     excluded_senders: cfgExcludedSenders,
                   })
-                } catch (e: any) {
-                  setCfgError(e?.detail?.[0] ?? e?.error ?? 'Failed to save config.')
+                } catch (e) {
+                  setCfgError(apiErrorText(e, 'Failed to save config.'))
                 } finally {
                   setCfgSaving(false)
                 }

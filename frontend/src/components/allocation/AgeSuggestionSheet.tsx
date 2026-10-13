@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { allocationTargetApi } from '../../api/allocationTargetApi'
 import { householdApi } from '../../api/householdApi'
 import type { AllocationSuggestion, Member } from '../../types/domain'
+import { useErrorToast } from '../../hooks/useErrorToast'
 
 type Props = {
   householdId: number
@@ -25,9 +26,10 @@ export function AgeSuggestionSheet({ householdId, asOf, onApplied, onClose }: Pr
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState('')
 
+  const errorToast = useErrorToast()
   useEffect(() => {
-    householdApi.listMembers(householdId).then(setMembers).catch(() => {})
-  }, [householdId])
+    householdApi.listMembers(householdId).then(setMembers).catch(errorToast('Couldn’t load members'))
+  }, [householdId, errorToast])
 
   const selectedMember = members.find((m) => m.id === memberId)
 

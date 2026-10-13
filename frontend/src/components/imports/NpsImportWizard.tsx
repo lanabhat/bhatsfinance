@@ -5,6 +5,7 @@ import type { NpsConfirmedItem, NpsFilePreview, NpsFileResult } from '../../api/
 import type { Account } from '../../types/domain'
 import { Button } from '../ui/Button'
 import { useApp } from '../../context/AppContext'
+import { useErrorToast } from '../../hooks/useErrorToast'
 
 type Props = { householdId: number }
 
@@ -27,9 +28,10 @@ export function NpsImportWizard({ householdId }: Props) {
   const [accounts, setAccounts] = useState<Account[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const errorToast = useErrorToast()
   useEffect(() => {
-    portfolioApi.listAccounts(householdId).then(setAccounts).catch(() => {})
-  }, [householdId])
+    portfolioApi.listAccounts(householdId).then(setAccounts).catch(errorToast('Couldn’t load accounts'))
+  }, [householdId, errorToast])
 
   const allMembers = rows.find(r => r.preview?.members && r.preview.members.length > 0)?.preview?.members ?? []
 

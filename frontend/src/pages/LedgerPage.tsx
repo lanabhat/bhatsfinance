@@ -4,7 +4,8 @@ import { getJson } from '../api/http'
 import { tagApi } from '../api/tagApi'
 import { EntityPageLayout } from '../components/common/EntityPageLayout'
 import { DeleteButton } from '../components/common/DeleteButton'
-import { TX_TYPES, TxFormFields, blankTxForm, txFormFromTransaction, type TxForm } from '../components/ledger/TransactionEditForm'
+import { TxFormFields } from '../components/ledger/TransactionEditForm'
+import { TX_TYPES, blankTxForm, txFormFromTransaction, type TxForm } from '../components/ledger/txForm'
 import { useAuth } from '../context/AuthContext'
 import type { DeleteEntity } from '../hooks/useDeleteConfig'
 import { normalizeApiError } from '../hooks/errorUtils'
@@ -15,6 +16,8 @@ import { useFilterState } from '../hooks/useFilters'
 import type { FilterField } from '../hooks/useFilters'
 import { FilterBar } from '../components/ui/FilterBar'
 import { Money } from '../components/common/Money'
+import { useErrorToast } from '../hooks/useErrorToast'
+import { ACCOUNT_TYPE_LABELS, TX_TYPE_LABELS } from '../lib/labels'
 
 type Props = {
   householdId: number
@@ -33,17 +36,7 @@ type GmailMeta = {
   snippet?: string
 }
 
-const TX_TYPE_LABELS: Record<string, string> = {
-  deposit: 'Deposit', withdrawal: 'Withdrawal', buy: 'Buy', sell: 'Sell',
-  dividend: 'Dividend', interest: 'Interest', salary: 'Salary',
-  tax_payment: 'Tax Payment', tax_refund: 'Tax Refund', emi: 'EMI',
-  loan_disbursal: 'Loan', premium: 'Premium', cc_bill_payment: 'CC Bill Payment', other: 'Other',
-}
 
-const ACCOUNT_TYPE_LABELS: Record<string, string> = {
-  bank: 'Bank Account', broker: 'Broker', pf: 'PF', loan: 'Loan',
-  credit_card: 'Credit Card', insurance: 'Insurance', cash: 'Cash', other: 'Other',
-}
 
 const CLASSIFICATION_OPTIONS: OptionItem[] = [
   { id: 1, label: 'spend' }, { id: 2, label: 'income' }, { id: 3, label: 'internal_transfer' }, { id: 4, label: 'tracking' },
@@ -193,11 +186,12 @@ export function LedgerPage({ householdId, memberOptions, accountOptions, instrum
     }
   }
 
+  const errorToast = useErrorToast()
   const loadTags = async () => {
     try {
       setTags(await tagApi.list(householdId))
-    } catch {
-      // non-fatal — tags just won't show if this fails
+    } catch (e) {
+      errorToast('Couldn’t load tags')(e)
     }
   }
 

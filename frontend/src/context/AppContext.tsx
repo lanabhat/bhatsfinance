@@ -6,6 +6,7 @@ import { type DeleteEntity, useDeleteConfig } from '../hooks/useDeleteConfig'
 import { invalidateOptionCache, useOptionLoaders } from '../hooks/useOptionLoaders'
 import type { AssetCategory, DashboardPayload, InstrumentOption, OptionItem } from '../types/domain'
 import { useAuth } from './AuthContext'
+import { useErrorToast } from '../hooks/useErrorToast'
 
 const EMPTY_DASHBOARD: DashboardPayload = {
   holdings: [],
@@ -84,6 +85,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const errorToast = useErrorToast()
   const refreshCategories = async () => {
     if (!householdId) {
       setCategories([])
@@ -91,8 +93,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     try {
       setCategories(await assetCategoryApi.list(householdId))
-    } catch {
-      // non-fatal
+    } catch (e) {
+      errorToast('Couldn’t load categories')(e)
     }
   }
 

@@ -25,6 +25,7 @@ import type { FilterAccessor } from '../hooks/useFilters'
 import { FilterBar } from '../components/ui/FilterBar'
 import { LabeledSelect } from '../components/ui/LabeledSelect'
 import type { ApiListResponse, AssetCategory, Instrument, InstrumentOwnership, Investment, Transaction, ValuationSnapshot } from '../types/domain'
+import { toggled } from '../lib/sets'
 
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -382,7 +383,7 @@ export function InstrumentsPage() {
   }
 
   const toggleGroup = (key: string) =>
-    setCollapsed((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+    setCollapsed((prev) => toggled(prev, key))
 
   const load = async () => {
     setLoading(true)

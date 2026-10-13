@@ -1,4 +1,5 @@
-import { SectionCard, hexToSectionColor } from '../ui/SectionCard'
+import { SectionCard } from '../ui/SectionCard'
+import { hexToSectionColor } from '../ui/sectionColors'
 import { useMaskedFmt } from '../common/Money'
 import type { CategoryBreakdownItem } from '../../types/domain'
 
