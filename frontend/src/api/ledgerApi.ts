@@ -170,20 +170,20 @@ export const ledgerApi = {
   async bulkUpdateTransactions(householdId: number, ids: number[], fields: Partial<Pick<Transaction, 'classification' | 'spend_category' | 'affects_balance'>>) {
     return postJson<{ updated: number }>('/api/transactions/bulk-update/', { household: householdId, ids, fields })
   },
-  async fetchDashboard(householdId: number, asOf: string): Promise<DashboardPayload> {
+  async fetchDashboard(householdId: number, asOf: string, signal?: AbortSignal): Promise<DashboardPayload> {
     const q = toQueryString({ household_id: householdId, as_of: asOf })
     const [holdings, networth, allocation, xirr, missed, missedRD, missedPremiums, history, catBreakdown, membersNw, accts] = await Promise.all([
-      getJson<{ holdings: DashboardPayload['holdings'] }>(`/api/holdings?${q}`),
-      getJson<{ networth: string }>(`/api/networth?${q}`),
-      getJson<{ allocation: DashboardPayload['allocation'] }>(`/api/allocation?${q}`),
-      getJson<{ xirr: number | null }>(`/api/xirr?${q}`),
-      getJson<{ missed: DashboardPayload['missedSip'] }>(`/api/alerts/missed-sip?${q}`),
-      getJson<{ missed: DashboardPayload['missedRD'] }>(`/api/alerts/missed-rd-installments?${q}`),
-      getJson<{ missed: DashboardPayload['missedPremiums'] }>(`/api/alerts/missed-premiums?${q}`),
-      getJson<{ history: DashboardPayload['networthHistory'] }>(`/api/networth/history?${q}`),
-      getJson<{ breakdown: DashboardPayload['categoryBreakdown'] }>(`/api/category-breakdown?${q}`),
-      getJson<{ members: DashboardPayload['membersNetworth'] }>(`/api/members-networth?${q}`),
-      getJson<{ accounts: DashboardAccount[] }>(`/api/household-accounts?${q}`),
+      getJson<{ holdings: DashboardPayload['holdings'] }>(`/api/holdings?${q}`, { signal }),
+      getJson<{ networth: string }>(`/api/networth?${q}`, { signal }),
+      getJson<{ allocation: DashboardPayload['allocation'] }>(`/api/allocation?${q}`, { signal }),
+      getJson<{ xirr: number | null }>(`/api/xirr?${q}`, { signal }),
+      getJson<{ missed: DashboardPayload['missedSip'] }>(`/api/alerts/missed-sip?${q}`, { signal }),
+      getJson<{ missed: DashboardPayload['missedRD'] }>(`/api/alerts/missed-rd-installments?${q}`, { signal }),
+      getJson<{ missed: DashboardPayload['missedPremiums'] }>(`/api/alerts/missed-premiums?${q}`, { signal }),
+      getJson<{ history: DashboardPayload['networthHistory'] }>(`/api/networth/history?${q}`, { signal }),
+      getJson<{ breakdown: DashboardPayload['categoryBreakdown'] }>(`/api/category-breakdown?${q}`, { signal }),
+      getJson<{ members: DashboardPayload['membersNetworth'] }>(`/api/members-networth?${q}`, { signal }),
+      getJson<{ accounts: DashboardAccount[] }>(`/api/household-accounts?${q}`, { signal }),
     ])
 
     return {

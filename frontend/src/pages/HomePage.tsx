@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { lazyPage } from '../lib/lazyPage'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { CategoryBreakdownCard } from '../components/home/CategoryBreakdownCard'
@@ -25,9 +25,9 @@ import { fdDetailsApi } from '../api/fdDetailsApi'
 import { bondDetailsApi } from '../api/bondDetailsApi'
 import { insuranceApi } from '../api/insuranceApi'
 import { portfolioApi } from '../api/portfolioApi'
-import { getJson, toQueryString } from '../api/http'
-import type { BondCouponDue, CategoryBreakdownItem, DashboardHolding, InsuranceSummary, MaturingBond, MaturingFD, MemberAccount, MutualFundDetails } from '../types/domain'
+import type { BondCouponDue, CategoryBreakdownItem, InsuranceSummary, MaturingBond, MaturingFD, MutualFundDetails } from '../types/domain'
 import { TYPE_ICONS } from '../lib/instrumentTypes'
+import { useAllMemberHoldings } from '../hooks/useMemberHoldings'
 
 
 const STORAGE_KEY = 'hw_excluded_types'
@@ -48,9 +48,6 @@ type Props = { onNavigate: (route: string) => void }
 // Charts pull in Recharts (~100 KB); load them after the rest of Home has rendered.
 const NetWorthTrendChart = lazyPage(() => import('../components/charts/NetWorthTrendChart'), 'NetWorthTrendChart')
 const AllocationDonutChart = lazyPage(() => import('../components/charts/AllocationDonutChart'), 'AllocationDonutChart')
-
-type MemberData = { key: string; holdings: Record<number, DashboardHolding[]>; accounts: Record<number, MemberAccount[]> }
-const emptyMemberData = (key: string): MemberData => ({ key, holdings: {}, accounts: {} })
 
 export function HomePage({ onNavigate }: Props) {
   const { householdId, dashboard, dashboardLoading, asOf, setAsOf, refreshDashboard, accounts, categories } = useApp()
@@ -116,36 +113,10 @@ export function HomePage({ onNavigate }: Props) {
     return m
   }, [mfDetails])
 
-  // Per-member holdings for the summary table and the "Viewing" selector, for the current
-  // household + date. Cleared when either changes (so no figures from the old date linger)
-  // and refetched whenever the dashboard reloads; responses for an older key are dropped.
-  const memberKey = `${householdId}|${asOf}`
-  const [memberData, setMemberData] = useState<MemberData>(() => emptyMemberData(memberKey))
-  const current = memberData.key === memberKey ? memberData : emptyMemberData(memberKey)
-  const allMemberHoldings = current.holdings
-  const allMemberAccounts = current.accounts
-
-  const requestMemberHoldings = useCallback((memberId: number) => {
-    const q = toQueryString({ household_id: householdId, as_of: asOf, member_id: memberId })
-    getJson<{ holdings: DashboardHolding[]; accounts: MemberAccount[] }>(`/api/holdings?${q}`)
-      .then((d) => ({ holdings: d.holdings ?? [], accounts: d.accounts ?? [] }))
-      .catch(() => ({ holdings: [], accounts: [] }))
-      .then(({ holdings, accounts }) => setMemberData((prev) => {
-        // Data for an older household/date is replaced, never merged into.
-        const base = prev.key === memberKey ? prev : emptyMemberData(memberKey)
-        return {
-          key: memberKey,
-          holdings: { ...base.holdings, [memberId]: holdings },
-          accounts: { ...base.accounts, [memberId]: accounts },
-        }
-      }))
-  }, [householdId, asOf, memberKey])
-
-  // Pre-fetch all member holdings so Summary Table shows real data without clicking
-  useEffect(() => {
-    if (!householdId) return
-    dashboard.membersNetworth.forEach(m => requestMemberHoldings(m.member_id))
-  }, [householdId, dashboard.membersNetworth, requestMemberHoldings])
+  // Per-member holdings for the summary table and the "Viewing" selector — cached per
+  // household + date (shared with the Holdings page's member view).
+  const memberIds = useMemo(() => dashboard.membersNetworth.map((m) => m.member_id), [dashboard.membersNetworth])
+  const { holdings: allMemberHoldings, accounts: allMemberAccounts } = useAllMemberHoldings(householdId, asOf, memberIds)
 
   // Member-scoped base holdings/accounts: when a member is selected via the
   // "Viewing" selector, every downstream figure (KPI, donut, type filter,
@@ -408,7 +379,7 @@ export function HomePage({ onNavigate }: Props) {
           memberAccounts={allMemberAccounts}
           membersNetworth={dashboard.membersNetworth}
           categoryBreakdown={dashboard.categoryBreakdown}
-          onRequestMemberHoldings={(id) => { if (allMemberHoldings[id] === undefined) requestMemberHoldings(id) }}
+          onRequestMemberHoldings={() => { /* all members are prefetched by useAllMemberHoldings */ }}
         />
       )}
 

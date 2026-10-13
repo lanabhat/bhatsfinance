@@ -1300,7 +1300,9 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
 
   const [tab, setTab] = useState<PageTab>('rules')
   const [rules, setRules] = useState<SmsRule[]>([])
-  const [loading, setLoading] = useState(true)
+  // The household whose rules are loaded; while it differs from householdId we're loading.
+  const [loadedFor, setLoadedFor] = useState<number | null>(null)
+  const loading = loadedFor !== householdId
   const [error, setError] = useState('')
 
   const [suggestions, setSuggestions] = useState<SmsRuleSuggestion[]>([])
@@ -1314,7 +1316,6 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
 
   useEffect(() => {
     if (!householdId) return
-    setLoading(true)
     Promise.all([
       smsRulesApi.list(householdId),
       smsRuleSuggestionsApi.list(householdId),
@@ -1324,7 +1325,7 @@ export function SmsRulesPage({ householdId, accountOptions, memberOptions }: Pro
         setSuggestions(s.filter((sg) => sg.status === 'pending'))
       })
       .catch(() => setError('Failed to load SMS rules.'))
-      .finally(() => setLoading(false))
+      .finally(() => setLoadedFor(householdId))
   }, [householdId])
 
   function handleSaved(saved: SmsRule) {

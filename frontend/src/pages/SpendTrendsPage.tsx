@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { CoinSpinner } from '../components/common/CoinSpinner'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { expenseApi } from '../api/expenseApi'
@@ -21,6 +22,8 @@ type Props = { householdId: number }
 
 type TrendsTab = 'trends' | 'cashflow'
 const TRENDS_TAB_KEY = 'trends:activeTab'
+
+const NO_CASHFLOW: CashFlowPoint[] = []
 
 function loadTrendsTab(): TrendsTab {
   try {
@@ -96,9 +99,14 @@ export function SpendTrendsPage({ householdId }: Props) {
   const [activeTab, setActiveTab] = useState<TrendsTab>(loadTrendsTab)
   const [granularity, setGranularity] = useState<Granularity>('month')
   const [periods, setPeriods] = useState(DEFAULT_PERIODS.month)
-  const [data, setData] = useState<SpendAnalytics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const analytics = useQuery({
+    queryKey: ['spend-analytics', householdId, granularity, periods],
+    queryFn: () => expenseApi.fetchSpendAnalytics(householdId, periods, undefined, granularity, periods),
+    placeholderData: keepPreviousData,
+  })
+  const data: SpendAnalytics | null = analytics.data ?? null
+  const loading = analytics.isFetching
+  const error = analytics.error ? normalizeApiError(analytics.error) : ''
   const [drillDown, setDrillDown] = useState<DrillDown | null>(null)
 
   const changeTab = (tab: TrendsTab) => {
@@ -112,16 +120,6 @@ export function SpendTrendsPage({ householdId }: Props) {
     setDrillDown(null)
   }
 
-  useEffect(() => {
-    let active = true
-    setLoading(true)
-    setError('')
-    expenseApi.fetchSpendAnalytics(householdId, periods, undefined, granularity, periods)
-      .then((res) => { if (active) setData(res) })
-      .catch((e) => { if (active) setError(normalizeApiError(e)) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [householdId, granularity, periods])
 
   // Build chart rows: one entry per period, columns for each classification series
   const chartRows = useMemo(() => {
@@ -336,47 +334,40 @@ function DrillDownTable({ householdId, drillDown, granularity, windowStart, wind
   windowEnd: string
   onClose: () => void
 }) {
-  const [rows, setRows] = useState<Transaction[]>([])
-  const [count, setCount] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    let active = true
-    setLoading(true)
-    setError('')
-
-    const params: Parameters<typeof ledgerApi.listTransactionsPage>[0] = {
-      householdId,
-      page: 1,
-      pageSize: 100,
-      ordering: '-tx_date',
-      txDateAfter: windowStart,
-      txDateBefore: windowEnd,
-    }
-
-    if (drillDown.kind === 'period') {
-      const { start, end } = periodDateRange(drillDown.period, granularity)
-      params.txDateAfter = start
-      params.txDateBefore = end
-      if (drillDown.category) {
-        if (drillDown.category === 'income') params.classification = 'income'
-        else params.classification = drillDown.category
+  const query = useQuery({
+    queryKey: ['spend-drilldown', householdId, drillDown, granularity, windowStart, windowEnd],
+    queryFn: () => {
+      const params: Parameters<typeof ledgerApi.listTransactionsPage>[0] = {
+        householdId,
+        page: 1,
+        pageSize: 100,
+        ordering: '-tx_date',
+        txDateAfter: windowStart,
+        txDateBefore: windowEnd,
       }
-    } else if (drillDown.kind === 'category') {
-      params.classification = 'spend'
-      params.spendCategory = drillDown.category
-    } else if (drillDown.kind === 'member') {
-      if (drillDown.memberId !== null) params.member = drillDown.memberId
-    }
 
-    ledgerApi.listTransactionsPage(params)
-      .then(res => { if (active) { setRows(res.results); setCount(res.count) } })
-      .catch((e) => { if (active) setError(normalizeApiError(e)) })
-      .finally(() => { if (active) setLoading(false) })
+      if (drillDown.kind === 'period') {
+        const { start, end } = periodDateRange(drillDown.period, granularity)
+        params.txDateAfter = start
+        params.txDateBefore = end
+        if (drillDown.category) {
+          if (drillDown.category === 'income') params.classification = 'income'
+          else params.classification = drillDown.category
+        }
+      } else if (drillDown.kind === 'category') {
+        params.classification = 'spend'
+        params.spendCategory = drillDown.category
+      } else if (drillDown.kind === 'member') {
+        if (drillDown.memberId !== null) params.member = drillDown.memberId
+      }
 
-    return () => { active = false }
-  }, [householdId, drillDown, granularity, windowStart, windowEnd])
+      return ledgerApi.listTransactionsPage(params)
+    },
+  })
+  const rows: Transaction[] = query.data?.results ?? []
+  const count = query.data?.count ?? 0
+  const loading = query.isPending
+  const error = query.error ? normalizeApiError(query.error) : ''
 
   return (
     <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
@@ -431,23 +422,14 @@ const CASHFLOW_BUCKET_LABELS: Record<CashFlowBucket, string> = {
 function CashFlowSection({ householdId }: { householdId: number }) {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
-  const [data, setData] = useState<CashFlowPoint[]>([])
-  const [error, setError] = useState('')
+  const cashflow = useQuery({
+    queryKey: ['cashflow', householdId, year],
+    queryFn: async () => (await getJson<{ cashflow: CashFlowPoint[] }>(`/api/cashflow?${toQueryString({ household_id: householdId, year })}`)).cashflow,
+  })
+  const data: CashFlowPoint[] = cashflow.data ?? NO_CASHFLOW
+  const error = cashflow.error ? normalizeApiError(cashflow.error) : ''
   const [cfDrillDown, setCfDrillDown] = useState<{ month: string; bucket: CashFlowBucket } | null>(null)
 
-  const load = async (hid: number, y: number) => {
-    try {
-      setError('')
-      const q = toQueryString({ household_id: hid, year: y })
-      const res = await getJson<{ cashflow: CashFlowPoint[] }>(`/api/cashflow?${q}`)
-      setData(res.cashflow)
-    } catch (e) {
-      setError(normalizeApiError(e))
-    }
-  }
-
-  useEffect(() => { void load(householdId, year) }, [householdId, year])
-  useEffect(() => { setCfDrillDown(null) }, [year])
 
   const totalIncome = data.reduce((s, r) => s + r.income, 0)
   const totalExpense = data.reduce((s, r) => s + r.expense, 0)
@@ -484,7 +466,7 @@ function CashFlowSection({ householdId }: { householdId: number }) {
           <h3 style={{ margin: 0 }}>Monthly Cash Flow</h3>
           <label>
             Year&nbsp;
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+            <select value={year} onChange={(e) => { setYear(Number(e.target.value)); setCfDrillDown(null) }}>
               {years.map((y) => <option key={y} value={y}>{y}</option>)}
             </select>
           </label>

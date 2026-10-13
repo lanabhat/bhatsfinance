@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { investmentEditTitle } from '../components/assets/investmentKind'
 import { CoinSpinner } from '../components/common/CoinSpinner'
-import { getJson, postJson, toQueryString } from '../api/http'
+import { postJson } from '../api/http'
 import { investmentApi } from '../api/investmentApi'
 import { ledgerApi } from '../api/ledgerApi'
 import { portfolioApi } from '../api/portfolioApi'
@@ -36,6 +36,7 @@ import { fdDetailsApi } from '../api/fdDetailsApi'
 import type { MaturityInfo } from '../components/assets/InstrumentRow'
 import type { AssetCategory, BondDetails, DashboardHolding, FDDetails, Instrument, InstrumentOwnership, Investment, MutualFundDetails } from '../types/domain'
 import { SUB_CATEGORY_LABELS } from '../lib/labels'
+import { useMemberHoldings } from '../hooks/useMemberHoldings'
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -162,8 +163,6 @@ export function HoldingsPage() {
   const { canWrite } = useAuth()
   const { householdId, categories, refreshCategories, dashboard, members, asOf, refreshDashboard, instrumentsFull } = useApp()
   const [activeMemberId, setActiveMemberId] = useState<number | null>(null)
-  const [memberHoldings, setMemberHoldings] = useState<typeof dashboard.holdings | null>(null)
-  const [holdingsLoading, setHoldingsLoading] = useState(false)
   const [instruments, setInstruments] = useState<Instrument[]>([])
   const [investments, setInvestments] = useState<Investment[]>([])
   const [ownerships, setOwnerships] = useState<InstrumentOwnership[]>([])
@@ -254,22 +253,13 @@ export function HoldingsPage() {
     return m
   }, [investments, members])
 
+  // One member's share of the holdings (cached, shared with Home's member view).
+  const memberQuery = useMemberHoldings(householdId, asOf, activeMemberId)
+  const memberHoldings = activeMemberId !== null ? (memberQuery.data?.holdings ?? null) : null
+  const holdingsLoading = activeMemberId !== null && memberQuery.isPending
   useEffect(() => {
-    if (activeMemberId === null) { setMemberHoldings(null); return }
-    // Abort the previous member's request so a slow response can't overwrite a newer pick.
-    const controller = new AbortController()
-    setHoldingsLoading(true)
-    const q = toQueryString({ household_id: householdId, as_of: asOf, member_id: activeMemberId })
-    getJson<{ holdings: DashboardHolding[] }>(`/api/holdings?${q}`, { signal: controller.signal })
-      .then((d) => setMemberHoldings(d.holdings ?? []))
-      .catch((e) => {
-        if (controller.signal.aborted) return
-        setMemberHoldings([])
-        toast.error(`Couldn’t load holdings: ${normalizeApiError(e)}`)
-      })
-      .finally(() => { if (!controller.signal.aborted) setHoldingsLoading(false) })
-    return () => controller.abort()
-  }, [activeMemberId, householdId, asOf, toast])
+    if (memberQuery.error) toast.error(`Couldn’t load holdings: ${normalizeApiError(memberQuery.error)}`)
+  }, [memberQuery.error, toast])
 
   const close = () => setSheet({ type: 'none' })
   const [updatingPrices, setUpdatingPrices] = useState(false)

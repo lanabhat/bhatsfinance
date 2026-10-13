@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { fundPerformanceApi } from '../api/fundPerformanceApi'
 import { FundCagrBarChart } from '../components/allocation/FundCagrBarChart'
 import { FundDistributionChart } from '../components/allocation/FundDistributionChart'
@@ -10,19 +10,14 @@ import type { FundPerformanceRow } from '../types/domain'
 export function FundPerformancePage() {
   const { householdId, asOf } = useApp()
 
-  const [rows, setRows] = useState<FundPerformanceRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!householdId) return
-    setLoading(true)
-    setError('')
-    fundPerformanceApi.get(householdId, asOf)
-      .then((res) => setRows(res.funds))
-      .catch(() => setError('Failed to load fund performance data.'))
-      .finally(() => setLoading(false))
-  }, [householdId, asOf])
+  const query = useQuery({
+    queryKey: ['fund-performance', householdId, asOf],
+    queryFn: () => fundPerformanceApi.get(householdId, asOf),
+    enabled: householdId > 0,
+  })
+  const rows: FundPerformanceRow[] = query.data?.funds ?? []
+  const loading = query.isPending
+  const error = query.error ? 'Failed to load fund performance data.' : ''
 
   if (loading && rows.length === 0) {
     return (

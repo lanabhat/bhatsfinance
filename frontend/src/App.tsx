@@ -1,4 +1,6 @@
 import { Suspense, useEffect, useState } from 'react'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClient } from './api/queryClient'
 import { lazyPage } from './lib/lazyPage'
 import { PageErrorBoundary } from './components/PageErrorBoundary'
 import { AppLayout } from './components/layout/AppLayout'
@@ -207,6 +209,7 @@ function AuthGate() {
 
 function App() {
   return (
+    <QueryClientProvider client={queryClient}>
     <ThemeProvider>
       <TermsProvider>
         <ToastProvider>
@@ -218,6 +221,7 @@ function App() {
         </ToastProvider>
       </TermsProvider>
     </ThemeProvider>
+    </QueryClientProvider>
   )
 }
 
