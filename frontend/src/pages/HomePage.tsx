@@ -277,7 +277,7 @@ export function HomePage({ onNavigate }: Props) {
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Net Worth Trend</h2>
           <div className="min-w-0 w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <Suspense fallback={<div className="h-[220px]" aria-hidden="true" />}>
-              <NetWorthTrendChart data={dashboard.networthHistory} />
+              <NetWorthTrendChart data={dashboard.networthHistory} live={{ date: asOf, value: Number(dashboard.networth) }} />
             </Suspense>
           </div>
         </div>
