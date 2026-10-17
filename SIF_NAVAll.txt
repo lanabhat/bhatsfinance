@@ -143,15 +143,15 @@ Interval Fund Schemes(Hybrid Investment Strategies - Active Asset Allocator Long
  
 DynaSIF SIF
  
-SIF-88;INF579M30109;-;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;GROWTH OPTION;10.4540;15-Oct-2026
-SIF-86;INF579M30117;INF579M30125;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Option;10.4540;15-Oct-2026
-SIF-87;INF579M30075;-;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;GROWTH OPTION;10.3776;15-Oct-2026
-SIF-89;INF579M30083;INF579M30091;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Option;10.3776;15-Oct-2026
+SIF-88;INF579M30109;-;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;GROWTH OPTION;10.4577;16-Oct-2026
+SIF-86;INF579M30117;INF579M30125;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Option;10.4577;16-Oct-2026
+SIF-87;INF579M30075;-;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;GROWTH OPTION;10.3809;16-Oct-2026
+SIF-89;INF579M30083;INF579M30091;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Option;10.3809;16-Oct-2026
  
 iSIF SIF
  
-SIF-125;INF109K30067;-;iSIF Active Asset Allocator Long-Short Fund;;;10.2856;15-Oct-2026
-SIF-124;INF109K30059;-;iSIF Active Asset Allocator Long-Short Fund;;;10.2334;15-Oct-2026
+SIF-125;INF109K30067;-;iSIF Active Asset Allocator Long-Short Fund;;;10.2970;16-Oct-2026
+SIF-124;INF109K30059;-;iSIF Active Asset Allocator Long-Short Fund;;;10.2444;16-Oct-2026
  
 qsif SIF
  
@@ -159,6 +159,15 @@ SIF-92;INF966L30258;INF966L30266;qsif Active Asset Allocator Long-Short Fund;Dir
 SIF-91;INF966L30225;INF966L30233;qsif Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Option;12.8434;16-Oct-2026
 SIF-90;INF966L30241;-;qsif Active Asset Allocator Long-Short Fund;Direct Plan;Growth Option;12.9414;16-Oct-2026
 SIF-93;INF966L30217;-;qsif Active Asset Allocator Long-Short Fund;Regular Plan;Growth Option;12.8434;16-Oct-2026
+ 
+Titanium SIF
+ 
+SIF-167;INF277K30161;-;Titanium Active Asset Allocator Long-Short Fund;Direct Plan;Growth;10.0208;16-Oct-2026
+SIF-170;INF277K30179;-;Titanium Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Payout;10.0208;16-Oct-2026
+SIF-166;-;INF277K30187;Titanium Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Reinvestment;10.0208;16-Oct-2026
+SIF-169;INF277K30138;-;Titanium Active Asset Allocator Long-Short Fund;Regular Plan;Growth;10.0191;16-Oct-2026
+SIF-165;INF277K30146;-;Titanium Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Payout;10.0191;16-Oct-2026
+SIF-168;-;INF277K30153;Titanium Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Reinvestment;10.0191;16-Oct-2026
  
 Interval Fund Schemes(Hybrid Investment Strategies - Hybrid Long-Short Fund)
  
