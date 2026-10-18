@@ -15,12 +15,25 @@ class ImportBatch(TimeStampedModel):
         COMPLETED = 'completed', 'Completed'
         FAILED = 'failed', 'Failed'
 
+    class Kind(models.TextChoices):
+        CSV = 'csv', 'CSV import'
+        GROWW = 'groww', 'Groww holdings'
+        UPSTOX = 'upstox', 'Upstox holdings'
+        FD_ADVICE = 'fd_advice', 'FD advice'
+        RD_STATEMENT = 'rd_statement', 'RD statement'
+        SBI_STATEMENT = 'sbi_statement', 'SBI statement'
+
     household = models.ForeignKey('core.Household', on_delete=models.CASCADE, related_name='import_batches')
     source = models.CharField(max_length=10, choices=SourceType.choices, default=SourceType.CSV)
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.CSV)
+    member = models.ForeignKey('core.Member', on_delete=models.SET_NULL, null=True, blank=True, related_name='import_batches')
     filename = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=20, choices=StatusType.choices, default=StatusType.PENDING)
     error_message = models.TextField(blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # What the import changed (ingestion.change_summary.diff) and its result counts.
+    summary = models.JSONField(default=dict, blank=True)
+    counts = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['-created_at']

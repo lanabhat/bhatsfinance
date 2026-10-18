@@ -5,7 +5,7 @@ from alerts.views import BondCouponRemindersView, MissedRDAlertsView, MissedSIPA
 from insurance.views import InsurancePolicyViewSet, InsuranceSummaryView, MissedPremiumRemindersView, VehicleClaimViewSet
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
-from ingestion.views import CSVImportView, EpfPassbookApplyView, EpfPassbookPreviewView, FDAdviceApplyView, FDAdvicePreviewView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportPreviewView, ImportSchemasView, NpsApplyView, NpsPreviewView, PpfStatementApplyView, PpfStatementPreviewView, SBIStatementApplyView, SBIStatementPreviewView
+from ingestion.views import CSVImportView, EpfPassbookApplyView, EpfPassbookPreviewView, FDAdviceApplyView, FDAdvicePreviewView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportHistoryDetailView, ImportHistoryView, ImportPreviewView, ImportSchemasView, NpsApplyView, NpsPreviewView, PpfStatementApplyView, PpfStatementPreviewView, SBIStatementApplyView, SBIStatementPreviewView
 from insights.views import AllocationSuggestionView, AllocationView, AttentionView, CategoryBreakdownView, MarketCapSplitView, AllocationFactsView, CashFlowView, DiversificationView, FundPerformanceView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, RebalancingView, SpendAnalyticsView, XIRRView
 from reports.views import StatementExportView, StatementPreviewView
 from instruments.views import (
@@ -163,6 +163,8 @@ urlpatterns = [
     path('imports/ppf-statement-apply', PpfStatementApplyView.as_view(), name='imports-ppf-statement-apply'),
     path('imports/sbi-statement-preview', SBIStatementPreviewView.as_view(), name='imports-sbi-statement-preview'),
     path('imports/sbi-statement-apply', SBIStatementApplyView.as_view(), name='imports-sbi-statement-apply'),
+    path('import-history', ImportHistoryView.as_view(), name='import-history'),
+    path('import-history/<int:batch_id>', ImportHistoryDetailView.as_view(), name='import-history-detail'),
     path('reports/statement-preview', StatementPreviewView.as_view(), name='reports-statement-preview'),
     path('reports/statement-export', StatementExportView.as_view(), name='reports-statement-export'),
     path('valuations/bulk-snapshot', BulkSnapshotView.as_view(), name='bulk-snapshot'),

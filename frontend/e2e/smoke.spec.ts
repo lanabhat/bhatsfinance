@@ -31,3 +31,14 @@ for (const route of ROUTES) {
     expect(problems, problems.join('\n')).toEqual([])
   })
 }
+
+test('Import history tab renders cleanly', async ({ page }) => {
+  const problems: string[] = []
+  page.on('pageerror', (e) => problems.push(`exception: ${e.message}`))
+  page.on('response', (r) => { if (r.url().includes('/api/') && r.status() >= 400) problems.push(`${r.status()} ${r.url()}`) })
+  await page.goto('/#/import', { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'History', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Import history' })).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  expect(problems, problems.join('\n')).toEqual([])
+})

@@ -12,6 +12,9 @@ import type {
 } from '../../api/importApi'
 import { Button } from '../ui/Button'
 import { useApp } from '../../context/AppContext'
+import { useChangePreview } from '../../hooks/useChangePreview'
+import { ChangePreviewPanel } from './ChangePreviewPanel'
+import { ChangeSummary } from './ChangeSummary'
 
 type Props = { householdId: number }
 
@@ -231,6 +234,25 @@ export function SBIStatementImportWizard({ householdId }: Props) {
     setSavingsItems(prev => prev.map(item => ({ ...item, member_id: memberId })))
   }
 
+  const buildAccountMapping = () => {
+    const accountMapping: Record<string, SbiAccountMappingEntry> = {}
+    for (const m of mappingRows) {
+      accountMapping[m.accountNumber] = m.mode === 'existing'
+        ? { account_id: m.accountId! }
+        : { name: m.newName.trim(), member_id: m.memberId }
+    }
+    return accountMapping
+  }
+  const statementName = files.map(f => f.name).join(', ')
+
+  // Dry run on the confirm step: what importing this statement (with these edits) would change.
+  const preview = useChangePreview(
+    ['sbi', householdId, mappingRows, savingsItems, depositItems, Array.from(deactivateIds)],
+    step === 'confirm' && savingsItems.length + depositItems.length + deactivateIds.size > 0,
+    () => importApi.applySBIStatementImport(householdId, buildAccountMapping(), savingsItems, depositItems,
+      Array.from(deactivateIds), true),
+  )
+
   const handleImport = async () => {
     const rdMissingTenure = depositItems.some(i => i.doc_type === 'rd_statement' && !i.tenure_months)
     if (rdMissingTenure) { setError('Enter tenure (months) for every RD deposit before importing.'); return }
@@ -241,13 +263,8 @@ export function SBIStatementImportWizard({ householdId }: Props) {
     setError('')
     setLoading(true)
     try {
-      const accountMapping: Record<string, SbiAccountMappingEntry> = {}
-      for (const m of mappingRows) {
-        accountMapping[m.accountNumber] = m.mode === 'existing'
-          ? { account_id: m.accountId! }
-          : { name: m.newName.trim(), member_id: m.memberId }
-      }
-      const res = await importApi.applySBIStatementImport(householdId, accountMapping, savingsItems, depositItems, Array.from(deactivateIds))
+      const res = await importApi.applySBIStatementImport(householdId, buildAccountMapping(), savingsItems, depositItems,
+        Array.from(deactivateIds), false, statementName)
       setResult(res)
       setStep('result')
       void refreshAll()
@@ -708,6 +725,12 @@ export function SBIStatementImportWizard({ householdId }: Props) {
           </div>
         )}
 
+        <ChangePreviewPanel
+          loading={preview.isFetching}
+          error={preview.error}
+          sections={preview.data?.change_summary ? [{ summary: preview.data.change_summary }] : undefined}
+        />
+
         <div className="flex gap-2">
           <Button onClick={handleImport} loading={loading}>
             Import {savingsItems.length + depositItems.length} item{savingsItems.length + depositItems.length === 1 ? '' : 's'}
@@ -735,6 +758,12 @@ export function SBIStatementImportWizard({ householdId }: Props) {
           )}
         </div>
       </div>
+      {result?.change_summary && (
+        <div className="grid gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">What changed</p>
+          <ChangeSummary summary={result.change_summary} />
+        </div>
+      )}
       <div className="grid gap-3">
         {result?.savings_accounts.map(r => (
           <div key={`sa-${r.account_number}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 grid gap-2">

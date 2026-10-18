@@ -25,14 +25,54 @@ export type GrowwFilePreview = {
   parsed_names?: { name: string; instrument_type: string }[]
   error?: string
 }
+/** One holding or account an import changed (ingestion/change_summary.py). Amounts are decimal strings. */
+export type ChangeItem = {
+  key: string
+  kind: 'holding' | 'account'
+  name: string
+  type: string
+  member: string
+  status: 'new' | 'changed' | 'sold_out' | 'closed' | 'removed'
+  value_before: string
+  value_after: string
+  change: string
+  units_before: string | null
+  units_after: string | null
+  /** When the holding was last valued before this import (to spot an older file). */
+  last_valued_before: string | null
+}
+
+/** What an import changes, biggest change first. Returned by a dry run (preview) and by the real apply. */
+export type ChangeSummary = {
+  items: ChangeItem[]
+  unchanged_count: number
+  total_before: string
+  total_after: string
+  net_change: string
+}
+
 export type GrowwFileResult = {
   filename: string
+  source?: 'groww' | 'upstox'
   member_name: string
   investor_name: string
-  stocks_created: number
-  mf_created: number
-  valuations_created: number
-  errors: { section: string; row: number; name: string; reason: string }[]
+  // Groww
+  stocks_created?: number
+  stocks_parsed?: number
+  mf_created?: number
+  mf_parsed?: number
+  valuations_created?: number
+  // Upstox
+  holdings_parsed?: number
+  holdings_created?: number
+  holdings_updated?: number
+  reclassified?: number
+  bonds_created?: string[]
+  bond_quantity_mismatch?: string[]
+  // Both: holdings whose unit count was brought in line with the file
+  units_adjusted?: number
+  errors?: { section?: string; row: number; name: string; reason: string }[]
+  change_summary?: ChangeSummary
   error?: string
 }
 
@@ -100,6 +140,22 @@ export type FDAdviceFileResult = {
   created?: boolean
   fd_details_created?: boolean
   error?: string
+}
+
+export type FDAdviceApplyResult = { results: FDAdviceFileResult[]; change_summary: ChangeSummary }
+
+/** One past import, for the Import History tab. */
+export type ImportHistoryRow = {
+  id: number
+  imported_at: string
+  kind: string
+  kind_label: string
+  filename: string
+  member_name: string
+  net_change: string | null
+  changed_count: number
+  unchanged_count: number
+  change_summary?: ChangeSummary
 }
 
 export type NpsMemberPreview = { id: number; name: string; relation?: string }
@@ -389,6 +445,7 @@ export type SbiStatementApplyResult = {
   savings_accounts: SbiSavingsAccountResult[]
   deposits: SbiDepositResult[]
   deactivated_count?: number
+  change_summary?: ChangeSummary
 }
 
 const BASE = '/api'
@@ -426,14 +483,17 @@ export const importApi = {
     return postForm<GrowwFilePreview[]>(`${BASE}/imports/groww-preview`, fd)
   },
 
+  /** `dryRun` previews: the import is applied and rolled back, returning what would change. */
   applyGrowwImport: async (
     householdId: number,
     files: File[],
     assignments: { filename: string; member_id: number }[],
+    dryRun = false,
   ): Promise<GrowwFileResult[]> => {
     const fd = new FormData()
     fd.append('household_id', String(householdId))
     fd.append('assignments', JSON.stringify(assignments))
+    if (dryRun) fd.append('dry_run', 'true')
     for (const f of files) fd.append('files', f)
     return postForm<GrowwFileResult[]>(`${BASE}/imports/groww-apply`, fd)
   },
@@ -455,8 +515,9 @@ export const importApi = {
   applyFDAdviceImport: (
     householdId: number,
     items: FDAdviceConfirmedItem[],
-  ): Promise<FDAdviceFileResult[]> =>
-    httpPost(`${BASE}/imports/fd-advice-apply`, { household_id: householdId, items }),
+    dryRun = false,
+  ): Promise<FDAdviceApplyResult> =>
+    httpPost(`${BASE}/imports/fd-advice-apply`, { household_id: householdId, items, dry_run: dryRun }),
 
   previewNpsFiles: async (householdId: number, files: File[]): Promise<NpsFilePreview[]> => {
     const fd = new FormData()
@@ -517,6 +578,8 @@ export const importApi = {
     savingsAccounts: SbiConfirmedSavingsAccount[],
     deposits: SbiConfirmedDeposit[],
     deactivateInstrumentIds?: number[],
+    dryRun = false,
+    filename?: string,
   ): Promise<SbiStatementApplyResult> =>
     httpPost(`${BASE}/imports/sbi-statement-apply`, {
       household_id: householdId,
@@ -524,5 +587,13 @@ export const importApi = {
       savings_accounts: savingsAccounts,
       deposits,
       deactivate_instrument_ids: deactivateInstrumentIds,
+      dry_run: dryRun,
+      filename,
     }),
+
+  importHistory: (householdId: number): Promise<{ count: number; results: ImportHistoryRow[] }> =>
+    httpGet(`${BASE}/import-history?household_id=${householdId}`),
+
+  importHistoryDetail: (householdId: number, id: number): Promise<ImportHistoryRow> =>
+    httpGet(`${BASE}/import-history/${id}?household_id=${householdId}`),
 }

@@ -1373,6 +1373,39 @@ def apply_ppf_statement_import(household, member, item: dict, estimated_prior_pr
     }
 
 
+
+def reconcile_units(household, member, account, instrument, investment, quantity, rate, tx_date, source_label):
+    """On a re-import, make the ledger hold the file's unit count: record a buy for extra
+    units or a sell (with average-cost realized gain) for missing ones, priced at `rate`.
+    Returns the unit change, or None when nothing was recorded (no change or no price)."""
+    from instruments.services import _ledger_units
+    from insights.services import compute_holding_cost_basis
+    from ledger.models import Transaction
+
+    delta = quantity - _ledger_units(investment)
+    amount = _money(abs(delta) * rate) if delta != 0 and rate and rate > 0 else None
+    if not amount:
+        return None
+    reference = f'Quantity change on {source_label} re-import'
+    if delta > 0:
+        Transaction.objects.create(
+            household=household, instrument=instrument, investment=investment, account=account,
+            member=member, tx_date=tx_date, amount=amount, quantity=delta, price_per_unit=rate,
+            direction='outflow', transaction_type='buy', currency='INR', source='csv', external_reference=reference,
+        )
+    else:
+        # Same average-cost realized gain as ledger.serializers.TransactionSerializer.validate.
+        held, net_invested = compute_holding_cost_basis(household.id, instrument.id, investment.id, tx_date)
+        realized_gain = (amount - net_invested / held * -delta).quantize(Decimal('0.01')) if held > 0 else None
+        Transaction.objects.create(
+            household=household, instrument=instrument, investment=investment, account=account,
+            member=member, tx_date=tx_date, amount=amount, quantity=-delta, price_per_unit=rate,
+            direction='inflow', transaction_type='sell', currency='INR', source='csv',
+            external_reference=reference, realized_gain=realized_gain,
+        )
+    return delta
+
+
 def apply_groww_import(household, member, parsed: dict) -> dict:
     """
     Import a parsed Groww Excel file (output of groww_parser.parse_groww_excel)
@@ -1391,6 +1424,7 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
     stocks_created = 0
     mf_created = 0
     valuations_created = 0
+    units_adjusted = 0
     errors = []
 
     member_label = member.full_name if member else None
@@ -1475,6 +1509,9 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                             currency='INR',
                             source='csv',
                         )
+                elif reconcile_units(household, member, groww_account, instrument, investment, qty, closing_price,
+                                     valuation_date, 'Groww') is not None:
+                    units_adjusted += 1
 
                 _, snap_created = ValuationSnapshot.objects.update_or_create(
                     household=household,
@@ -1592,12 +1629,20 @@ def apply_groww_import(household, member, parsed: dict) -> dict:
                             currency='INR',
                             source='csv',
                         )
+                else:
+                    units = _to_decimal(mf.get('units') or '0').quantize(Decimal('0.0001'))
+                    if units > 0 and current_value:
+                        nav = (current_value / units).quantize(Decimal('0.0001'))
+                        if reconcile_units(household, member, groww_account, instrument, investment, units, nav,
+                                           valuation_date, 'Groww') is not None:
+                            units_adjusted += 1
         except Exception as e:
             errors.append({'section': 'mutual_funds', 'row': i, 'name': mf.get('scheme_name', ''), 'reason': str(e)})
 
     return {
         'stocks_created': stocks_created,
         'mf_created': mf_created,
+        'units_adjusted': units_adjusted,
         'valuations_created': valuations_created,
         'errors': errors,
     }
@@ -1619,12 +1664,11 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
     """
     from instruments.models import Instrument, Investment
     from instruments.services import (
-        _ledger_units, create_bond_instrument, find_bond_instruments, get_or_create_equity_shell,
+        create_bond_instrument, find_bond_instruments, get_or_create_equity_shell,
         get_or_create_etf_shell, get_or_create_mf_shell, holding_isin, is_bond_isin, is_etf_isin,
         is_mutual_fund_isin, move_investment_to_shell,
         reclassify_bond_investment,
     )
-    from insights.services import compute_holding_cost_basis
     from valuations.models import ValuationSnapshot
     from ledger.models import Transaction
 
@@ -1766,23 +1810,8 @@ def apply_upstox_import(household, member, parsed: dict) -> dict:
                 if not Transaction.objects.filter(investment=investment, household=household).exists():
                     if quantity > 0 and valuation > 0:
                         buy(instrument, investment, vd, quantity, rate, valuation)
-                else:
-                    delta = quantity - _ledger_units(investment)
-                    amount = _money(abs(delta) * rate) if delta != 0 and rate > 0 else None
-                    if amount:
-                        if delta > 0:
-                            buy(instrument, investment, vd, delta, rate, amount, 'Quantity change on Upstox re-import')
-                        else:
-                            # Same average-cost realized gain as ledger.serializers.TransactionSerializer.validate.
-                            held, net_invested = compute_holding_cost_basis(household.id, instrument.id, investment.id, vd)
-                            realized_gain = (amount - net_invested / held * -delta).quantize(Decimal('0.01')) if held > 0 else None
-                            Transaction.objects.create(
-                                household=household, instrument=instrument, investment=investment, account=upstox_account,
-                                member=member, tx_date=vd, amount=amount, quantity=-delta, price_per_unit=rate,
-                                direction='inflow', transaction_type='sell', currency='INR', source='csv',
-                                external_reference='Quantity change on Upstox re-import', realized_gain=realized_gain,
-                            )
-                        units_adjusted += 1
+                elif reconcile_units(household, member, upstox_account, instrument, investment, quantity, rate, vd, 'Upstox') is not None:
+                    units_adjusted += 1
 
                 ValuationSnapshot.objects.update_or_create(
                     household=household,

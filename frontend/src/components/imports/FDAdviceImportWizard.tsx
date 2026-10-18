@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { importApi } from '../../api/importApi'
 import { portfolioApi } from '../../api/portfolioApi'
-import type { FDAdviceConfirmedItem, FDAdviceFilePreview, FDAdviceFileResult, FDAdviceMemberPreview } from '../../api/importApi'
+import type { ChangeSummary as Summary, FDAdviceConfirmedItem, FDAdviceFilePreview, FDAdviceFileResult, FDAdviceMemberPreview } from '../../api/importApi'
 import type { Account } from '../../types/domain'
 import { Button } from '../ui/Button'
 import { useApp } from '../../context/AppContext'
 import { useErrorToast } from '../../hooks/useErrorToast'
+import { useChangePreview } from '../../hooks/useChangePreview'
+import { ChangePreviewPanel } from './ChangePreviewPanel'
+import { ChangeSummary } from './ChangeSummary'
 
 type Props = { householdId: number }
 
@@ -35,6 +38,7 @@ export function FDAdviceImportWizard({ householdId }: Props) {
   const [rows, setRows] = useState<FileRow[]>([])
   const [items, setItems] = useState<FDAdviceConfirmedItem[]>([])
   const [results, setResults] = useState<FDAdviceFileResult[]>([])
+  const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -157,6 +161,10 @@ export function FDAdviceImportWizard({ householdId }: Props) {
     setItems(prev => prev.map(i => i.doc_type === docType ? { ...i, ...patch } : i))
   }
 
+  // Dry run on the confirm step: what importing these documents would change.
+  const preview = useChangePreview(['fd-advice', householdId, items], step === 'confirm' && items.length > 0,
+    () => importApi.applyFDAdviceImport(householdId, items, true))
+
   const handleImport = async () => {
     const rdMissingTenure = items.some(i => i.doc_type === 'rd_statement' && !i.tenure_months)
     if (rdMissingTenure) { setError('Enter tenure (months) for every RD statement before importing.'); return }
@@ -166,7 +174,8 @@ export function FDAdviceImportWizard({ householdId }: Props) {
     setLoading(true)
     try {
       const res = await importApi.applyFDAdviceImport(householdId, items)
-      setResults(res)
+      setResults(res.results)
+      setSummary(res.change_summary)
       setStep('result')
       void refreshAll()
     } catch (e: unknown) {
@@ -182,6 +191,7 @@ export function FDAdviceImportWizard({ householdId }: Props) {
     setRows([])
     setItems([])
     setResults([])
+    setSummary(null)
     setError('')
   }
 
@@ -450,6 +460,12 @@ export function FDAdviceImportWizard({ householdId }: Props) {
           </div>
         )}
 
+        <ChangePreviewPanel
+          loading={preview.isFetching}
+          error={preview.error}
+          sections={preview.data ? [{ summary: preview.data.change_summary }] : undefined}
+        />
+
         <div className="flex gap-2">
           <Button onClick={handleImport} loading={loading}>Import {items.length} item{items.length === 1 ? '' : 's'}</Button>
           <Button variant="secondary" onClick={reset}>Cancel</Button>
@@ -470,6 +486,12 @@ export function FDAdviceImportWizard({ householdId }: Props) {
           {totalErrors > 0 && <p className="text-sm text-amber-500">{totalErrors} errors — see details below</p>}
         </div>
       </div>
+      {summary && (
+        <div className="grid gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">What changed</p>
+          <ChangeSummary summary={summary} />
+        </div>
+      )}
       <div className="grid gap-3">
         {results.map(r => (
           <div key={r.filename} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 grid gap-2">

@@ -6,10 +6,11 @@ import { NpsImportWizard } from '../components/imports/NpsImportWizard'
 import { EpfPassbookImportWizard } from '../components/imports/EpfPassbookImportWizard'
 import { PpfStatementImportWizard } from '../components/imports/PpfStatementImportWizard'
 import { SBIStatementImportWizard } from '../components/imports/SBIStatementImportWizard'
+import { ImportHistory } from '../components/imports/ImportHistory'
 import { UpstoxConnect } from '../components/integrations/UpstoxConnect'
 import type { OptionItem } from '../types/domain'
 
-type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'nps' | 'epf' | 'ppf' | 'sbi'
+type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'nps' | 'epf' | 'ppf' | 'sbi' | 'history'
 
 type Props = {
   householdId: number
@@ -35,7 +36,18 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
         <button className={tabCls('epf')} onClick={() => setTab('epf')}>EPF Import</button>
         <button className={tabCls('ppf')} onClick={() => setTab('ppf')}>PPF Import</button>
         <button className={tabCls('sbi')} onClick={() => setTab('sbi')}>SBI Statement</button>
+        <button className={tabCls('history')} onClick={() => setTab('history')}>History</button>
       </div>
+
+      {tab === 'history' && (
+        <article className="panel">
+          <h2>Import history</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Every holdings, FD/RD and SBI statement import, with what it changed — values before and after, units, and new or closed holdings.
+          </p>
+          <ImportHistory householdId={householdId} />
+        </article>
+      )}
 
       {tab === 'import' && (
         <ImportWizard

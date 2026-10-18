@@ -178,7 +178,8 @@ def holding_display_name(h: dict) -> str:
     return h['investment_name'] or h['instrument_name']
 
 
-def compute_holdings(household_id: int, as_of: date, member_id: int | None = None, include_inactive: bool = False) -> list[dict]:
+def compute_holdings(household_id: int, as_of: date, member_id: int | None = None, include_inactive: bool = False,
+                     unscaled: bool = False) -> list[dict]:
     """
     Groups Transactions into one dict per holding. Most instrument types are
     still one Instrument = one holding (grouping key: instrument_id). For
@@ -233,7 +234,9 @@ def compute_holdings(household_id: int, as_of: date, member_id: int | None = Non
         txs = txs.filter(
             Q(investment_id__in=investment_ids) | Q(investment__isnull=True, instrument_id__in=member_allocation.keys())
         )
-    else:
+    elif not unscaled:
+        # Household view counts only the shares of members included in net worth;
+        # unscaled=True keeps full values (e.g. an import's before/after summary).
         household_instrument_share, _ = _household_share_maps(household_id)
         household_investment_share = _household_investment_share_map(household_id)
 

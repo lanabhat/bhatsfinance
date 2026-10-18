@@ -1051,3 +1051,115 @@ class SBIStatementRDPaidFromTests(TestCase):
         response = self._apply(None)
         self.assertIn('paid from', response.data['deposits'][0]['error'])
         self.assertFalse(Instrument.objects.filter(instrument_type='rd').exists())
+
+
+class ImportChangeSummaryTests(TestCase):
+    """What an import changes: before/after values and units, dry-run preview, history."""
+
+    def setUp(self):
+        self.household = Household.objects.create(name='Lal Family')
+        self.member = Member.objects.create(household=self.household, full_name='Anushree L')
+
+    def _upstox(self, *rows, value_date='2026-10-02'):
+        from ingestion.universal_importer import apply_upstox_import
+        holdings = [{'isin': isin, 'name': name, 'quantity': qty, 'rate': rate,
+                     'valuation': str(Decimal(qty) * Decimal(rate)), 'value_date': value_date}
+                    for isin, name, qty, rate in rows]
+        return lambda: apply_upstox_import(self.household, self.member,
+                                           {'valuation_date': date.fromisoformat(value_date), 'holdings': holdings})
+
+    def _groww(self, qty, price, units, nav, value_date=date(2026, 6, 19)):
+        return {
+            'investor_name': '', 'valuation_date': value_date,
+            'stocks': [{'name': 'ITC LTD', 'isin': 'INE154A01025', 'quantity': str(qty),
+                        'avg_buy_price': '200', 'buy_value': str(Decimal(qty) * 200),
+                        'closing_price': str(price), 'closing_value': str(Decimal(qty) * Decimal(price))}],
+            'mutual_funds': [{'scheme_name': 'Axis Bluechip Fund', 'folio_no': 'F1', 'units': str(units),
+                              'invested_value': str(Decimal(units) * 10), 'current_value': str(Decimal(units) * Decimal(nav))}],
+        }
+
+    def test_diff_reports_new_changed_sold_out_and_closed_biggest_first(self):
+        from ingestion.change_summary import diff
+        base = {'kind': 'holding', 'type': 'equity', 'member': '', 'last_valued_on': None, 'active': True}
+        before = {
+            'a': {**base, 'name': 'A', 'value': Decimal('100'), 'units': Decimal('1')},
+            'b': {**base, 'name': 'B', 'value': Decimal('500'), 'units': Decimal('5')},
+            'c': {**base, 'name': 'C', 'value': Decimal('50'), 'units': Decimal('2')},
+            'd': {**base, 'name': 'D', 'value': Decimal('70'), 'units': Decimal('1')},
+        }
+        after = {
+            'a': {**before['a']},                                                  # unchanged
+            'b': {**before['b'], 'value': Decimal('900')},                         # +400
+            'c': {**before['c'], 'value': Decimal('0'), 'units': Decimal('0')},    # sold out
+            'd': {**before['d'], 'active': False},                                 # closed
+            'e': {**base, 'name': 'E', 'value': Decimal('30'), 'units': Decimal('3')},  # new
+        }
+        summary = diff(before, after)
+        self.assertEqual([(i['name'], i['status']) for i in summary['items']],
+                         [('B', 'changed'), ('D', 'closed'), ('C', 'sold_out'), ('E', 'new')])
+        self.assertEqual(summary['unchanged_count'], 1)
+        self.assertEqual(Decimal(summary['net_change']), Decimal('400') - 70 - 50 + 30)
+
+    def test_dry_run_leaves_nothing_behind_and_matches_the_real_apply(self):
+        from ingestion.change_summary import summarise_import
+        from valuations.models import ValuationSnapshot
+        summarise_import(self.household, self._upstox(('INE154A01025', 'ITC LTD', '10', '250'), value_date='2026-09-01'))
+        tx_before, snaps_before = Transaction.objects.count(), ValuationSnapshot.objects.count()
+
+        # Statements are dated on or before today (the summary values holdings as of today).
+        run = self._upstox(('INE154A01025', 'ITC LTD', '15', '260'), value_date='2026-10-02')
+        _, preview = summarise_import(self.household, run, dry_run=True)
+        self.assertEqual((Transaction.objects.count(), ValuationSnapshot.objects.count()), (tx_before, snaps_before))
+
+        _, applied = summarise_import(self.household, run)
+        self.assertEqual(preview, applied)
+        item = applied['items'][0]
+        self.assertEqual((item['name'], item['status'], Decimal(item['units_before']), Decimal(item['units_after'])),
+                         ('ITC LTD', 'changed', Decimal('10'), Decimal('15')))
+        self.assertEqual((Decimal(item['value_before']), Decimal(item['value_after'])), (Decimal('2500'), Decimal('3900')))
+
+    def test_groww_reimport_reconciles_units(self):
+        from instruments.services import _ledger_units
+        apply_groww_import(self.household, self.member, self._groww(qty=10, price=250, units=100, nav=12))
+        result = apply_groww_import(self.household, self.member,
+                                    self._groww(qty=12, price=260, units=80, nav=13, value_date=date(2026, 7, 19)))
+        self.assertEqual(result['units_adjusted'], 2)
+        stock = Investment.objects.get(name='ITC LTD')
+        fund = Investment.objects.get(name='Axis Bluechip Fund')
+        self.assertEqual((_ledger_units(stock), _ledger_units(fund)), (Decimal('12'), Decimal('80')))
+        sell = Transaction.objects.get(investment=fund, transaction_type='sell')
+        self.assertEqual((sell.quantity, sell.external_reference), (Decimal('20'), 'Quantity change on Groww re-import'))
+
+    def test_sbi_apply_dry_run_then_apply_is_recorded_in_history(self):
+        from ingestion.models import ImportBatch
+        from valuations.models import ValuationSnapshot
+        client = _approved_client(self.household)
+        account = Account.objects.create(household=self.household, name='SBI Savings', account_type='bank',
+                                         opening_balance=Decimal('1000'))
+        payload = {
+            'household_id': self.household.id,
+            'account_mapping': {'4011': {'account_id': account.id}},
+            'savings_accounts': [{'account_number': '4011', 'available_balance': '5000'}],
+            'deposits': [],
+        }
+        preview = client.post('/api/imports/sbi-statement-apply', {**payload, 'dry_run': True}, format='json')
+        self.assertEqual(preview.status_code, 200, preview.data)
+        self.assertFalse(ValuationSnapshot.objects.filter(account=account).exists())
+        self.assertFalse(ImportBatch.objects.exists())
+        item = preview.data['change_summary']['items'][0]
+        self.assertEqual((item['name'], Decimal(item['value_before']), Decimal(item['value_after'])),
+                         ('SBI Savings', Decimal('1000'), Decimal('5000')))
+
+        applied = client.post('/api/imports/sbi-statement-apply', payload, format='json')
+        self.assertEqual(applied.status_code, 201, applied.data)
+        self.assertEqual(applied.data['change_summary'], preview.data['change_summary'])
+
+        history = client.get('/api/import-history', {'household_id': self.household.id})
+        self.assertEqual(history.data['count'], 1)
+        row = history.data['results'][0]
+        self.assertEqual((row['kind'], Decimal(row['net_change']), row['changed_count']),
+                         ('sbi_statement', Decimal('4000'), 1))
+        detail = client.get(f"/api/import-history/{row['id']}", {'household_id': self.household.id})
+        self.assertEqual(detail.data['change_summary'], applied.data['change_summary'])
+        other = Household.objects.create(name='Other')
+        self.assertEqual(client.get(f"/api/import-history/{row['id']}", {'household_id': other.id}).status_code, 404)

@@ -309,6 +309,9 @@ class GrowwApplyView(APIView):
         if not files:
             return Response({'error': 'No files provided'}, status=400)
 
+        from ingestion.change_summary import is_dry_run, record_import, summarise_import
+        dry_run = is_dry_run(request.data)
+
         all_results = []
         for f in files:
             member_id = assignment_map.get(f.name)
@@ -324,20 +327,32 @@ class GrowwApplyView(APIView):
 
             try:
                 parsed, source = _detect_and_parse(f.read(), f.name)
+
+                def run(parsed=parsed, source=source, member=member):
+                    if source == 'upstox':
+                        return apply_upstox_import(household, member, parsed)
+                    return apply_groww_import(household, member, parsed)
+
+                # A dry run (preview) applies the file and rolls it back, reporting what would change.
+                result, summary = summarise_import(household, run, dry_run)
                 if source == 'upstox':
-                    result = apply_upstox_import(household, member, parsed)
                     result['holdings_parsed'] = len(parsed.get('holdings', []))
                 else:
-                    result = apply_groww_import(household, member, parsed)
                     result['stocks_parsed'] = len(parsed.get('stocks', []))
                     result['mf_parsed'] = len(parsed.get('mutual_funds', []))
                 result['filename'] = f.name
                 result['source'] = source
                 result['member_name'] = member.full_name
                 result['investor_name'] = parsed.get('investor_name', '')
+                result['change_summary'] = summary
+                if not dry_run:
+                    record_import(household, source, f.name, member, summary, result)
                 all_results.append(result)
             except Exception as e:
                 all_results.append({'filename': f.name, 'member_name': member.full_name, 'error': str(e)})
+
+        if dry_run:
+            return Response(all_results, status=200)
 
         # New stocks get their category and market cap now rather than at the next daily refresh.
         try:
@@ -497,34 +512,49 @@ class FDAdviceApplyView(APIView):
         if not items:
             return Response({'error': 'items is required'}, status=400)
 
-        all_results = []
-        for item in items:
-            member = None
-            member_id = item.get('member_id')
-            if member_id:
-                try:
-                    member = Member.objects.get(pk=member_id, household=household)
-                except Member.DoesNotExist:
-                    pass
+        from django.db import transaction as db_transaction
+        from ingestion.change_summary import is_dry_run, record_import, summarise_import
+        dry_run = is_dry_run(request.data)
+        members: list = []
 
-            try:
-                if item.get('doc_type') == 'rd_statement':
-                    account_id = item.get('account_id')
-                    if not account_id:
-                        raise ValueError('account_id is required for RD statement imports (select the account future installments will be paid from).')
+        def run():
+            all_results = []
+            for item in items:
+                member = None
+                member_id = item.get('member_id')
+                if member_id:
                     try:
-                        account = Account.objects.get(pk=account_id, household=household)
-                    except Account.DoesNotExist:
-                        raise ValueError(f'Account {account_id} not found')
-                    result = apply_rd_statement_import(household, member, item, account)
-                else:
-                    result = apply_fd_advice_import(household, member, item)
-                result['filename'] = item.get('filename', '')
-                all_results.append(result)
-            except Exception as e:
-                all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
+                        member = Member.objects.get(pk=member_id, household=household)
+                        members.append(member)
+                    except Member.DoesNotExist:
+                        pass
 
-        return Response(all_results, status=201)
+                try:
+                  with db_transaction.atomic():  # a failing document rolls back alone
+                    if item.get('doc_type') == 'rd_statement':
+                        account_id = item.get('account_id')
+                        if not account_id:
+                            raise ValueError('account_id is required for RD statement imports (select the account future installments will be paid from).')
+                        try:
+                            account = Account.objects.get(pk=account_id, household=household)
+                        except Account.DoesNotExist:
+                            raise ValueError(f'Account {account_id} not found')
+                        result = apply_rd_statement_import(household, member, item, account)
+                    else:
+                        result = apply_fd_advice_import(household, member, item)
+                    result['filename'] = item.get('filename', '')
+                    all_results.append(result)
+                except Exception as e:
+                    all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
+
+            return all_results
+
+        all_results, summary = summarise_import(household, run, dry_run)
+        if not dry_run:
+            kind = 'rd_statement' if all(i.get('doc_type') == 'rd_statement' for i in items) else 'fd_advice'
+            filenames = ', '.join(dict.fromkeys(i.get('filename', '') for i in items if i.get('filename')))
+            record_import(household, kind, filenames, members[0] if members else None, summary, {'results': all_results})
+        return Response({'results': all_results, 'change_summary': summary}, status=200 if dry_run else 201)
 
 
 class SBIStatementPreviewView(APIView):
@@ -770,72 +800,84 @@ class SBIStatementApplyView(APIView):
             except Member.DoesNotExist:
                 return None
 
-        savings_results = []
-        for item in savings_accounts:
-            account_number = (item.get('account_number') or '').strip()
-            try:
-                account = resolve_account(account_number)
-                if account is None:
-                    raise ValueError(account_errors.get(account_number, 'Could not resolve account'))
-                member = resolve_member(item.get('member_id'))
-                result = apply_sbi_savings_account_import(household, member, item, account)
-                result['account_number'] = account_number
-                savings_results.append(result)
-            except Exception as e:
-                savings_results.append({'account_number': account_number, 'error': str(e)})
+        from django.db import transaction as db_transaction
+        from ingestion.change_summary import is_dry_run, record_import, summarise_import
+        dry_run = is_dry_run(request.data)
 
-        deposit_results = []
-        for item in deposits:
-            account_number = (item.get('account_number') or '').strip()
-            metadata = {
-                'sbi_deposit_type': item.get('deposit_type', ''),
-                'sbi_branch': item.get('branch', ''),
-                'sbi_mode_of_operation': item.get('mode_of_operation', ''),
-                'sbi_currency': item.get('currency', ''),
-                'account_number': account_number,
-            }
-            item = {**item, 'metadata': metadata}
-            member = resolve_member(item.get('member_id'))
-            try:
-                if item.get('doc_type') == 'rd_statement':
-                    # The RD's mandate debits the savings account it's paid from — never an
-                    # Account named after the RD itself (that put RDs into account balances).
-                    paid_from = str(item.get('paid_from') or '')
-                    if paid_from.startswith('acct:'):
-                        account = Account.objects.filter(pk=int(paid_from[5:]), household=household).first()
-                    elif paid_from.startswith('num:'):
-                        account = resolve_account(paid_from[4:])
-                    else:
-                        raise ValueError('Choose the savings account this RD is paid from.')
+        def run():
+            savings_results = []
+            for item in savings_accounts:
+                account_number = (item.get('account_number') or '').strip()
+                try:
+                  with db_transaction.atomic():
+                    account = resolve_account(account_number)
                     if account is None:
-                        raise ValueError(f'Could not resolve the account this RD is paid from ({paid_from}).')
-                    if not item.get('tenure_months'):
-                        raise ValueError('tenure_months is required for RD deposits (enter it in the confirm step).')
-                    if not item.get('installment_amount'):
-                        raise ValueError('installment_amount is required for RD deposits (enter it in the confirm step).')
-                    result = apply_rd_statement_import(household, member, item, account)
-                else:
-                    result = apply_fd_advice_import(household, member, item)
-                result['account_number'] = account_number
-                deposit_results.append(result)
-            except Exception as e:
-                deposit_results.append({'account_number': account_number, 'error': str(e)})
+                        raise ValueError(account_errors.get(account_number, 'Could not resolve account'))
+                    member = resolve_member(item.get('member_id'))
+                    result = apply_sbi_savings_account_import(household, member, item, account)
+                    result['account_number'] = account_number
+                    savings_results.append(result)
+                except Exception as e:
+                    savings_results.append({'account_number': account_number, 'error': str(e)})
 
-        # Deposits the user confirmed are closed/matured (present in the DB,
-        # absent from this statement) — explicit opt-in per instrument, never
-        # inferred automatically. Reuses the existing manual is_active toggle
-        # rather than adding a new status field.
-        deactivate_ids = request.data.get('deactivate_instrument_ids') or []
-        deactivated_count = 0
-        if deactivate_ids:
-            from instruments.models import Instrument
-            deactivated_count = Instrument.objects.filter(household=household, id__in=deactivate_ids).update(is_active=False)
+            deposit_results = []
+            for item in deposits:
+                account_number = (item.get('account_number') or '').strip()
+                metadata = {
+                    'sbi_deposit_type': item.get('deposit_type', ''),
+                    'sbi_branch': item.get('branch', ''),
+                    'sbi_mode_of_operation': item.get('mode_of_operation', ''),
+                    'sbi_currency': item.get('currency', ''),
+                    'account_number': account_number,
+                }
+                item = {**item, 'metadata': metadata}
+                member = resolve_member(item.get('member_id'))
+                try:
+                  with db_transaction.atomic():
+                    if item.get('doc_type') == 'rd_statement':
+                        # The RD's mandate debits the savings account it's paid from — never an
+                        # Account named after the RD itself (that put RDs into account balances).
+                        paid_from = str(item.get('paid_from') or '')
+                        if paid_from.startswith('acct:'):
+                            account = Account.objects.filter(pk=int(paid_from[5:]), household=household).first()
+                        elif paid_from.startswith('num:'):
+                            account = resolve_account(paid_from[4:])
+                        else:
+                            raise ValueError('Choose the savings account this RD is paid from.')
+                        if account is None:
+                            raise ValueError(f'Could not resolve the account this RD is paid from ({paid_from}).')
+                        if not item.get('tenure_months'):
+                            raise ValueError('tenure_months is required for RD deposits (enter it in the confirm step).')
+                        if not item.get('installment_amount'):
+                            raise ValueError('installment_amount is required for RD deposits (enter it in the confirm step).')
+                        result = apply_rd_statement_import(household, member, item, account)
+                    else:
+                        result = apply_fd_advice_import(household, member, item)
+                    result['account_number'] = account_number
+                    deposit_results.append(result)
+                except Exception as e:
+                    deposit_results.append({'account_number': account_number, 'error': str(e)})
 
-        return Response({
-            'savings_accounts': savings_results,
-            'deposits': deposit_results,
-            'deactivated_count': deactivated_count,
-        }, status=201)
+            # Deposits the user confirmed are closed/matured (present in the DB,
+            # absent from this statement) — explicit opt-in per instrument, never
+            # inferred automatically. Reuses the existing manual is_active toggle
+            # rather than adding a new status field.
+            deactivate_ids = request.data.get('deactivate_instrument_ids') or []
+            deactivated_count = 0
+            if deactivate_ids:
+                from instruments.models import Instrument
+                deactivated_count = Instrument.objects.filter(household=household, id__in=deactivate_ids).update(is_active=False)
+
+            return {
+                'savings_accounts': savings_results,
+                'deposits': deposit_results,
+                'deactivated_count': deactivated_count,
+            }
+
+        result, summary = summarise_import(household, run, dry_run)
+        if not dry_run:
+            record_import(household, 'sbi_statement', request.data.get('filename') or 'SBI statement', None, summary, result)
+        return Response({**result, 'change_summary': summary}, status=200 if dry_run else 201)
 
 
 class NpsPreviewView(APIView):
@@ -1154,3 +1196,55 @@ class PpfStatementApplyView(APIView):
                 all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
 
         return Response(all_results, status=201)
+
+
+def _history_row(batch, include_summary=False):
+    summary = batch.summary or {}
+    row = {
+        'id': batch.id,
+        'imported_at': batch.completed_at or batch.created_at,
+        'kind': batch.kind,
+        'kind_label': batch.get_kind_display(),
+        'filename': batch.filename,
+        'member_name': batch.member.full_name if batch.member else '',
+        'net_change': summary.get('net_change'),
+        'changed_count': len(summary.get('items', [])),
+        'unchanged_count': summary.get('unchanged_count', 0),
+    }
+    if include_summary:
+        row['change_summary'] = summary
+        row['counts'] = batch.counts
+    return row
+
+
+class ImportHistoryView(APIView):
+    """Past imports (Groww/Upstox holdings, FD/RD documents, SBI statements), newest first."""
+
+    def get(self, request):
+        from ingestion.models import ImportBatch
+
+        household_id = request.query_params.get('household_id')
+        if not household_id:
+            return Response({'detail': 'household_id query parameter is required.'}, status=400)
+        try:
+            limit = min(int(request.query_params.get('limit', 50)), 200)
+            offset = max(int(request.query_params.get('offset', 0)), 0)
+        except ValueError:
+            return Response({'detail': 'limit and offset must be numbers.'}, status=400)
+        batches = (ImportBatch.objects.filter(household_id=int(household_id)).exclude(kind=ImportBatch.Kind.CSV)
+                   .select_related('member').order_by('-created_at', '-id'))
+        return Response({
+            'count': batches.count(),
+            'results': [_history_row(b) for b in batches[offset:offset + limit]],
+        })
+
+
+class ImportHistoryDetailView(APIView):
+    def get(self, request, batch_id):
+        from ingestion.models import ImportBatch
+
+        household_id = request.query_params.get('household_id')
+        batch = ImportBatch.objects.filter(pk=batch_id, household_id=household_id).select_related('member').first()
+        if batch is None:
+            return Response({'detail': 'Import not found.'}, status=404)
+        return Response(_history_row(batch, include_summary=True))

@@ -1,10 +1,13 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { importApi } from '../../api/importApi'
 import type { GrowwExistingHolding, GrowwFilePreview, GrowwFileResult, GrowwMemberPreview } from '../../api/importApi'
 import { Button } from '../ui/Button'
 import { Sheet } from '../ui/Sheet'
 import { SellForm } from '../holdings/SellForm'
 import { useApp } from '../../context/AppContext'
+import { useChangePreview } from '../../hooks/useChangePreview'
+import { ChangePreviewPanel } from './ChangePreviewPanel'
+import { ChangeSummary } from './ChangeSummary'
 
 type Props = { householdId: number }
 
@@ -88,8 +91,20 @@ export function GrowwImportWizard({ householdId }: Props) {
     setAssignments(prev => prev.map(a => a.filename === filename ? { ...a, member_id: memberId } : a))
   }
 
+  const validAssignments = useMemo(
+    () => assignments.filter(a => a.member_id !== null) as { filename: string; member_id: number }[],
+    [assignments],
+  )
+  // Dry run on the confirm step: what applying these files (to these members) would change.
+  const preview = useChangePreview(
+    ['groww', householdId, files.map(f => [f.name, f.size, f.lastModified]), validAssignments],
+    step === 'confirm' && validAssignments.length > 0,
+    () => importApi.applyGrowwImport(householdId, files, validAssignments, true),
+  )
+  const fileDate = (filename: string) => previews.find(p => p.filename === filename)?.valuation_date || undefined
+
   const handleImport = async () => {
-    const valid = assignments.filter(a => a.member_id !== null) as { filename: string; member_id: number }[]
+    const valid = validAssignments
     if (valid.length === 0) { setError('Assign at least one member before importing'); return }
     setError('')
     setLoading(true)
@@ -275,6 +290,17 @@ export function GrowwImportWizard({ householdId }: Props) {
             </div>
           )
         })}
+        {validAssignments.length > 0 && (
+          <ChangePreviewPanel
+            loading={preview.isFetching}
+            error={preview.error}
+            sections={preview.data?.filter(r => r.change_summary).map(r => ({
+              title: [r.member_name, r.filename].filter(Boolean).join(' · '),
+              summary: r.change_summary!,
+              fileDate: fileDate(r.filename),
+            }))}
+          />
+        )}
         {error && <p className="text-sm text-red-500">{error}</p>}
         <div className="flex gap-2">
           <Button onClick={handleImport} loading={loading}>
@@ -303,10 +329,6 @@ export function GrowwImportWizard({ householdId }: Props) {
   }
 
   // result step — handle both Groww (stocks_created/mf_created) and Upstox (holdings_created)
-  type ExtendedResult = GrowwFileResult & {
-    source?: string; holdings_created?: number; holdings_updated?: number; stocks_parsed?: number; mf_parsed?: number
-    reclassified?: number; units_adjusted?: number; bonds_created?: string[]; bond_quantity_mismatch?: string[]
-  }
   const totalErrors = results.reduce((s, r) => s + (r.errors?.length ?? 0) + (r.error ? 1 : 0), 0)
 
   return (
@@ -320,7 +342,7 @@ export function GrowwImportWizard({ householdId }: Props) {
       </div>
       <div className="grid gap-3">
         {results.map(r => {
-          const er = r as ExtendedResult
+          const er = r
           const isUpstox = er.source === 'upstox'
           return (
             <div key={r.filename} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 grid gap-2">
@@ -370,6 +392,17 @@ export function GrowwImportWizard({ householdId }: Props) {
                     <p className="text-[var(--text-muted)]">Valuations</p>
                     <p className="text-lg font-bold text-[var(--text)]">{r.valuations_created ?? 0}</p>
                   </div>
+                  {(er.units_adjusted ?? 0) > 0 && (
+                    <p className="col-span-3 text-[var(--text-muted)]">
+                      {er.units_adjusted} holding{er.units_adjusted === 1 ? '' : 's'} changed quantity — recorded as a buy/sell at the statement price.
+                    </p>
+                  )}
+                </div>
+              )}
+              {r.change_summary && (
+                <div className="grid gap-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">What changed</p>
+                  <ChangeSummary summary={r.change_summary} fileDate={fileDate(r.filename)} />
                 </div>
               )}
               {r.errors && r.errors.length > 0 && (
