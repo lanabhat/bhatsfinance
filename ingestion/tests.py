@@ -1163,3 +1163,33 @@ class ImportChangeSummaryTests(TestCase):
         self.assertEqual(detail.data['change_summary'], applied.data['change_summary'])
         other = Household.objects.create(name='Other')
         self.assertEqual(client.get(f"/api/import-history/{row['id']}", {'household_id': other.id}).status_code, 404)
+
+
+class DataImportChangeSummaryTests(TestCase):
+    """The Import Data tab (CSV/Excel): previews and records what it changes like the other imports."""
+
+    def test_csv_valuation_preview_then_apply(self):
+        from ingestion.models import ImportBatch
+        from valuations.models import ValuationSnapshot
+        household = Household.objects.create(name='Shenoy Family')
+        client = _approved_client(household)
+        gold = Instrument.objects.create(household=household, name='Gold Jewellery', instrument_type='gold')
+        Transaction.objects.create(household=household, instrument=gold, tx_date=date(2026, 1, 5), amount=Decimal('100000'),
+                                   direction='outflow', transaction_type='buy')
+        payload = {
+            'household_id': household.id, 'import_type': 'valuations', 'filename': 'gold.csv',
+            'rows': [{'Date': '2026-10-01', 'Holding': 'Gold Jewellery', 'Value': '150000'}],
+            'mapping': {'valuation_date': 'Date', 'instrument_name': 'Holding', 'market_value': 'Value'},
+            'defaults': {'instrument_type': 'GOLD', 'balance': '0'},
+        }
+        preview = client.post('/api/imports/apply', {**payload, 'dry_run': True}, format='json')
+        self.assertEqual(preview.status_code, 200, preview.data)
+        self.assertFalse(ValuationSnapshot.objects.exists())
+        item = preview.data['change_summary']['items'][0]
+        self.assertEqual((item['name'], Decimal(item['value_before']), Decimal(item['value_after'])),
+                         ('Gold Jewellery', Decimal('100000'), Decimal('150000')))
+
+        applied = client.post('/api/imports/apply', payload, format='json')
+        self.assertEqual(applied.status_code, 201, applied.data)
+        self.assertEqual(applied.data['change_summary'], preview.data['change_summary'])
+        self.assertEqual(ImportBatch.objects.get().kind, 'data')

@@ -3,6 +3,10 @@ import { importApi } from '../../api/importApi'
 import type { EpfConfirmedItem, EpfFilePreview, EpfFileResult } from '../../api/importApi'
 import { Button } from '../ui/Button'
 import { useApp } from '../../context/AppContext'
+import { useChangePreview } from '../../hooks/useChangePreview'
+import { ChangePreviewPanel } from './ChangePreviewPanel'
+import { ChangeSummary } from './ChangeSummary'
+import type { ChangeSummary as ChangeSummaryData } from '../../api/importApi'
 
 type Props = { householdId: number }
 
@@ -20,6 +24,7 @@ export function EpfPassbookImportWizard({ householdId }: Props) {
   const [rows, setRows] = useState<FileRow[]>([])
   const [items, setItems] = useState<EpfConfirmedItem[]>([])
   const [results, setResults] = useState<EpfFileResult[]>([])
+  const [summaries, setSummaries] = useState<ChangeSummaryData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -78,6 +83,10 @@ export function EpfPassbookImportWizard({ householdId }: Props) {
     setItems(prev => prev.map(i => i.filename === filename ? { ...i, ...patch } : i))
   }
 
+  // Dry run on the confirm step: what importing these statements would change.
+  const preview = useChangePreview(['applyEpfPassbookImport', householdId, items], step === 'confirm' && items.length > 0,
+    () => importApi.applyEpfPassbookImport(householdId, items, true))
+
   const handleImport = async () => {
     setError('')
     setLoading(true)
@@ -85,11 +94,14 @@ export function EpfPassbookImportWizard({ householdId }: Props) {
       // Apply sequentially (not Promise.all) — order matters: each year's
       // opening-balance backfill depends on the prior year already existing.
       const res: EpfFileResult[] = []
+      const sums: ChangeSummaryData[] = []
       for (const item of items) {
-        const [single] = await importApi.applyEpfPassbookImport(householdId, [item])
-        res.push(single)
+        const out = await importApi.applyEpfPassbookImport(householdId, [item])
+        res.push(out.results[0])
+        sums.push(out.change_summary)
       }
       setResults(res)
+      setSummaries(sums)
       setStep('result')
       void refreshAll()
     } catch (e: unknown) {
@@ -104,6 +116,7 @@ export function EpfPassbookImportWizard({ householdId }: Props) {
     setRows([])
     setItems([])
     setResults([])
+    setSummaries([])
     setError('')
   }
 
@@ -230,6 +243,12 @@ export function EpfPassbookImportWizard({ householdId }: Props) {
           them all would otherwise double-count. Files are applied oldest-first automatically.
         </p>
 
+        <ChangePreviewPanel
+          loading={preview.isFetching}
+          error={preview.error}
+          sections={preview.data ? [{ summary: preview.data.change_summary }] : undefined}
+        />
+
         <div className="flex gap-2">
           <Button onClick={handleImport} loading={loading}>Import {items.length} passbook{items.length === 1 ? '' : 's'}</Button>
           <Button variant="secondary" onClick={reset}>Cancel</Button>
@@ -249,6 +268,12 @@ export function EpfPassbookImportWizard({ householdId }: Props) {
           {totalErrors > 0 && <p className="text-sm text-amber-500">{totalErrors} errors — see details below</p>}
         </div>
       </div>
+      {summaries.length > 0 && (
+        <div className="grid gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">What changed</p>
+          {summaries.map((s, i) => <ChangeSummary key={i} summary={s} />)}
+        </div>
+      )}
       <div className="grid gap-3">
         {results.map(r => (
           <div key={r.filename} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 grid gap-2">

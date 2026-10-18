@@ -473,8 +473,8 @@ export const importApi = {
   getSchemas: (): Promise<Record<string, ImportSchema>> =>
     httpGet(`${BASE}/imports/schemas`),
 
-  applyImport: (payload: ImportApplyPayload): Promise<ImportResult> =>
-    httpPost(`${BASE}/imports/apply`, payload),
+  applyImport: (payload: ImportApplyPayload, dryRun = false): Promise<ImportResult & { change_summary?: ChangeSummary }> =>
+    httpPost(`${BASE}/imports/apply`, { ...payload, dry_run: dryRun }),
 
   previewGrowwFiles: async (householdId: number, files: File[]): Promise<GrowwFilePreview[]> => {
     const fd = new FormData()
@@ -529,8 +529,9 @@ export const importApi = {
   applyNpsImport: (
     householdId: number,
     items: NpsConfirmedItem[],
-  ): Promise<NpsFileResult[]> =>
-    httpPost(`${BASE}/imports/nps-apply`, { household_id: householdId, items }),
+    dryRun = false,
+  ): Promise<{ results: NpsFileResult[]; change_summary: ChangeSummary }> =>
+    httpPost(`${BASE}/imports/nps-apply`, { household_id: householdId, items, dry_run: dryRun }),
 
   previewEpfPassbookFiles: async (householdId: number, files: File[]): Promise<EpfFilePreview[]> => {
     const fd = new FormData()
@@ -542,8 +543,9 @@ export const importApi = {
   applyEpfPassbookImport: (
     householdId: number,
     items: EpfConfirmedItem[],
-  ): Promise<EpfFileResult[]> =>
-    httpPost(`${BASE}/imports/epf-passbook-apply`, { household_id: householdId, items }),
+    dryRun = false,
+  ): Promise<{ results: EpfFileResult[]; change_summary: ChangeSummary }> =>
+    httpPost(`${BASE}/imports/epf-passbook-apply`, { household_id: householdId, items, dry_run: dryRun }),
 
   previewPpfStatementFiles: async (householdId: number, files: File[]): Promise<PpfFilePreview[]> => {
     const fd = new FormData()
@@ -555,8 +557,9 @@ export const importApi = {
   applyPpfStatementImport: (
     householdId: number,
     items: PpfConfirmedItem[],
-  ): Promise<PpfFileResult[]> =>
-    httpPost(`${BASE}/imports/ppf-statement-apply`, { household_id: householdId, items }),
+    dryRun = false,
+  ): Promise<{ results: PpfFileResult[]; change_summary: ChangeSummary }> =>
+    httpPost(`${BASE}/imports/ppf-statement-apply`, { household_id: householdId, items, dry_run: dryRun }),
 
   previewSBIStatementFiles: async (
     householdId: number,

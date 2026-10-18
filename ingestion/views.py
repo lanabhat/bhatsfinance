@@ -81,18 +81,27 @@ class ImportApplyView(APIView):
         if not rows:
             return Response({'error': 'rows is required'}, status=400)
 
+        from core.models import Household
+        from ingestion.change_summary import is_dry_run, record_import, summarise_import
+        household = Household.objects.filter(pk=int(household_id)).first()
+        if household is None:
+            return Response({'error': 'Household not found'}, status=404)
+        dry_run = is_dry_run(data)
+
         try:
-            result = apply_import(
-                household_id=int(household_id),
+            result, summary = summarise_import(household, lambda: apply_import(
+                household_id=household.id,
                 import_type=import_type,
                 rows=rows,
                 mapping=mapping,
                 defaults=defaults,
-            )
+            ), dry_run)
         except Exception as e:
             return Response({'error': str(e)}, status=400)
 
-        return Response(result, status=201)
+        if not dry_run:
+            record_import(household, 'data', data.get('filename') or import_type, None, summary, result)
+        return Response({**result, 'change_summary': summary}, status=200 if dry_run else 201)
 
 
 def _detect_and_parse(file_bytes: bytes, filename: str) -> tuple[dict, str]:
@@ -959,36 +968,48 @@ class NpsApplyView(APIView):
         if not items:
             return Response({'error': 'items is required'}, status=400)
 
-        all_results = []
-        for item in items:
-            member = None
-            member_id = item.get('member_id')
-            if member_id:
+        from django.db import transaction as db_transaction
+        from ingestion.change_summary import is_dry_run, record_import, summarise_import
+        dry_run = is_dry_run(request.data)
+
+        def run():
+            all_results = []
+            for item in items:
+                member = None
+                member_id = item.get('member_id')
+                if member_id:
+                    try:
+                        member = Member.objects.get(pk=member_id, household=household)
+                    except Member.DoesNotExist:
+                        pass
+
+                account = None
+                account_id = item.get('account_id')
+                if account_id:
+                    try:
+                        account = Account.objects.get(pk=account_id, household=household)
+                    except Account.DoesNotExist:
+                        pass
+
                 try:
-                    member = Member.objects.get(pk=member_id, household=household)
-                except Member.DoesNotExist:
-                    pass
+                  with db_transaction.atomic():
+                    result = apply_nps_statement_import(
+                        household, member, item,
+                        account=account,
+                        affects_balance=bool(item.get('affects_balance', False)),
+                    )
+                    result['filename'] = item.get('filename', '')
+                    all_results.append(result)
+                except Exception as e:
+                    all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
 
-            account = None
-            account_id = item.get('account_id')
-            if account_id:
-                try:
-                    account = Account.objects.get(pk=account_id, household=household)
-                except Account.DoesNotExist:
-                    pass
+            return all_results
 
-            try:
-                result = apply_nps_statement_import(
-                    household, member, item,
-                    account=account,
-                    affects_balance=bool(item.get('affects_balance', False)),
-                )
-                result['filename'] = item.get('filename', '')
-                all_results.append(result)
-            except Exception as e:
-                all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
-
-        return Response(all_results, status=201)
+        all_results, summary = summarise_import(household, run, dry_run)
+        if not dry_run:
+            filenames = ', '.join(dict.fromkeys(i.get('filename', '') for i in items if i.get('filename')))
+            record_import(household, 'nps', filenames, None, summary, {'results': all_results})
+        return Response({'results': all_results, 'change_summary': summary}, status=200 if dry_run else 201)
 
 
 class EpfPassbookPreviewView(APIView):
@@ -1073,24 +1094,36 @@ class EpfPassbookApplyView(APIView):
         if not items:
             return Response({'error': 'items is required'}, status=400)
 
-        all_results = []
-        for item in items:
-            member = None
-            member_id = item.get('member_id')
-            if member_id:
+        from django.db import transaction as db_transaction
+        from ingestion.change_summary import is_dry_run, record_import, summarise_import
+        dry_run = is_dry_run(request.data)
+
+        def run():
+            all_results = []
+            for item in items:
+                member = None
+                member_id = item.get('member_id')
+                if member_id:
+                    try:
+                        member = Member.objects.get(pk=member_id, household=household)
+                    except Member.DoesNotExist:
+                        pass
+
                 try:
-                    member = Member.objects.get(pk=member_id, household=household)
-                except Member.DoesNotExist:
-                    pass
+                  with db_transaction.atomic():
+                    result = apply_epf_passbook_import(household, member, item)
+                    result['filename'] = item.get('filename', '')
+                    all_results.append(result)
+                except Exception as e:
+                    all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
 
-            try:
-                result = apply_epf_passbook_import(household, member, item)
-                result['filename'] = item.get('filename', '')
-                all_results.append(result)
-            except Exception as e:
-                all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
+            return all_results
 
-        return Response(all_results, status=201)
+        all_results, summary = summarise_import(household, run, dry_run)
+        if not dry_run:
+            filenames = ', '.join(dict.fromkeys(i.get('filename', '') for i in items if i.get('filename')))
+            record_import(household, 'epf', filenames, None, summary, {'results': all_results})
+        return Response({'results': all_results, 'change_summary': summary}, status=200 if dry_run else 201)
 
 
 class PpfStatementPreviewView(APIView):
@@ -1167,35 +1200,47 @@ class PpfStatementApplyView(APIView):
         if not items:
             return Response({'error': 'items is required'}, status=400)
 
-        all_results = []
-        for item in items:
-            member = None
-            member_id = item.get('member_id')
-            if member_id:
+        from django.db import transaction as db_transaction
+        from ingestion.change_summary import is_dry_run, record_import, summarise_import
+        dry_run = is_dry_run(request.data)
+
+        def run():
+            all_results = []
+            for item in items:
+                member = None
+                member_id = item.get('member_id')
+                if member_id:
+                    try:
+                        member = Member.objects.get(pk=member_id, household=household)
+                    except Member.DoesNotExist:
+                        pass
+
+                estimated_prior_principal = None
+                raw_estimate = item.get('estimated_prior_principal')
+                if raw_estimate not in (None, ''):
+                    try:
+                        estimated_prior_principal = Decimal(str(raw_estimate))
+                    except InvalidOperation:
+                        pass
+
                 try:
-                    member = Member.objects.get(pk=member_id, household=household)
-                except Member.DoesNotExist:
-                    pass
+                  with db_transaction.atomic():
+                    result = apply_ppf_statement_import(
+                        household, member, item,
+                        estimated_prior_principal=estimated_prior_principal,
+                    )
+                    result['filename'] = item.get('filename', '')
+                    all_results.append(result)
+                except Exception as e:
+                    all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
 
-            estimated_prior_principal = None
-            raw_estimate = item.get('estimated_prior_principal')
-            if raw_estimate not in (None, ''):
-                try:
-                    estimated_prior_principal = Decimal(str(raw_estimate))
-                except InvalidOperation:
-                    pass
+            return all_results
 
-            try:
-                result = apply_ppf_statement_import(
-                    household, member, item,
-                    estimated_prior_principal=estimated_prior_principal,
-                )
-                result['filename'] = item.get('filename', '')
-                all_results.append(result)
-            except Exception as e:
-                all_results.append({'filename': item.get('filename', ''), 'error': str(e)})
-
-        return Response(all_results, status=201)
+        all_results, summary = summarise_import(household, run, dry_run)
+        if not dry_run:
+            filenames = ', '.join(dict.fromkeys(i.get('filename', '') for i in items if i.get('filename')))
+            record_import(household, 'ppf', filenames, None, summary, {'results': all_results})
+        return Response({'results': all_results, 'change_summary': summary}, status=200 if dry_run else 201)
 
 
 def _history_row(batch, include_summary=False):

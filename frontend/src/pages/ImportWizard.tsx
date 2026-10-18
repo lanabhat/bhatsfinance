@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { importApi } from '../api/importApi'
 import { normalizeApiError } from '../hooks/errorUtils'
 import { useApp } from '../context/AppContext'
+import { useChangePreview } from '../hooks/useChangePreview'
+import { ChangePreviewPanel } from '../components/imports/ChangePreviewPanel'
+import { ChangeSummary } from '../components/imports/ChangeSummary'
+import type { ChangeSummary as ChangeSummaryData } from '../api/importApi'
 import type {
   ImportApplyPayload,
   ImportFieldDef,
@@ -61,7 +65,7 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
   const [uploading, setUploading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState('')
-  const [result, setResult] = useState<ImportResult | null>(null)
+  const [result, setResult] = useState<(ImportResult & { change_summary?: ChangeSummaryData }) | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -107,6 +111,20 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
     const f = e.dataTransfer.files[0]
     if (f) void handleFile(f)
   }
+
+  const buildPayload = (): ImportApplyPayload | null => schema ? {
+    household_id: householdId,
+    import_type: importType,
+    rows: allRows,
+    mapping,
+    defaults: { ...schema.system_defaults, ...userDefaults },
+  } : null
+  // Preview once every required field has a column or a default value.
+  const mappingComplete = !!schema && schema.required.every(
+    (f) => mapping[f.key] || userDefaults[f.key] || schema.system_defaults[f.key])
+  const changePreview = useChangePreview(['data-import', householdId, importType, mapping, userDefaults, allRows.length],
+    step === 'map' && mappingComplete && allRows.length > 0,
+    () => importApi.applyImport(buildPayload()!, true))
 
   const handleApply = async () => {
     if (!schema) return
@@ -392,6 +410,14 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
               </div>
             )}
 
+            {mappingComplete && (
+              <ChangePreviewPanel
+                loading={changePreview.isFetching}
+                error={changePreview.error}
+                sections={changePreview.data?.change_summary ? [{ summary: changePreview.data.change_summary }] : undefined}
+              />
+            )}
+
             <div className="row-actions">
               <button type="button" className="secondary-btn" onClick={() => setStep('upload')}>← Back</button>
               <button
@@ -409,6 +435,12 @@ export function ImportWizard({ householdId, memberOptions, accountOptions, instr
         {/* ── Step 3: Results ── */}
         {step === 'result' && result && (
           <div className="space-y-4">
+            {result.change_summary && (
+              <div className="grid gap-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">What changed</p>
+                <ChangeSummary summary={result.change_summary} />
+              </div>
+            )}
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/15 p-4 text-center">
                 <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{result.created}</p>
