@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { X } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 type Props = {
@@ -73,7 +74,7 @@ export function Sheet({ title, subtitle, onClose, children, footer, wide }: Prop
         onClick={onClose}
       >
         <div
-          className={`dialog-panel relative flex max-h-[90dvh] w-full flex-col bg-[var(--surface)] shadow-[var(--shadow-modal)] rounded-t-2xl md:rounded-2xl md:max-h-[88vh] ${wide ? 'max-w-xl' : 'max-w-lg'}`}
+          className={`dialog-panel relative flex max-h-[90dvh] w-full flex-col bg-[var(--surface)] shadow-[var(--shadow-modal)] rounded-t-[var(--radius-xl)] md:rounded-[var(--radius-xl)] md:max-h-[88vh] ${wide ? 'max-w-xl' : 'max-w-lg'}`}
           style={{
             transform: dragY ? `translateY(${dragY}px)` : undefined,
             transition: dragging ? 'none' : 'transform 0.22s ease-out',
@@ -102,11 +103,9 @@ export function Sheet({ title, subtitle, onClose, children, footer, wide }: Prop
             <button
               type="button"
               onClick={onClose}
-              className="tap ml-auto flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+              className="tap ml-auto flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-[var(--radius-md)] text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
               aria-label="Close"
-            >
-              ✕
-            </button>
+            ><X className="h-4 w-4" aria-hidden /></button>
           </div>
 
           {/* Body */}

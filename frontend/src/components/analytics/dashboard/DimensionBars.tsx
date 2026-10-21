@@ -26,13 +26,13 @@ function BarTooltip({ active, payload, full }: { active?: boolean; payload?: rea
   const row = active ? payload?.[0]?.payload : undefined
   if (!row) return null
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 shadow-[var(--shadow-modal)]">
-      <p className="text-sm font-semibold tabular-nums text-[var(--text)]">{full(row.value)}</p>
-      <p className="text-xs text-[var(--text-muted)]">{row.label} · {row.share.toFixed(1)}% of view</p>
+    <div className="rounded-[var(--radius-md)] border border-line bg-surface px-3 py-2 shadow-[var(--shadow-modal)]">
+      <p className="text-sm font-semibold tabular-nums text-ink">{full(row.value)}</p>
+      <p className="text-xs text-ink-muted">{row.label} · {row.share.toFixed(1)}% of view</p>
       {row.invested > 0 && (
-        <p className="text-xs text-[var(--text-muted)]">Invested {full(row.invested)}</p>
+        <p className="text-xs text-ink-muted">Invested {full(row.invested)}</p>
       )}
-      {!row.isOther && <p className="mt-1 text-[10px] text-[var(--text-faint)]">Click to filter</p>}
+      {!row.isOther && <p className="mt-1 text-xs text-ink-faint">Select to filter</p>}
     </div>
   )
 }
@@ -60,17 +60,17 @@ export function DimensionBars({ title, dim, rows, selected, onToggle, onClear, l
   const anySelected = selected.size > 0
 
   return (
-    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+    <section className="min-w-0 rounded-[var(--radius-lg)] border border-line bg-surface p-4 shadow-[var(--shadow-card)] md:p-6">
       <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-[var(--text)]">{title}</h3>
+        <h3 className="text-base font-semibold text-ink">{title}</h3>
         {anySelected ? (
-          <button type="button" onClick={onClear} className="text-[11px] text-primary-600 hover:underline dark:text-primary-300">
+          <button type="button" onClick={onClear} className="text-xs text-accent hover:underline">
             Clear ({selected.size})
           </button>
-        ) : hint ? <span className="text-[11px] text-[var(--text-muted)]">{hint}</span> : null}
+        ) : hint ? <span className="text-xs text-ink-muted">{hint}</span> : null}
       </div>
       {data.length === 0 ? (
-        <p className="py-6 text-center text-xs text-[var(--text-muted)]">Nothing in this view.</p>
+        <p className="py-6 text-center text-xs text-ink-muted">Nothing in this view.</p>
       ) : (
         <div style={{ height: data.length * ROW_PX + 8 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -84,7 +84,7 @@ export function DimensionBars({ title, dim, rows, selected, onToggle, onClear, l
                   const isSel = row && selected.has(row.key)
                   return (
                     // The label is part of the hit target: clicking it filters like clicking the bar.
-                    <text x={x - 6} y={y} dy={4} textAnchor="end" fontSize={11}
+                    <text x={x - 6} y={y} dy={4} textAnchor="end" fontSize={12}
                       fill={isSel ? ct.text : ct.axis} fontWeight={isSel ? 600 : 400}
                       style={{ cursor: row && !row.isOther ? 'pointer' : 'default' }}
                       onClick={() => { if (row && !row.isOther) onToggle(row.key) }}>
@@ -108,7 +108,7 @@ export function DimensionBars({ title, dim, rows, selected, onToggle, onClear, l
                   const { x, y, width, height, value } = props as { x: number; y: number; width: number; height: number; value: number }
                   const n = Number(value)
                   return (
-                    <text x={x + width + 6} y={y + height / 2} dy={4} fontSize={11} fill={ct.axis}>
+                    <text x={x + width + 6} y={y + height / 2} dy={4} fontSize={12} fill={ct.axis}>
                       {money.compact(n)} · {pct(n, total).toFixed(0)}%
                     </text>
                   )

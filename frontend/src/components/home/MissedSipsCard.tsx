@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Money } from '../common/Money'
+import { DateText } from '../ui/DateText'
 import { ExpandableGridCard } from '../common/ExpandableGridCard'
 import { useExpandable } from '../../hooks/useExpandable'
 import { MarkSipPaidSheet } from './MarkSipPaidSheet'
@@ -7,6 +8,8 @@ import { MarkAllSipsPaidSheet } from './MarkAllSipsPaidSheet'
 import type { MissedSipAlert, OptionItem } from '../../types/domain'
 
 type Props = {
+  /** Inside the Home action-items sheet: no heading of its own. */
+  embedded?: boolean
   items: MissedSipAlert[]
   accountOptions: OptionItem[]
   onPaid: () => void | Promise<void>
@@ -33,7 +36,7 @@ function groupByMandate(items: MissedSipAlert[]): SipGroup[] {
   return [...map.values()]
 }
 
-export function MissedSipsCard({ items, accountOptions, onPaid }: Props) {
+export function MissedSipsCard({ items, accountOptions, onPaid, embedded }: Props) {
   const [paidSheetTarget, setPaidSheetTarget] = useState<MissedSipAlert | null>(null)
   const [bulkSheetGroup, setBulkSheetGroup] = useState<SipGroup | null>(null)
   const groupExpand = useExpandable<number>()
@@ -44,7 +47,7 @@ export function MissedSipsCard({ items, accountOptions, onPaid }: Props) {
 
   return (
     <div>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Missed SIPs</h2>
+      {!embedded && <h2 className="mb-3 text-base font-semibold text-ink">Missed SIPs</h2>}
       <div className="card-grid grid gap-3">
         {groups.map(group => {
           const isExpanded = groupExpand.isExpanded(group.mandate_id)
@@ -53,37 +56,37 @@ export function MissedSipsCard({ items, accountOptions, onPaid }: Props) {
               key={group.mandate_id}
               expanded={isExpanded}
               onToggle={() => groupExpand.toggle(group.mandate_id)}
-              className={isExpanded ? 'ring-2 ring-amber-400 ring-offset-1 rounded-xl' : ''}
+              className={isExpanded ? 'ring-2 ring-accent ring-offset-1 rounded-xl' : ''}
               collapsed={
-                <div className="tap min-w-0 rounded-xl border border-amber-100 bg-amber-50 dark:bg-amber-900/15 px-4 py-3">
+                <div className="tap min-w-0 rounded-xl border border-line bg-surface px-4 py-3">
                   <p className="truncate text-sm font-medium text-[var(--text)]">{group.instrument}</p>
-                  <p className="text-[11px] text-[var(--text-muted)]">{group.dues.length} due{group.dues.length === 1 ? '' : 's'} · {group.account}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{group.dues.length} due{group.dues.length === 1 ? '' : 's'} · {group.account}</p>
                   <div className="mt-2 flex items-end justify-between">
-                    <Money value={group.total} className="text-lg font-bold text-amber-800 dark:text-amber-300 tabular-nums" />
+                    <Money value={group.total} className="text-lg font-bold text-ink tabular-nums" />
                     <p className="text-xs text-[var(--text-faint)]">total due</p>
                   </div>
                 </div>
               }
             >
-              <div className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50 dark:bg-amber-900/15">
+              <div className="overflow-hidden rounded-xl border border-line bg-surface">
                 {group.dues.length > 1 && (
-                  <div className="flex items-center justify-end gap-3 border-b border-amber-100/60 dark:border-amber-900/20 px-4 py-1.5">
+                  <div className="flex items-center justify-end gap-3 border-b border-line dark:border-line px-4 py-1.5">
                     <button type="button" onClick={() => setBulkSheetGroup(group)}
-                      className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:text-amber-800">
+                      className="text-xs font-medium text-ink hover:text-ink">
                       Mark all paid →
                     </button>
                   </div>
                 )}
                 {group.dues.map(sip => (
-                  <div key={`${sip.mandate_id}-${sip.due_date}`} className="flex items-center gap-3 border-b border-amber-100 px-4 py-3 last:border-0">
+                  <div key={`${sip.mandate_id}-${sip.due_date}`} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs text-[var(--text-muted)]">Due {sip.due_date}</p>
+                      <p className="text-xs text-[var(--text-muted)]">Due <DateText value={sip.due_date} /></p>
                     </div>
-                    <Money value={sip.expected_amount} className="shrink-0 text-sm font-bold text-amber-700 dark:text-amber-300" />
+                    <Money value={sip.expected_amount} className="shrink-0 text-sm font-bold text-ink" />
                     <button
                       type="button"
                       onClick={() => setPaidSheetTarget(sip)}
-                      className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+                      className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:bg-accent-hover"
                     >
                       Mark paid
                     </button>

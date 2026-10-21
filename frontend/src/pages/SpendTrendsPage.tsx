@@ -1,76 +1,67 @@
 import { useEffect, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { CoinSpinner } from '../components/common/CoinSpinner'
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { X } from 'lucide-react'
 import { expenseApi } from '../api/expenseApi'
 import { ledgerApi } from '../api/ledgerApi'
 import { getJson, toQueryString } from '../api/http'
 import { normalizeApiError } from '../hooks/errorUtils'
 import { CashFlowChart, type CashFlowBucket, type CashFlowPoint } from '../components/charts/CashFlowChart'
-import { Money, useMaskedFmt } from '../components/common/Money'
-import { Sheet } from '../components/ui/Sheet'
+import { ChartCard } from '../components/charts/ChartCard'
+import { useChartTheme, ChartTooltip } from '../components/charts/chartTheme'
+import { useMaskedFmt } from '../components/common/Money'
 import { TxFormFields } from '../components/ledger/TransactionEditForm'
 import { blankTxForm, txFormFromTransaction } from '../components/ledger/txForm'
-import { usePrivacy } from '../context/PrivacyContext'
+import { Amount } from '../components/ui/Amount'
+import { Card } from '../components/ui/Card'
+import { DataTable } from '../components/ui/DataTable'
+import type { DataTableColumn } from '../components/ui/DataTable'
+import { DateText } from '../components/ui/DateText'
+import { EmptyState } from '../components/ui/EmptyState'
+import { FilterBar } from '../components/ui/FilterBar'
+import { IconButton } from '../components/ui/Button'
+import { ToolbarSelect } from '../components/ui/Input'
+import { Notice } from '../components/ui/Notice'
+import { PageLayout } from '../components/ui/PageLayout'
+import { Sheet } from '../components/ui/Sheet'
+import { Skeleton } from '../components/ui/Skeleton'
+import { StatCard } from '../components/ui/StatCard'
+import { Tabs } from '../components/ui/Tabs'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
-import { useChartTheme, ChartTooltip } from '../components/charts/chartTheme'
-import type { SpendAnalytics, Transaction } from '../types/domain'
+import { useMemberScope } from '../context/MemberScopeContext'
 import { useErrorToast } from '../hooks/useErrorToast'
+import { fmtDateShort, fmtMonth, fmtMonthAxis } from '../lib/fmt'
+import { CASHFLOW_COLOR, CASHFLOW_SERIES, FLOW_COLOR, spendCategoryColor } from '../lib/palette'
+import type { SpendAnalytics, Transaction } from '../types/domain'
 
 type Props = { householdId: number }
 
 type TrendsTab = 'trends' | 'cashflow'
 const TRENDS_TAB_KEY = 'trends:activeTab'
-
 const NO_CASHFLOW: CashFlowPoint[] = []
 
 function loadTrendsTab(): TrendsTab {
-  try {
-    const raw = localStorage.getItem(TRENDS_TAB_KEY)
-    return raw === 'cashflow' ? 'cashflow' : 'trends'
-  } catch { return 'trends' }
+  try { return localStorage.getItem(TRENDS_TAB_KEY) === 'cashflow' ? 'cashflow' : 'trends' } catch { return 'trends' }
 }
 
 type Granularity = 'day' | 'week' | 'month'
 
 const RANGE_OPTIONS: Record<Granularity, { value: number; label: string }[]> = {
-  day: [
-    { value: 7, label: '7d' },
-    { value: 14, label: '14d' },
-    { value: 30, label: '30d' },
-  ],
-  week: [
-    { value: 4, label: '4w' },
-    { value: 8, label: '8w' },
-    { value: 12, label: '12w' },
-  ],
-  month: [
-    { value: 3, label: '3m' },
-    { value: 6, label: '6m' },
-    { value: 12, label: '12m' },
-    { value: 24, label: '24m' },
-  ],
+  day: [{ value: 7, label: 'Last 7 days' }, { value: 14, label: 'Last 14 days' }, { value: 30, label: 'Last 30 days' }],
+  week: [{ value: 4, label: 'Last 4 weeks' }, { value: 8, label: 'Last 8 weeks' }, { value: 12, label: 'Last 12 weeks' }],
+  month: [{ value: 3, label: 'Last 3 months' }, { value: 6, label: 'Last 6 months' }, { value: 12, label: 'Last 12 months' }, { value: 24, label: 'Last 24 months' }],
 }
-
 const DEFAULT_PERIODS: Record<Granularity, number> = { day: 30, week: 8, month: 12 }
 
 const SERIES = [
-  { key: 'spend',             label: 'Spend',    color: '#f43f5e' },
-  { key: 'income',            label: 'Income',   color: '#10b981' },
-  { key: 'internal_transfer', label: 'Transfer', color: '#f59e0b' },
-  { key: 'tracking',          label: 'Tracking', color: '#6366f1' },
+  { key: 'spend', label: 'Spend' },
+  { key: 'income', label: 'Income' },
+  { key: 'internal_transfer', label: 'Transfer' },
+  { key: 'tracking', label: 'Tracking' },
 ]
 
-const CATEGORY_COLORS: Record<string, string> = {
-  spend: '#f43f5e', income: '#10b981', internal_transfer: '#f59e0b',
-  tracking: '#6366f1', '': '#94a3b8',
-  food: '#f43f5e', transport: '#f59e0b', utilities: '#0ea5e9',
-  entertainment: '#a855f7', health: '#10b981', shopping: '#ec4899',
-  education: '#6366f1', rent: '#8b5cf6', emi: '#ef4444', other: '#64748b',
-}
-
-// A single active drill-down filter for the transaction table below the charts.
+// One active drill-down filter for the transaction table below the charts.
 type DrillDown =
   | { kind: 'period'; period: string; category?: string; label: string }
   | { kind: 'category'; category: string; label: string }
@@ -79,24 +70,38 @@ type DrillDown =
 function periodDateRange(period: string, granularity: Granularity): { start: string; end: string } {
   if (granularity === 'month') {
     const [y, m] = period.split('-').map(Number)
-    const start = new Date(Date.UTC(y, m - 1, 1))
-    const end = new Date(Date.UTC(y, m, 0))
-    return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }
+    return { start: new Date(Date.UTC(y, m - 1, 1)).toISOString().slice(0, 10), end: new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10) }
   }
   if (granularity === 'week') {
-    const start = new Date(period + 'T00:00:00Z')
-    const end = new Date(start)
+    const end = new Date(period + 'T00:00:00Z')
     end.setUTCDate(end.getUTCDate() + 6)
     return { start: period, end: end.toISOString().slice(0, 10) }
   }
   return { start: period, end: period }
 }
 
+function periodLabel(period: string, granularity: Granularity): string {
+  if (granularity === 'month') return fmtMonth(period)
+  if (granularity === 'week') { const { start, end } = periodDateRange(period, granularity); return `${fmtDateShort(start)} – ${fmtDateShort(end)}` }
+  return fmtDateShort(period)
+}
+
 export function SpendTrendsPage({ householdId }: Props) {
-  const fmtINR = useMaskedFmt()
-  const { hidden } = usePrivacy()
-  const ct = useChartTheme()
   const [activeTab, setActiveTab] = useState<TrendsTab>(loadTrendsTab)
+  const changeTab = (tab: TrendsTab) => {
+    setActiveTab(tab)
+    try { localStorage.setItem(TRENDS_TAB_KEY, tab) } catch { /* ignore */ }
+  }
+  const tabs = <Tabs label="Trends view" active={activeTab} onChange={changeTab} tabs={[{ key: 'trends', label: 'Trends' }, { key: 'cashflow', label: 'Cash flow' }]} />
+  return activeTab === 'cashflow'
+    ? <CashFlowSection householdId={householdId} tabs={tabs} />
+    : <TrendsSection householdId={householdId} tabs={tabs} />
+}
+
+function TrendsSection({ householdId, tabs }: { householdId: number; tabs: React.ReactNode }) {
+  const fmt = useMaskedFmt()
+  const ct = useChartTheme()
+  const { memberId: scopeMemberId, memberName } = useMemberScope()
   const [granularity, setGranularity] = useState<Granularity>('month')
   const [periods, setPeriods] = useState(DEFAULT_PERIODS.month)
   const analytics = useQuery({
@@ -105,227 +110,167 @@ export function SpendTrendsPage({ householdId }: Props) {
     placeholderData: keepPreviousData,
   })
   const data: SpendAnalytics | null = analytics.data ?? null
-  const loading = analytics.isFetching
+  const loading = analytics.isFetching && !data
   const error = analytics.error ? normalizeApiError(analytics.error) : ''
   const [drillDown, setDrillDown] = useState<DrillDown | null>(null)
 
-  const changeTab = (tab: TrendsTab) => {
-    setActiveTab(tab)
-    try { localStorage.setItem(TRENDS_TAB_KEY, tab) } catch { /* ignore */ }
-  }
+  const changeGranularity = (g: Granularity) => { setGranularity(g); setPeriods(DEFAULT_PERIODS[g]); setDrillDown(null) }
 
-  const changeGranularity = (g: Granularity) => {
-    setGranularity(g)
-    setPeriods(DEFAULT_PERIODS[g])
-    setDrillDown(null)
-  }
-
-
-  // Build chart rows: one entry per period, columns for each classification series
+  // One row per period, a column per classification.
   const chartRows = useMemo(() => {
     if (!data) return []
-    const periodSet = new Set(data.by_month_category.map(r => r.month))
-    data.by_month.forEach(r => periodSet.add(r.month))
-    const allPeriods = Array.from(periodSet).sort()
-    return allPeriods.map(period => {
+    const periodSet = new Set(data.by_month_category.map((r) => r.month))
+    data.by_month.forEach((r) => periodSet.add(r.month))
+    return Array.from(periodSet).sort().map((period) => {
       const row: Record<string, number | string> = { month: period }
-      SERIES.forEach(s => {
-        const match = data.by_month_category.find(r => r.month === period && r.category === s.key)
-        row[s.key] = match ? match.amount : 0
-      })
+      SERIES.forEach((s) => { row[s.key] = data.by_month_category.find((r) => r.month === period && r.category === s.key)?.amount ?? 0 })
       return row
     })
   }, [data])
 
-  const summaryByCls = useMemo(() => {
-    if (!data) return {}
-    const map: Record<string, number> = {}
-    data.by_category.forEach(r => { map[r.category] = r.amount })
-    return map
-  }, [data])
-
-  const totalIncome = summaryByCls['income'] ?? 0
-  const totalSpend = summaryByCls['spend'] ?? 0
-  const totalTransfer = summaryByCls['internal_transfer'] ?? 0
+  const byCls = useMemo(() => Object.fromEntries((data?.by_category ?? []).map((r) => [r.category, r.amount])) as Record<string, number>, [data])
+  const totalIncome = byCls.income ?? 0
+  const totalSpend = byCls.spend ?? 0
   const netFlow = totalIncome - totalSpend
-
-  const cards = [
-    { label: 'Income', value: totalIncome, color: '#10b981' },
-    { label: 'Spend', value: totalSpend, color: '#f43f5e' },
-    { label: 'Net Flow', value: netFlow, color: netFlow >= 0 ? '#10b981' : '#f43f5e' },
-    { label: 'Transfers', value: totalTransfer, color: '#f59e0b' },
-  ]
-
-  const tabCls = (tab: TrendsTab) =>
-    `tap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-      activeTab === tab
-        ? 'bg-[var(--surface)] shadow-sm text-[var(--text)]'
-        : 'text-[var(--text-muted)] hover:text-[var(--text)]'
-    }`
-
-  const pillCls = (active: boolean) =>
-    `tap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-      active ? 'bg-[var(--surface)] shadow-sm text-[var(--text)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
-    }`
-
-  const periodLabel = (period: string): string => {
-    if (granularity === 'month') {
-      const [y, m] = period.split('-').map(Number)
-      return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
-    }
-    if (granularity === 'week') {
-      const { start, end } = periodDateRange(period, granularity)
-      const fmt = (s: string) => new Date(s + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-      return `${fmt(start)} – ${fmt(end)}`
-    }
-    return new Date(period + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-  }
+  const granularityLabel = granularity === 'day' ? 'Daily' : granularity === 'week' ? 'Weekly' : 'Monthly'
 
   return (
-    <div className="grid gap-4">
-      {/* Tab switcher */}
-      <div className="flex gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-0.5 w-fit">
-        <button type="button" onClick={() => changeTab('trends')} className={tabCls('trends')}>Trends</button>
-        <button type="button" onClick={() => changeTab('cashflow')} className={tabCls('cashflow')}>Cash Flow</button>
-      </div>
-
-      {activeTab === 'cashflow' ? (
-        <CashFlowSection householdId={householdId} />
-      ) : (
+    <PageLayout
+      title="Trends"
+      description={data ? <>{fmtDateShort(data.window.start)} – {fmtDateShort(data.window.end)}</> : undefined}
+      summary={(
         <>
-          {/* Granularity + range selector */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-[var(--text-muted)]">View:</span>
-              <div className="flex gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-0.5">
-                {(['day', 'week', 'month'] as Granularity[]).map(g => (
-                  <button key={g} type="button" onClick={() => changeGranularity(g)} className={pillCls(granularity === g)}>
-                    {g === 'day' ? 'Daily' : g === 'week' ? 'Weekly' : 'Monthly'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-[var(--text-muted)]">Range:</span>
-              <div className="flex gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-0.5">
-                {RANGE_OPTIONS[granularity].map(({ value, label }) => (
-                  <button key={value} type="button" onClick={() => setPeriods(value)} className={pillCls(periods === value)}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Summary KPI cards */}
-          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {cards.map((c) => (
-              <div key={c.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">{c.label}</p>
-                <p className="mt-1.5 text-2xl font-bold leading-none" style={{ color: c.color }}>
-                  <Money value={c.value} />
-                </p>
-              </div>
-            ))}
-          </section>
-
-          {error && <p className="error">{error}</p>}
-
-          {/* Grouped bar chart — all series, clickable bars drill into that period's transactions */}
-          <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
-            <h3 className="mb-3 text-base font-semibold text-[var(--text)]">
-              {granularity === 'day' ? 'Daily' : granularity === 'week' ? 'Weekly' : 'Monthly'} Breakdown
-            </h3>
-            {loading ? (
-              <div className="flex justify-center py-8"><CoinSpinner size={48} /></div>
-            ) : chartRows.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">No transactions in this window.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartRows} margin={{ top: 10, right: 10, left: 10, bottom: 0 }} barCategoryGap="20%">
-                  <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: ct.axis }} stroke={ct.grid} />
-                  <YAxis tick={{ fontSize: 11, fill: ct.axis }} stroke={ct.grid} tickFormatter={(v) => hidden ? '••' : `₹${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip cursor={{ fill: ct.grid, opacity: 0.3 }} content={(p) => <ChartTooltip {...p} fmt={fmtINR} />} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  {SERIES.map(s => (
-                    <Bar
-                      key={s.key}
-                      dataKey={s.key}
-                      name={s.label}
-                      fill={s.color}
-                      radius={[4, 4, 0, 0]}
-                      cursor="pointer"
-                      onClick={(entry: unknown) => {
-                        const row = entry as { month?: string }
-                        if (!row?.month) return
-                        setDrillDown({ kind: 'period', period: row.month, category: s.key, label: `${s.label} · ${periodLabel(row.month)}` })
-                      }}
-                    />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </article>
-
-          {/* Spend drill-down by category */}
-          <SpendCategoryBreakdown
-            householdId={householdId}
-            granularity={granularity}
-            periods={periods}
-            onSelectCategory={(category, label) => setDrillDown({ kind: 'category', category, label })}
-          />
-
-          {/* By member */}
-          {data && data.by_member.length > 0 && (
-            <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
-              <h3 className="mb-3 text-base font-semibold text-[var(--text)]">By Member</h3>
-              <ul className="grid gap-2.5">
-                {data.by_member.map((row) => {
-                  const pct = data.total > 0 ? (row.amount / data.total) * 100 : 0
-                  return (
-                    <li key={row.member_id ?? 'unassigned'}>
-                      <button
-                        type="button"
-                        onClick={() => setDrillDown({ kind: 'member', memberId: row.member_id, label: row.name })}
-                        className="w-full text-left"
-                      >
-                        <div className="mb-1 flex items-center justify-between text-sm">
-                          <span className="font-medium text-[var(--text)] hover:underline">{row.name}</span>
-                          <span>
-                            <strong className="text-[var(--text)]"><Money value={row.amount} /></strong>
-                            <span className="ml-2 text-xs text-[var(--text-muted)]">{pct.toFixed(1)}%</span>
-                          </span>
-                        </div>
-                        <div className="fill-bar">
-                          <div className="fill-bar-inner bg-primary-500" style={{ width: `${pct}%` }} />
-                        </div>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            </article>
-          )}
-
-          {/* Drill-down transaction table */}
-          {drillDown && data && (
-            <DrillDownTable
-              householdId={householdId}
-              drillDown={drillDown}
-              granularity={granularity}
-              windowStart={data.window.start}
-              windowEnd={data.window.end}
-              onClose={() => setDrillDown(null)}
-            />
-          )}
+          <StatCard label="Income" loading={loading} value={<Amount value={totalIncome} format="compact" />} />
+          <StatCard label="Spend" loading={loading} value={<Amount value={totalSpend} format="compact" />} />
+          <StatCard label="Net flow" loading={loading} value={<Amount value={netFlow} format="compact" signed tone="gain" />} subtitle="Income − spend" />
+          <StatCard label="Transfers" loading={loading} value={<Amount value={byCls.internal_transfer ?? 0} format="compact" />} subtitle="Between your accounts" />
         </>
       )}
-    </div>
+      notices={(
+        <>
+          {error && <Notice tone="danger" title="Couldn’t load trends">{error}</Notice>}
+          {memberName && scopeMemberId !== null && <Notice title={`Showing the whole household`}>Trends aren’t split by member — use “By member” below for {memberName}’s spend.</Notice>}
+        </>
+      )}
+      toolbar={(
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          {tabs}
+          <FilterBar
+            className="min-w-0 flex-1 md:flex-none"
+            controls={(
+              <>
+                <ToolbarSelect label="View" value={granularity}
+                  options={[{ value: 'day', label: 'Daily' }, { value: 'week', label: 'Weekly' }, { value: 'month', label: 'Monthly' }]}
+                  onChange={(v) => changeGranularity(v as Granularity)} />
+                <ToolbarSelect label="Range" value={String(periods)}
+                  options={RANGE_OPTIONS[granularity].map((o) => ({ value: String(o.value), label: o.label }))}
+                  onChange={(v) => { setPeriods(Number(v)); setDrillDown(null) }} />
+              </>
+            )}
+          />
+        </div>
+      )}
+    >
+      <ChartCard
+        title={`${granularityLabel} breakdown`}
+        subtitle="Select a bar to see its transactions"
+        loading={loading}
+        empty={!loading && chartRows.length === 0 ? { title: 'No transactions in this window' } : null}
+        legend={SERIES.map((s) => ({ key: s.key, label: s.label, color: FLOW_COLOR[s.key], value: byCls[s.key] ?? 0 }))}
+      >
+        <ResponsiveContainer width="100%" height={300} minWidth={0}>
+          <BarChart data={chartRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={2}>
+            <CartesianGrid {...ct.gridProps} />
+            <XAxis dataKey="month" {...ct.xAxis} tickFormatter={(p: string) => (granularity === 'month' ? fmtMonthAxis(p) : fmtDateShort(p))} />
+            <YAxis {...ct.yAxisINR} />
+            <Tooltip cursor={{ fill: ct.grid, opacity: 0.3 }} content={(p) => <ChartTooltip {...p} fmt={fmt} labelFmt={(l) => periodLabel(l, granularity)} />} />
+            {SERIES.map((s) => (
+              <Bar
+                key={s.key}
+                dataKey={s.key}
+                name={s.label}
+                fill={FLOW_COLOR[s.key]}
+                radius={[4, 4, 0, 0]}
+                cursor="pointer"
+                isAnimationActive={false}
+                onClick={(entry: unknown) => {
+                  const row = entry as { month?: string }
+                  if (row?.month) setDrillDown({ kind: 'period', period: row.month, category: s.key, label: `${s.label} · ${periodLabel(row.month, granularity)}` })
+                }}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <SpendCategoryBreakdown householdId={householdId} granularity={granularity} periods={periods}
+          onSelectCategory={(category, label) => setDrillDown({ kind: 'category', category, label })} />
+
+        {data && data.by_member.length > 0 && (
+          <Card title="Spend by member" subtitle="Select a member to see their spends">
+            <BarList
+              rows={data.by_member.map((r) => ({ key: String(r.member_id ?? 'none'), label: r.name, value: r.amount, highlight: r.member_id === scopeMemberId }))}
+              total={data.total}
+              onSelect={(key, label) => setDrillDown({ kind: 'member', memberId: key === 'none' ? null : Number(key), label })}
+            />
+          </Card>
+        )}
+      </div>
+
+      {drillDown && data && (
+        <DrillDownTable
+          householdId={householdId}
+          drillDown={drillDown}
+          granularity={granularity}
+          windowStart={data.window.start}
+          windowEnd={data.window.end}
+          onClose={() => setDrillDown(null)}
+        />
+      )}
+    </PageLayout>
   )
 }
 
-// Transaction table shown below the charts when a bar/category/member is clicked.
+/** Ranked horizontal bars: label · bar · amount · %. Single hue — the labels carry identity. */
+function BarList({ rows, total, onSelect, colorOf }: {
+  rows: { key: string; label: string; value: number; highlight?: boolean }[]
+  total: number
+  onSelect: (key: string, label: string) => void
+  colorOf?: (key: string) => string
+}) {
+  const max = Math.max(1, ...rows.map((r) => r.value))
+  return (
+    <ul className="m-0 grid list-none gap-1 p-0">
+      {rows.map((r) => (
+        <li key={r.key}>
+          <button type="button" onClick={() => onSelect(r.key, r.label)}
+            className="grid min-h-11 w-full grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3 rounded-[var(--radius-md)] px-2 text-left hover:bg-surface-2 sm:grid-cols-[minmax(0,11rem)_1fr_auto_3rem]">
+            <span className={r.highlight ? 'truncate text-sm font-semibold text-ink' : 'truncate text-sm text-ink-2'}>{r.label}</span>
+            <span className="h-2 overflow-hidden rounded-full bg-surface-2" aria-hidden>
+              <span className="block h-full rounded-full" style={{ width: `${(r.value / max) * 100}%`, background: colorOf?.(r.key) ?? 'var(--primary)' }} />
+            </span>
+            <Amount value={r.value} format="compact" className="text-right text-sm font-medium text-ink" />
+            <span className="hidden text-right text-sm tabular-nums text-ink-muted sm:block">{total > 0 ? `${((r.value / total) * 100).toFixed(1)}%` : '—'}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+const txColumns = (showClassification: boolean): DataTableColumn<Transaction>[] => [
+  { key: 'date', label: 'Date', mobile: 'meta', render: (t) => <DateText value={t.tx_date} format="short" className="whitespace-nowrap text-ink-2" /> },
+  { key: 'description', label: 'Description', mobile: 'title',
+    render: (t) => <span className="block max-w-[24rem] truncate text-ink" title={t.description || t.external_reference}>{t.description || t.external_reference || '—'}</span> },
+  { key: 'type', label: 'Type', mobile: 'subtitle', render: (t) => <span className="capitalize text-ink-2">{t.transaction_type.replace(/_/g, ' ')}</span> },
+  ...(showClassification ? [{ key: 'classification', label: 'Classification', mobile: 'hide' as const,
+    render: (t: Transaction) => <span className="capitalize text-ink-2">{t.classification ? t.classification.replace(/_/g, ' ') : '—'}</span> }] : []),
+  { key: 'amount', label: 'Amount', align: 'right', mobile: 'value',
+    render: (t) => <Amount value={t.direction === 'outflow' ? -Number(t.amount) : Number(t.amount)} signed tone={t.direction === 'outflow' ? 'debit' : 'credit'} className="font-semibold" /> },
+]
+
+// Transactions behind a clicked bar / category / member.
 function DrillDownTable({ householdId, drillDown, granularity, windowStart, windowEnd, onClose }: {
   householdId: number
   drillDown: DrillDown
@@ -338,88 +283,43 @@ function DrillDownTable({ householdId, drillDown, granularity, windowStart, wind
     queryKey: ['spend-drilldown', householdId, drillDown, granularity, windowStart, windowEnd],
     queryFn: () => {
       const params: Parameters<typeof ledgerApi.listTransactionsPage>[0] = {
-        householdId,
-        page: 1,
-        pageSize: 100,
-        ordering: '-tx_date',
-        txDateAfter: windowStart,
-        txDateBefore: windowEnd,
+        householdId, page: 1, pageSize: 100, ordering: '-tx_date', txDateAfter: windowStart, txDateBefore: windowEnd,
       }
-
       if (drillDown.kind === 'period') {
         const { start, end } = periodDateRange(drillDown.period, granularity)
         params.txDateAfter = start
         params.txDateBefore = end
-        if (drillDown.category) {
-          if (drillDown.category === 'income') params.classification = 'income'
-          else params.classification = drillDown.category
-        }
+        if (drillDown.category) params.classification = drillDown.category
       } else if (drillDown.kind === 'category') {
         params.classification = 'spend'
         params.spendCategory = drillDown.category
-      } else if (drillDown.kind === 'member') {
-        if (drillDown.memberId !== null) params.member = drillDown.memberId
+      } else if (drillDown.kind === 'member' && drillDown.memberId !== null) {
+        params.member = drillDown.memberId
       }
-
       return ledgerApi.listTransactionsPage(params)
     },
   })
-  const rows: Transaction[] = query.data?.results ?? []
+  const rows = query.data?.results ?? []
   const count = query.data?.count ?? 0
-  const loading = query.isPending
-  const error = query.error ? normalizeApiError(query.error) : ''
-
   return (
-    <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-base font-semibold text-[var(--text)]">{drillDown.label}</h3>
-        <button type="button" onClick={onClose} className="text-xs text-[var(--text-muted)] hover:text-[var(--text)]">✕ Close</button>
-      </div>
-      {loading ? (
-        <div className="flex justify-center py-6"><CoinSpinner size={36} /></div>
-      ) : error ? (
-        <p className="text-sm text-red-500">{error}</p>
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-[var(--text-muted)]">No transactions found.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-          <table className="w-full text-sm">
-            <thead className="bg-[var(--surface-2)]">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Date</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Description</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Type</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(t => (
-                <tr key={t.id} className="border-t border-[var(--border)]">
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-faint)]">{t.tx_date}</td>
-                  <td className="max-w-[20rem] truncate px-3 py-2 text-xs text-[var(--text-2)]" title={t.description || t.external_reference}>
-                    {t.description || t.external_reference || '—'}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-muted)]">{t.transaction_type.replace(/_/g, ' ')}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold"><Money value={t.amount} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {count > rows.length && (
-            <p className="px-3 py-2 text-xs text-[var(--text-muted)]">Showing {rows.length} of {count} — narrow the range or category for more detail.</p>
-          )}
-        </div>
-      )}
-    </article>
+    <Card title={drillDown.label} subtitle={count > rows.length ? `Showing ${rows.length} of ${count} — narrow the range for more detail` : undefined}
+      actions={<IconButton label="Close" icon={<X />} onClick={onClose} />}>
+      <DataTable
+        ariaLabel={drillDown.label}
+        columns={txColumns(false)}
+        rows={rows}
+        rowKey={(t) => t.id}
+        loading={query.isPending}
+        error={query.error ? { message: normalizeApiError(query.error), onRetry: () => void query.refetch() } : null}
+        emptyState="No transactions found"
+        maxHeight="28rem"
+      />
+    </Card>
   )
 }
 
-const CASHFLOW_BUCKET_LABELS: Record<CashFlowBucket, string> = {
-  income: 'Income', expense: 'Expense', investment: 'Investment', savings: 'Savings',
-}
-
-// Cash Flow tab — yearly income/expense/investment/savings breakdown
-function CashFlowSection({ householdId }: { householdId: number }) {
+// Cash flow tab — yearly income / expense / investment / savings.
+function CashFlowSection({ householdId, tabs }: { householdId: number; tabs: React.ReactNode }) {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const cashflow = useQuery({
@@ -427,106 +327,88 @@ function CashFlowSection({ householdId }: { householdId: number }) {
     queryFn: async () => (await getJson<{ cashflow: CashFlowPoint[] }>(`/api/cashflow?${toQueryString({ household_id: householdId, year })}`)).cashflow,
   })
   const data: CashFlowPoint[] = cashflow.data ?? NO_CASHFLOW
+  const loading = cashflow.isPending
   const error = cashflow.error ? normalizeApiError(cashflow.error) : ''
   const [cfDrillDown, setCfDrillDown] = useState<{ month: string; bucket: CashFlowBucket } | null>(null)
 
-
-  const totalIncome = data.reduce((s, r) => s + r.income, 0)
-  const totalExpense = data.reduce((s, r) => s + r.expense, 0)
-  const totalInvestment = data.reduce((s, r) => s + r.investment, 0)
-  const totalSavings = data.reduce((s, r) => s + r.savings, 0)
-  const savingsRate = totalIncome > 0 ? ((totalSavings / totalIncome) * 100).toFixed(1) : 'N/A'
+  const total = (k: CashFlowBucket) => data.reduce((s, r) => s + r[k], 0)
+  const totalIncome = total('income')
+  const savingsRate = totalIncome > 0 ? (total('savings') / totalIncome) * 100 : null
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i)
 
-  const cellCls = 'cursor-pointer hover:underline'
+  const cell = (r: CashFlowPoint, bucket: CashFlowBucket) => (
+    <button type="button" onClick={(e) => { e.stopPropagation(); setCfDrillDown({ month: r.month, bucket }) }}
+      className="hover:underline underline-offset-4" aria-label={`${bucket} in ${fmtMonth(r.month)}`}>
+      <Amount value={r[bucket]} tone={bucket === 'savings' ? 'gain' : 'default'} />
+    </button>
+  )
 
   return (
-    <>
-      <section className="cards">
-        <article className="card">
-          <h2>Income</h2>
-          <strong><Money value={totalIncome} /></strong>
-        </article>
-        <article className="card">
-          <h2>Expense</h2>
-          <strong><Money value={totalExpense} /></strong>
-        </article>
-        <article className="card">
-          <h2>Investment</h2>
-          <strong><Money value={totalInvestment} /></strong>
-        </article>
-        <article className="card">
-          <h2>Savings Rate</h2>
-          <strong>{savingsRate}{totalIncome > 0 ? '%' : ''}</strong>
-        </article>
-      </section>
-
-      <article className="panel">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-          <h3 style={{ margin: 0 }}>Monthly Cash Flow</h3>
-          <label>
-            Year&nbsp;
-            <select value={year} onChange={(e) => { setYear(Number(e.target.value)); setCfDrillDown(null) }}>
-              {years.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </label>
+    <PageLayout
+      title="Trends"
+      description={`Cash flow in ${year}`}
+      summary={(
+        <>
+          <StatCard label="Income" loading={loading} value={<Amount value={totalIncome} format="compact" />} />
+          <StatCard label="Expense" loading={loading} value={<Amount value={total('expense')} format="compact" />} />
+          <StatCard label="Investment" loading={loading} value={<Amount value={total('investment')} format="compact" />} />
+          <StatCard label="Savings rate" loading={loading} value={savingsRate === null ? '—' : `${savingsRate.toFixed(1)}%`}
+            subtitle={<>Saved <Amount value={total('savings')} format="compact" /></>} />
+        </>
+      )}
+      notices={error ? <Notice tone="danger" title="Couldn’t load cash flow">{error}</Notice> : undefined}
+      toolbar={(
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          {tabs}
+          <FilterBar className="min-w-0 flex-1 md:flex-none" controls={(
+            <ToolbarSelect label="Year" value={String(year)} options={years.map((y) => ({ value: String(y), label: String(y) }))}
+              onChange={(v) => { setYear(Number(v)); setCfDrillDown(null) }} />
+          )} />
         </div>
-        {error && <p className="error">{error}</p>}
-        {data.length === 0 ? (
-          <p>No transactions found for {year}.</p>
-        ) : (
-          <CashFlowChart data={data} onSelect={(month, bucket) => setCfDrillDown({ month, bucket })} />
-        )}
-      </article>
+      )}
+    >
+      <ChartCard
+        title="Monthly cash flow"
+        subtitle="Select a bar to see its transactions"
+        loading={loading}
+        empty={!loading && data.length === 0 ? { title: `No transactions in ${year}` } : null}
+        legend={CASHFLOW_SERIES.map((s) => ({ key: s.key, label: s.label, color: CASHFLOW_COLOR[s.key], value: total(s.key) }))}
+      >
+        <CashFlowChart data={data} onSelect={(month, bucket) => setCfDrillDown({ month, bucket })} />
+      </ChartCard>
 
-      <article className="panel">
-        <h3>Monthly Breakdown</h3>
-        <p className="mb-2 text-xs text-[var(--text-muted)]">Click a figure to see the transactions behind it.</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th>Income</th>
-              <th>Expense</th>
-              <th>Investment</th>
-              <th>Savings</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((r) => (
-              <tr key={r.month}>
-                <td>{r.month}</td>
-                <td className={cellCls} onClick={() => setCfDrillDown({ month: r.month, bucket: 'income' })}><Money value={r.income} /></td>
-                <td className={cellCls} onClick={() => setCfDrillDown({ month: r.month, bucket: 'expense' })}><Money value={r.expense} /></td>
-                <td className={cellCls} onClick={() => setCfDrillDown({ month: r.month, bucket: 'investment' })}><Money value={r.investment} /></td>
-                <td
-                  className={cellCls}
-                  style={{ color: r.savings >= 0 ? '#10b981' : '#f43f5e' }}
-                  onClick={() => setCfDrillDown({ month: r.month, bucket: 'savings' })}
-                >
-                  <Money value={r.savings} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </article>
+      <Card title="Monthly breakdown" subtitle="Select a figure to see the transactions behind it" flush>
+        <div className="px-4 pb-4 md:px-6 md:pb-6">
+          {loading ? <Skeleton variant="table" rows={6} /> : (
+            <DataTable
+              ariaLabel="Monthly cash flow"
+              maxHeight="none"
+              columns={[
+                { key: 'month', label: 'Month', mobile: 'title', render: (r) => <span className="font-medium text-ink">{fmtMonth(r.month)}</span> },
+                ...CASHFLOW_SERIES.map((s) => ({
+                  key: s.key, label: s.label, align: 'right' as const,
+                  mobile: (s.key === 'savings' ? 'value' : s.key === 'income' ? 'meta' : 'hide') as 'value' | 'meta' | 'hide',
+                  render: (r: CashFlowPoint) => cell(r, s.key),
+                })),
+              ]}
+              rows={data}
+              rowKey={(r) => r.month}
+              emptyState={<EmptyState title={`No transactions in ${year}`} />}
+            />
+          )}
+        </div>
+      </Card>
 
       {cfDrillDown && (
-        <CashFlowDrillDown
-          householdId={householdId}
-          month={cfDrillDown.month}
-          bucket={cfDrillDown.bucket}
-          onClose={() => setCfDrillDown(null)}
-        />
+        <CashFlowDrillDown householdId={householdId} month={cfDrillDown.month} bucket={cfDrillDown.bucket} onClose={() => setCfDrillDown(null)} />
       )}
-    </>
+    </PageLayout>
   )
 }
 
-// Transaction list for a clicked Cash Flow chart bar / breakdown cell, using the
-// same cashflow_bucket filter as insights.services.compute_cashflow so the list
-// matches the figure exactly. Clicking a row opens the same edit form as Ledger.
+// Transactions behind a cash-flow figure, using the same cashflow_bucket filter as
+// insights.services.compute_cashflow so the list matches the figure. A row opens the
+// same edit form as the Ledger.
 function CashFlowDrillDown({ householdId, month, bucket, onClose }: {
   householdId: number
   month: string
@@ -548,15 +430,12 @@ function CashFlowDrillDown({ householdId, month, bucket, onClose }: {
   const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
 
   const load = async () => {
-    setLoading(true)
-    setError('')
+    setLoading(true); setError('')
     try {
       const res = await ledgerApi.listTransactionsPage({
-        householdId, page: 1, pageSize: 100, ordering: '-amount',
-        txDateAfter: start, txDateBefore: end, cashflowBucket: bucket,
+        householdId, page: 1, pageSize: 100, ordering: '-amount', txDateAfter: start, txDateBefore: end, cashflowBucket: bucket,
       })
-      setRows(res.results)
-      setCount(res.count)
+      setRows(res.results); setCount(res.count)
     } catch (e) {
       setError(normalizeApiError(e))
     } finally {
@@ -564,13 +443,10 @@ function CashFlowDrillDown({ householdId, month, bucket, onClose }: {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void load() }, [householdId, month, bucket])
 
-  const openEdit = (t: Transaction) => {
-    setEditingId(t.id)
-    setEditForm(txFormFromTransaction(t))
-    setFormError('')
-  }
+  const openEdit = (t: Transaction) => { setEditingId(t.id); setEditForm(txFormFromTransaction(t)); setFormError('') }
 
   const saveEdit = async () => {
     if (editingId === null) return
@@ -596,56 +472,23 @@ function CashFlowDrillDown({ householdId, month, bucket, onClose }: {
     }
   }
 
+  const label = CASHFLOW_SERIES.find((s) => s.key === bucket)?.label ?? bucket
   return (
-    <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-base font-semibold text-[var(--text)]">{CASHFLOW_BUCKET_LABELS[bucket]} · {month}</h3>
-        <button type="button" onClick={onClose} className="text-xs text-[var(--text-muted)] hover:text-[var(--text)]">✕ Close</button>
-      </div>
-      {loading ? (
-        <div className="flex justify-center py-6"><CoinSpinner size={36} /></div>
-      ) : error ? (
-        <p className="text-sm text-red-500">{error}</p>
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-[var(--text-muted)]">No transactions found.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-          <table className="w-full text-sm">
-            <thead className="bg-[var(--surface-2)]">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Date</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Description</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Type</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Classification</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(t => (
-                <tr
-                  key={t.id}
-                  className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--surface-2)]"
-                  onClick={() => openEdit(t)}
-                >
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-faint)]">{t.tx_date}</td>
-                  <td className="max-w-[20rem] truncate px-3 py-2 text-xs text-[var(--text-2)]" title={t.description || t.external_reference}>
-                    {t.description || t.external_reference || '—'}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-muted)]">{t.transaction_type.replace(/_/g, ' ')}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs capitalize text-[var(--text-muted)]">{t.classification ? t.classification.replace(/_/g, ' ') : '—'}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-semibold"><Money value={t.amount} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {count > rows.length && (
-            <p className="px-3 py-2 text-xs text-[var(--text-muted)]">Showing {rows.length} of {count}.</p>
-          )}
-        </div>
-      )}
-
+    <Card title={`${label} · ${fmtMonth(month)}`} subtitle={count > rows.length ? `Showing ${rows.length} of ${count}` : 'Select a transaction to edit it'}
+      actions={<IconButton label="Close" icon={<X />} onClick={onClose} />}>
+      <DataTable
+        ariaLabel={`${label} transactions`}
+        columns={txColumns(true)}
+        rows={rows}
+        rowKey={(t) => t.id}
+        loading={loading}
+        error={error ? { message: error, onRetry: () => void load() } : null}
+        emptyState="No transactions found"
+        onRowClick={canWrite ? openEdit : undefined}
+        maxHeight="28rem"
+      />
       {editingId !== null && (
-        <Sheet title={`Editing #${editingId}`} onClose={() => setEditingId(null)}>
+        <Sheet title="Edit transaction" onClose={() => setEditingId(null)}>
           <TxFormFields
             form={editForm} onChange={setEditForm}
             accountOptions={accounts} memberOptions={members} instrumentOptions={instruments}
@@ -655,53 +498,35 @@ function CashFlowDrillDown({ householdId, month, bucket, onClose }: {
           />
         </Sheet>
       )}
-    </article>
+    </Card>
   )
 }
 
-// Separate spend-by-category breakdown pulled with classification=spend
-function SpendCategoryBreakdown({
-  householdId, granularity, periods, onSelectCategory,
-}: { householdId: number; granularity: Granularity; periods: number; onSelectCategory: (category: string, label: string) => void }) {
+// Spend by category (classification=spend).
+function SpendCategoryBreakdown({ householdId, granularity, periods, onSelectCategory }: {
+  householdId: number; granularity: Granularity; periods: number; onSelectCategory: (category: string, label: string) => void
+}) {
   const [data, setData] = useState<SpendAnalytics | null>(null)
   const errorToast = useErrorToast()
   useEffect(() => {
     let active = true
     expenseApi.fetchSpendAnalytics(householdId, periods, 'spend', granularity, periods)
-      .then(r => { if (active) setData(r) })
+      .then((r) => { if (active) setData(r) })
       .catch((e) => { if (active) errorToast('Couldn’t load spend analytics')(e) })
     return () => { active = false }
   }, [householdId, granularity, periods, errorToast])
 
-  if (!data || data.by_category.length === 0) return null
-  const total = data.total
-
+  if (!data) return <Skeleton variant="card" />
   return (
-    <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-card)]">
-      <h3 className="mb-3 text-base font-semibold text-[var(--text)]">Spend by Category</h3>
-      <ul className="grid gap-2.5">
-        {data.by_category.map(row => {
-          const pct = total > 0 ? (row.amount / total) * 100 : 0
-          const color = CATEGORY_COLORS[row.category] || '#64748b'
-          const label = row.label || row.category || 'Uncategorised'
-          return (
-            <li key={row.category}>
-              <button type="button" onClick={() => onSelectCategory(row.category, label)} className="w-full text-left">
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="font-medium text-[var(--text)] hover:underline">{label}</span>
-                  <span>
-                    <strong className="text-[var(--text)]"><Money value={row.amount} /></strong>
-                    <span className="ml-2 text-xs text-[var(--text-muted)]">{pct.toFixed(1)}%</span>
-                  </span>
-                </div>
-                <div className="fill-bar">
-                  <div className="fill-bar-inner" style={{ width: `${pct}%`, background: color }} />
-                </div>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    </article>
+    <Card title="Spend by category" subtitle="Select a category to see its spends">
+      {data.by_category.length === 0 ? <EmptyState title="No spends in this window" /> : (
+        <BarList
+          rows={data.by_category.map((r) => ({ key: r.category, label: r.label || r.category || 'Uncategorised', value: r.amount }))}
+          total={data.total}
+          onSelect={onSelectCategory}
+          colorOf={spendCategoryColor}
+        />
+      )}
+    </Card>
   )
 }

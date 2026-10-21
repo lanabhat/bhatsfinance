@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useTheme } from '../../context/ThemeContext'
+import { usePrivacy } from '../../context/PrivacyContext'
+import { fmtINRAxis, MASKED_TEXT } from '../../lib/fmt'
 
 /**
- * Resolves chart colors from the app's CSS design tokens so Recharts is
- * theme-aware (light & dark) instead of using hardcoded hex values.
+ * Resolves chart colours from the CSS design tokens so Recharts follows light & dark,
+ * plus the shared axis props every chart uses (12px ticks, no tick/axis lines, a
+ * recessive grid, compact ₹ on value axes — masked in privacy mode).
  */
 export function useChartTheme() {
   const { theme } = useTheme()
-  // Re-read CSS vars whenever theme changes (system toggles included)
+  const { hidden } = usePrivacy()
   const [tick, setTick] = useState(0)
   useEffect(() => {
     const id = requestAnimationFrame(() => setTick((t) => t + 1))
@@ -20,41 +23,56 @@ export function useChartTheme() {
     return v || fallback
   }
 
-  // tick is referenced so the memo recomputes on theme change
   void tick
+  const grid = read('--border', '#e4e4e7')
+  const axis = read('--text-muted', '#71717a')
   return {
-    grid: read('--border', '#e4e4e7'),
-    axis: read('--text-muted', '#71717a'),
+    grid,
+    axis,
     surface: read('--surface', '#ffffff'),
     text: read('--text', '#18181b'),
     border: read('--border', '#e4e4e7'),
+    primary: read('--primary', '#2563eb'),
+    /** Spread onto <XAxis>. */
+    xAxis: { tick: { fontSize: 12, fill: axis }, tickLine: false, axisLine: { stroke: grid }, minTickGap: 24 },
+    /** Spread onto a value <YAxis>: compact ₹ ticks, masked when amounts are hidden. */
+    yAxisINR: {
+      tick: { fontSize: 12, fill: axis }, tickLine: false, axisLine: false, width: 56,
+      tickFormatter: (v: number) => (hidden ? '•••' : fmtINRAxis(v)),
+    },
+    /** Spread onto <CartesianGrid>: horizontal guides only. */
+    gridProps: { stroke: grid, strokeDasharray: '3 3', vertical: false },
   }
 }
 
-type TooltipEntry = { name?: unknown; value?: unknown; color?: string }
+type TooltipEntry = { name?: unknown; value?: unknown; color?: string; payload?: Record<string, unknown> }
 type TooltipProps = {
   active?: boolean
   payload?: readonly TooltipEntry[]
   label?: unknown
+  /** Formats each value; masked automatically when amounts are hidden. */
   fmt: (v: number) => string
+  /** Formats the header (e.g. dates). */
+  labelFmt?: (label: string) => string
 }
 
-/** Dark-mode-aware glass tooltip for all charts. */
-export function ChartTooltip({ active, payload, label, fmt }: TooltipProps) {
+/** The one chart tooltip. */
+export function ChartTooltip({ active, payload, label, fmt, labelFmt }: TooltipProps) {
+  const { hidden } = usePrivacy()
   if (!active || !payload || payload.length === 0) return null
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 shadow-[var(--shadow-modal)]">
+    <div className="rounded-[var(--radius-md)] border border-line bg-surface px-3 py-2 shadow-[var(--shadow-modal)]">
       {label != null && label !== '' && (
-        <p className="mb-1 text-xs font-semibold text-[var(--text)]">{String(label)}</p>
+        <p className="mb-1 text-xs font-semibold text-ink">{labelFmt ? labelFmt(String(label)) : String(label)}</p>
       )}
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-1">
         {payload.map((e, i) => (
           <div key={i} className="flex items-center justify-between gap-4 text-xs">
-            <span className="flex items-center gap-1.5 text-[var(--text-muted)]">
-              <span className="inline-block h-2 w-2 rounded-full" style={{ background: e.color }} />
+            <span className="flex items-center gap-2 text-ink-muted">
+              <span className="inline-block h-2 w-2 rounded-sm" style={{ background: e.color }} />
               {String(e.name ?? '')}
             </span>
-            <span className="font-medium text-[var(--text)]">{fmt(Number(e.value))}</span>
+            <span className="font-medium text-ink tabular-nums">{hidden ? MASKED_TEXT : fmt(Number(e.value))}</span>
           </div>
         ))}
       </div>

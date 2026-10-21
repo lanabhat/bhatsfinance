@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
+const INP = 'w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent'
 
 /**
  * Text-input-driven filtered picker for choosing one item out of a large
@@ -92,7 +92,7 @@ export function SearchableSelect<T>({
             filtered.map(({ group, rows }) => rows.length === 0 ? null : (
               <div key={group || '_'}>
                 {group && (
-                  <p className="sticky top-0 bg-[var(--surface-2)] px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{group}</p>
+                  <p className="sticky top-0 bg-[var(--surface-2)] px-3 py-1 text-xs font-semibold text-ink-muted">{group}</p>
                 )}
                 {rows.map((item) => {
                   rowIndex += 1
@@ -105,7 +105,7 @@ export function SearchableSelect<T>({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => select(item)}
                       onMouseEnter={() => setHighlight(rowIndex)}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${isHighlighted ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${isHighlighted ? 'bg-accent-subtle' : ''}`}
                     >
                       {getIcon && <span className="shrink-0 text-sm">{getIcon(item)}</span>}
                       <span className="min-w-0 flex-1 truncate text-[var(--text)]">{getLabel(item)}</span>

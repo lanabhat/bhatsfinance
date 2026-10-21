@@ -26,7 +26,7 @@ export function Tooltip({ content, children, position = 'top' }: Props) {
       {visible && (
         <span
           role="tooltip"
-          className={`pointer-events-none absolute z-50 whitespace-nowrap rounded-lg bg-zinc-900 px-3 py-1.5 text-xs text-white shadow-lg dark:bg-zinc-700 ${posClass}`}
+          className={`pointer-events-none absolute z-50 whitespace-nowrap rounded-[var(--radius-md)] bg-ink px-3 py-1.5 text-xs text-surface shadow-lg ${posClass}`}
         >
           {content}
         </span>

@@ -56,30 +56,30 @@ export function AllocationTreemap({ filters, rowsFor, set, toggle }: Props) {
     else toggle('holding', name)
   }
 
-  const crumb = 'text-xs text-primary-600 hover:underline dark:text-primary-300'
+  const crumb = 'text-xs text-accent hover:underline'
   return (
-    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+    <section className="min-w-0 rounded-[var(--radius-lg)] border border-line bg-surface p-4 shadow-[var(--shadow-card)] md:p-6">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <nav className="flex flex-wrap items-center gap-1 text-xs text-[var(--text-muted)]" aria-label="Treemap drill-down">
-          <button type="button" className={level === 'type' ? 'font-semibold text-[var(--text)]' : crumb}
+        <nav className="flex flex-wrap items-center gap-1 text-xs text-ink-muted" aria-label="Treemap drill-down">
+          <button type="button" className={level === 'type' ? 'font-semibold text-ink' : crumb}
             onClick={() => { set('type', []); set('classification', []); set('holding', []) }}>
             Overview
           </button>
           {oneType && <>
             <span>›</span>
-            <button type="button" className={level === 'classification' ? 'font-semibold text-[var(--text)]' : crumb}
+            <button type="button" className={level === 'classification' ? 'font-semibold text-ink' : crumb}
               onClick={() => { set('classification', []); set('holding', []) }}>
               {oneType}
             </button>
           </>}
-          {oneClass && <><span>›</span><span className="font-semibold text-[var(--text)]">{oneClass}</span></>}
+          {oneClass && <><span>›</span><span className="font-semibold text-ink">{oneClass}</span></>}
         </nav>
-        <span className="text-[11px] text-[var(--text-muted)]">
+        <span className="text-xs text-ink-muted">
           {level === 'holding' ? 'Click holdings to select them' : 'Click a block to drill in'}
         </span>
       </div>
       {data.length === 0 ? (
-        <p className="py-10 text-center text-xs text-[var(--text-muted)]">Nothing in this view.</p>
+        <p className="py-10 text-center text-xs text-ink-muted">Nothing in this view.</p>
       ) : (
         <div className="h-[320px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -101,7 +101,7 @@ export function AllocationTreemap({ filters, rowsFor, set, toggle }: Props) {
                           {name.length > Math.floor(width / 7.5) ? `${name.slice(0, Math.max(3, Math.floor(width / 7.5) - 1))}…` : name}
                         </text>
                         {height > 46 && (
-                          <text x={x + 8} y={y + 34} fill={ink} fontSize={11} opacity={0.9}>{share.toFixed(1)}%</text>
+                          <text x={x + 8} y={y + 34} fill={ink} fontSize={12} opacity={0.9}>{share.toFixed(1)}%</text>
                         )}
                       </>
                     )}
@@ -112,9 +112,9 @@ export function AllocationTreemap({ filters, rowsFor, set, toggle }: Props) {
                 const cell = active ? (payload?.[0]?.payload as Cell | undefined) : undefined
                 if (!cell) return null
                 return (
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 shadow-[var(--shadow-modal)]">
-                    <p className="text-sm font-semibold tabular-nums text-[var(--text)]">{money.full(cell.size)}</p>
-                    <p className="text-xs text-[var(--text-muted)]">{cell.name} · {cell.share.toFixed(1)}%</p>
+                  <div className="rounded-[var(--radius-md)] border border-line bg-surface px-3 py-2 shadow-[var(--shadow-modal)]">
+                    <p className="text-sm font-semibold tabular-nums text-ink">{money.full(cell.size)}</p>
+                    <p className="text-xs text-ink-muted">{cell.name} · {cell.share.toFixed(1)}%</p>
                   </div>
                 )
               }} />

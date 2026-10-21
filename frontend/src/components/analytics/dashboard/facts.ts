@@ -1,6 +1,7 @@
 import { useTheme } from '../../../context/ThemeContext'
 import { usePrivacy } from '../../../context/PrivacyContext'
-import { fmtINR, fmtINRCompact } from '../../../lib/fmt'
+import { fmtINR, fmtINRCompact, MASKED_TEXT } from '../../../lib/fmt'
+import { resolveCssColor } from '../../../lib/palette'
 
 /** One holding × member row from GET /api/analytics/facts. */
 export type Fact = {
@@ -58,16 +59,15 @@ export function aggregate(rows: Fact[], dim: Dim): Bucket[] {
 // the dataviz palette checker in both modes; light-mode yellow/aqua/magenta sit
 // below 3:1, so every use pairs the colour with a visible label.
 export const ASSET_CLASS_ORDER = ['Equity', 'Debt', 'Retirement', 'Real estate', 'Gold', 'Hybrid', 'Cash', 'Other']
-const CATEGORICAL_LIGHT = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948']
-const CATEGORICAL_DARK = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767']
-
-/** Chart colours for the current theme: the single bar hue, its dimmed step, and asset-class slots. */
+/** Chart colours for the current theme: the single bar hue, its dimmed step, and asset-class
+ *  slots — read from the shared --series-* tokens (index.css), resolved to concrete colours
+ *  because the treemap computes label contrast from them. */
 export function useDashboardColors() {
   const { isDark } = useTheme()
-  const palette = isDark ? CATEGORICAL_DARK : CATEGORICAL_LIGHT
+  const palette = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => resolveCssColor(`var(--series-${i})`))
   return {
-    bar: isDark ? '#3987e5' : '#2a78d6',
-    barDim: isDark ? '#184f95' : '#b7d3f6',
+    bar: palette[0],
+    barDim: isDark ? '#184f95' : '#b7d3f6', // sequential ramp step: the "not selected" bar
     assetClass: (name: string) => {
       const i = ASSET_CLASS_ORDER.indexOf(name)
       return palette[i >= 0 ? i : ASSET_CLASS_ORDER.length - 1]
@@ -79,8 +79,8 @@ export function useDashboardColors() {
 export function useMoney() {
   const { hidden } = usePrivacy()
   return {
-    full: (v: number) => (hidden ? '••••' : fmtINR(v)),
-    compact: (v: number) => (hidden ? '••••' : fmtINRCompact(v)),
+    full: (v: number) => (hidden ? MASKED_TEXT : fmtINR(v)),
+    compact: (v: number) => (hidden ? MASKED_TEXT : fmtINRCompact(v)),
   }
 }
 

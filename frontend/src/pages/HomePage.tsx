@@ -1,36 +1,41 @@
 import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Check, Plus, Upload, Wallet } from 'lucide-react'
 import { lazyPage } from '../lib/lazyPage'
-import { CoinSpinner } from '../components/common/CoinSpinner'
-import { CategoryBreakdownCard } from '../components/home/CategoryBreakdownCard'
-import { MaturingFDsCard } from '../components/home/MaturingFDsCard'
-import { MaturingBondsCard } from '../components/home/MaturingBondsCard'
-import { BondCouponsCard } from '../components/home/BondCouponsCard'
-import { MissedSipsCard } from '../components/home/MissedSipsCard'
-import { MissedPremiumsCard } from '../components/home/MissedPremiumsCard'
-import { MissedRDsCard } from '../components/home/MissedRDsCard'
-import { InsuranceSummaryCard } from '../components/home/InsuranceSummaryCard'
-import { NeedsAttentionCard } from '../components/home/NeedsAttentionCard'
-import { MemberNetWorthRow } from '../components/home/MemberNetWorthRow'
-import { MemberViewSelector } from '../components/home/MemberViewSelector'
-import { MemberWealthBreakdown } from '../components/home/MemberWealthBreakdown'
+import { ActionItemsCard } from '../components/home/ActionItemsCard'
 import { MarketCapSplitCard } from '../components/home/MarketCapSplitCard'
-import { NetWorthHero } from '../components/home/NetWorthHero'
-import { RecentHoldings } from '../components/home/RecentHoldings'
-import { SummaryTable } from '../components/home/SummaryTable'
-import { ExpandableGridCard } from '../components/common/ExpandableGridCard'
-import { useExpandable } from '../hooks/useExpandable'
-import { Money } from '../components/common/Money'
+import { MemberCards } from '../components/home/MemberCards'
+import { PortfolioSummaryCard } from '../components/home/PortfolioSummaryCard'
+import { ChartCard } from '../components/charts/ChartCard'
+import { Amount } from '../components/ui/Amount'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { Chip } from '../components/ui/Chip'
+import { DateText } from '../components/ui/DateText'
+import { Delta } from '../components/ui/Delta'
+import { EmptyState } from '../components/ui/EmptyState'
+import { FilterBar } from '../components/ui/FilterBar'
+import { Input } from '../components/ui/Input'
+import { Menu } from '../components/ui/Menu'
+import { PageLayout } from '../components/ui/PageLayout'
+import { SectionHeader, SectionLink } from '../components/ui/SectionHeader'
+import { Skeleton } from '../components/ui/Skeleton'
+import { StatCard, StatStrip } from '../components/ui/StatCard'
 import { useApp } from '../context/AppContext'
+import { useMemberScope } from '../context/MemberScopeContext'
 import { fdDetailsApi } from '../api/fdDetailsApi'
 import { bondDetailsApi } from '../api/bondDetailsApi'
 import { insuranceApi } from '../api/insuranceApi'
 import { portfolioApi } from '../api/portfolioApi'
+import { computeGain, fmtCount, fmtPercent } from '../lib/fmt'
+import type { ChartRange } from '../lib/chartRange'
+import { TYPE_LABELS } from '../lib/instrumentTypes'
+import { assetTypeColor } from '../lib/palette'
 import type { BondCouponDue, CategoryBreakdownItem, InsuranceSummary, MaturingBond, MaturingFD, MutualFundDetails } from '../types/domain'
-import { TYPE_ICONS } from '../lib/instrumentTypes'
 import { useAllMemberHoldings } from '../hooks/useMemberHoldings'
 
-
 const STORAGE_KEY = 'hw_excluded_types'
+const MATURING_WINDOW_DAYS = 180
+const VISIBLE_TYPE_CHIPS = 6
 
 function loadExcluded(): Set<string> {
   try {
@@ -40,23 +45,34 @@ function loadExcluded(): Set<string> {
 }
 
 function saveExcluded(s: Set<string>) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify([...s]))
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...s])) } catch { /* not persisted */ }
 }
+
+const typeLabel = (t: string) => TYPE_LABELS[t] ?? t.replace(/_/g, ' ')
 
 type Props = { onNavigate: (route: string) => void }
 
 // Charts pull in Recharts (~100 KB); load them after the rest of Home has rendered.
 const NetWorthTrendChart = lazyPage(() => import('../components/charts/NetWorthTrendChart'), 'NetWorthTrendChart')
-const AllocationDonutChart = lazyPage(() => import('../components/charts/AllocationDonutChart'), 'AllocationDonutChart')
+const AllocationCard = lazyPage(() => import('../components/home/AllocationCard'), 'AllocationCard')
+
+/** Snapshot nearest to (on or before) `days` before `asOf`. */
+function snapshotBefore(history: { date: string; networth: number }[], asOf: string, days: number) {
+  const d = new Date(`${asOf}T00:00:00`)
+  d.setDate(d.getDate() - days)
+  const cutoff = d.toISOString().slice(0, 10)
+  let best: { date: string; networth: number } | null = null
+  for (const p of history) if (p.date <= cutoff && (!best || p.date > best.date)) best = p
+  return best
+}
 
 export function HomePage({ onNavigate }: Props) {
   const { householdId, dashboard, dashboardLoading, asOf, setAsOf, refreshDashboard, accounts, categories } = useApp()
+  const { memberId, memberName } = useMemberScope()
   const [excluded, setExcluded] = useState<Set<string>>(loadExcluded)
-  const [viewMemberId, setViewMemberId] = useState<number | null>(null)
-  const memberExpand = useExpandable<number>()
+  const [range, setRange] = useState<ChartRange>('1Y')
   const [maturingFDs, setMaturingFDs] = useState<MaturingFD[]>([])
   const [maturingBonds, setMaturingBonds] = useState<MaturingBond[]>([])
-  const MATURING_WINDOW_DAYS = 180
   const [insuranceSummary, setInsuranceSummary] = useState<InsuranceSummary | null>(null)
   const [bondCouponsDue, setBondCouponsDue] = useState<BondCouponDue[]>([])
   const [mfDetails, setMfDetails] = useState<MutualFundDetails[]>([])
@@ -66,46 +82,23 @@ export function HomePage({ onNavigate }: Props) {
     fdDetailsApi.listMaturing(householdId, MATURING_WINDOW_DAYS)
       .then((rows) => { if (active) setMaturingFDs(rows) })
       .catch(() => { if (active) setMaturingFDs([]) })
-    return () => { active = false }
-  }, [householdId])
-
-  useEffect(() => {
-    let active = true
     bondDetailsApi.listMaturing(householdId, MATURING_WINDOW_DAYS)
       .then((rows) => { if (active) setMaturingBonds(rows) })
       .catch(() => { if (active) setMaturingBonds([]) })
-    return () => { active = false }
-  }, [householdId])
-
-  const refreshBondCoupons = () => {
-    return bondDetailsApi.listCouponsDue(householdId)
-      .then((rows) => setBondCouponsDue(rows))
-      .catch(() => setBondCouponsDue([]))
-  }
-
-  useEffect(() => {
-    let active = true
     bondDetailsApi.listCouponsDue(householdId)
       .then((rows) => { if (active) setBondCouponsDue(rows) })
       .catch(() => { if (active) setBondCouponsDue([]) })
-    return () => { active = false }
-  }, [householdId])
-
-  useEffect(() => {
-    let active = true
     insuranceApi.fetchSummary(householdId)
       .then((s) => { if (active) setInsuranceSummary(s) })
       .catch(() => { if (active) setInsuranceSummary(null) })
-    return () => { active = false }
-  }, [householdId])
-
-  useEffect(() => {
-    let active = true
     portfolioApi.listMutualFundDetails()
       .then((rows) => { if (active) setMfDetails(rows) })
       .catch(() => { if (active) setMfDetails([]) })
     return () => { active = false }
   }, [householdId])
+
+  const refreshBondCoupons = () =>
+    bondDetailsApi.listCouponsDue(householdId).then(setBondCouponsDue).catch(() => setBondCouponsDue([]))
 
   const mfDetailsByInvestment = useMemo(() => {
     const m = new Map<number, MutualFundDetails>()
@@ -113,290 +106,264 @@ export function HomePage({ onNavigate }: Props) {
     return m
   }, [mfDetails])
 
-  // Per-member holdings for the summary table and the "Viewing" selector — cached per
-  // household + date (shared with the Holdings page's member view).
+  // Per-member holdings for "By member", the summary table and the member scope — cached
+  // per household + date (shared with the Investments page's member view).
   const memberIds = useMemo(() => dashboard.membersNetworth.map((m) => m.member_id), [dashboard.membersNetworth])
   const { holdings: allMemberHoldings, accounts: allMemberAccounts } = useAllMemberHoldings(householdId, asOf, memberIds)
 
-  // Member-scoped base holdings/accounts: when a member is selected via the
-  // "Viewing" selector, every downstream figure (KPI, donut, type filter,
-  // breakdown) is computed from that member's data instead of the household's.
-  const isMemberView = viewMemberId !== null
+  // With a member selected in the header, every figure below is that member's share.
+  const isMemberView = memberId !== null && dashboard.membersNetworth.some((m) => m.member_id === memberId)
   const baseHoldings = useMemo(
-    () => (isMemberView ? (allMemberHoldings[viewMemberId] ?? []) : dashboard.holdings),
-    [isMemberView, viewMemberId, allMemberHoldings, dashboard.holdings],
+    () => (isMemberView ? (allMemberHoldings[memberId!] ?? []) : dashboard.holdings),
+    [isMemberView, memberId, allMemberHoldings, dashboard.holdings],
   )
-  const baseAccountsForMember = useMemo(
-    () => (isMemberView ? (allMemberAccounts[viewMemberId] ?? []) : null),
-    [isMemberView, viewMemberId, allMemberAccounts],
+  const baseAccounts = useMemo(
+    () => (isMemberView ? (allMemberAccounts[memberId!] ?? []) : dashboard.accounts),
+    [isMemberView, memberId, allMemberAccounts, dashboard.accounts],
   )
   const baseNetworth = isMemberView
-    ? dashboard.membersNetworth.find((m) => m.member_id === viewMemberId)?.networth ?? '0'
-    : dashboard.networth
+    ? parseFloat(dashboard.membersNetworth.find((m) => m.member_id === memberId)?.networth ?? '0')
+    : parseFloat(dashboard.networth)
 
-  // All instrument types present in holdings
   const presentTypes = useMemo(() => {
-    const seen = new Set<string>()
-    for (const h of baseHoldings) seen.add(h.instrument_type)
-    return [...seen].sort()
+    const value = new Map<string, number>()
+    for (const h of baseHoldings) value.set(h.instrument_type, (value.get(h.instrument_type) ?? 0) + parseFloat(h.market_value))
+    return [...value.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t)
   }, [baseHoldings])
 
+  const setExcludedSaved = (next: Set<string>) => { setExcluded(next); saveExcluded(next) }
   const toggleType = (type: string) => {
-    setExcluded((prev) => {
-      const next = new Set(prev)
-      if (next.has(type)) next.delete(type)
-      else next.add(type)
-      saveExcluded(next)
-      return next
-    })
+    const next = new Set(excluded)
+    if (next.has(type)) next.delete(type); else next.add(type)
+    setExcludedSaved(next)
   }
 
   const activeHoldings = useMemo(
     () => baseHoldings.filter((h) => !excluded.has(h.instrument_type)),
     [baseHoldings, excluded],
   )
+  const isFiltered = presentTypes.some((t) => excluded.has(t))
 
-  const filteredNetworth = useMemo(() => {
-    if (excluded.size === 0 && !isMemberView) return null // show full networth from dashboard
-    const holdingsTotal = activeHoldings.reduce((s, h) => s + parseFloat(h.market_value), 0)
-    // accounts are not filtered by type — only instrument holdings are excluded
-    const fullHoldingsTotal = baseHoldings.reduce((s, h) => s + parseFloat(h.market_value), 0)
-    const accountsTotal = isMemberView
-      ? (baseAccountsForMember ?? []).reduce((s, a) => s + parseFloat(a.balance), 0)
-      : parseFloat(dashboard.networth) - fullHoldingsTotal
-    return String(holdingsTotal + accountsTotal)
-  }, [excluded, activeHoldings, baseHoldings, isMemberView, baseAccountsForMember, dashboard])
+  // Accounts aren't filtered by type — only instrument holdings are excluded.
+  const displayNetworth = useMemo(() => {
+    if (!isFiltered) return baseNetworth
+    const fullHoldings = baseHoldings.reduce((s, h) => s + parseFloat(h.market_value), 0)
+    const shown = activeHoldings.reduce((s, h) => s + parseFloat(h.market_value), 0)
+    return baseNetworth - fullHoldings + shown
+  }, [isFiltered, baseNetworth, baseHoldings, activeHoldings])
+
+  const totals = useMemo(() => {
+    let value = 0, invested = 0
+    for (const h of activeHoldings) {
+      const mv = parseFloat(h.market_value)
+      const ni = parseFloat(h.net_invested)
+      value += mv
+      invested += h.instrument_type === 'cash' ? mv : ni // cash never gains: count it at value
+    }
+    return { value, invested, ...computeGain(value, invested) }
+  }, [activeHoldings])
 
   const filteredBreakdown = useMemo((): CategoryBreakdownItem[] => {
-    if (excluded.size === 0 && !isMemberView) return dashboard.categoryBreakdown
-    // Recompute breakdown from active holdings only
+    if (!isFiltered && !isMemberView) return dashboard.categoryBreakdown
     const byCategory = new Map<number | null, { name: string; color: string; icon: string; total: number }>()
     for (const h of activeHoldings) {
       const key = h.asset_category
       if (!byCategory.has(key)) {
         const cat = dashboard.categoryBreakdown.find((c) => c.category_id === key)
-        byCategory.set(key, {
-          name: cat?.category_name ?? 'Uncategorised',
-          color: cat?.color ?? '#94a3b8',
-          icon: cat?.icon_name ?? '',
-          total: 0,
-        })
+        byCategory.set(key, { name: cat?.category_name ?? 'Uncategorised', color: cat?.color ?? 'var(--series-other)', icon: cat?.icon_name ?? '', total: 0 })
       }
       byCategory.get(key)!.total += parseFloat(h.market_value)
     }
     const total = [...byCategory.values()].reduce((s, v) => s + v.total, 0)
     return [...byCategory.entries()]
       .map(([id, v]) => ({
-        category_id: id,
-        category_name: v.name,
-        color: v.color,
-        icon_name: v.icon,
-        market_value: String(v.total.toFixed(2)),
-        allocation_percent: total > 0 ? String(((v.total / total) * 100).toFixed(2)) : '0',
+        category_id: id, category_name: v.name, color: v.color, icon_name: v.icon,
+        market_value: v.total.toFixed(2),
+        allocation_percent: total > 0 ? ((v.total / total) * 100).toFixed(2) : '0',
       }))
       .sort((a, b) => parseFloat(b.market_value) - parseFloat(a.market_value))
-  }, [excluded, activeHoldings, dashboard, isMemberView])
+  }, [isFiltered, isMemberView, activeHoldings, dashboard.categoryBreakdown])
 
-  const displayNetworth = filteredNetworth ?? baseNetworth
-  const isFiltered = excluded.size > 0
+  // Household-level history only: a member's or a filtered net worth has no snapshots.
+  const monthAgo = !isMemberView && !isFiltered ? snapshotBefore(dashboard.networthHistory, asOf, 30) : null
+  const monthDelta = monthAgo && monthAgo.networth > 0 ? ((displayNetworth - monthAgo.networth) / monthAgo.networth) * 100 : null
+  const xirr = isFiltered || isMemberView ? null : dashboard.xirr
 
-  if (dashboardLoading && dashboard.holdings.length === 0) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <CoinSpinner size={64} />
-      </div>
-    )
-  }
+  const loading = dashboardLoading && dashboard.holdings.length === 0
+  const nothingYet = !dashboardLoading && dashboard.holdings.length === 0 && dashboard.accounts.length === 0
+
+  const typeChips = presentTypes.length > 1 ? (
+    <TypeChips types={presentTypes} excluded={excluded} onToggle={toggleType} />
+  ) : null
 
   return (
-    <div className="grid min-w-0 gap-5">
-      <MemberViewSelector members={dashboard.membersNetworth} selected={viewMemberId} onSelect={setViewMemberId} />
-
-      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-        <NetWorthHero
-          networth={displayNetworth}
-          xirr={isFiltered || isMemberView ? null : dashboard.xirr}
-          asOf={asOf}
-          onDateChange={setAsOf}
-          onRefresh={refreshDashboard}
-          loading={dashboardLoading}
-          label={isMemberView ? `${dashboard.membersNetworth.find((m) => m.member_id === viewMemberId)?.member_name}'s Net Worth` : 'Total Net Worth'}
-        />
-        {filteredBreakdown.length > 0 && (
-          <Suspense fallback={<div className="h-[180px]" aria-hidden="true" />}>
-            <AllocationDonutChart items={filteredBreakdown} />
-          </Suspense>
-        )}
-      </div>
-
-      {/* Asset type filter pills */}
-      {presentTypes.length > 0 && (
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Filter by Type</h2>
-            {isFiltered && (
-              <button type="button" onClick={() => { setExcluded(new Set()); saveExcluded(new Set()) }}
-                className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-300">
-                Reset
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {presentTypes.map((type) => {
-              const active = !excluded.has(type)
-              const holding = dashboard.holdings.filter((h) => h.instrument_type === type)
-              const value = holding.reduce((s, h) => s + parseFloat(h.market_value), 0)
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => toggleType(type)}
-                  className={`flex min-w-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                    active
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-[var(--surface-2)] text-[var(--text-muted)] line-through'
-                  }`}
-                >
-                  <span className="shrink-0">{TYPE_ICONS[type] ?? '💼'}</span>
-                  <span className="truncate max-w-[8rem]">{type.replace(/_/g, ' ')}</span>
-                  {active && <Money value={value} className="shrink-0 opacity-70" />}
-                </button>
-              )
-            })}
-          </div>
-          {isFiltered && (
-            <p className="mt-2 text-xs text-[var(--text-muted)]">
-              Showing <Money value={parseFloat(displayNetworth)} /> of <Money value={parseFloat(dashboard.networth)} /> total net worth
-            </p>
-          )}
-        </div>
+    <PageLayout
+      title="Home"
+      description={isMemberView ? `Viewing ${memberName}’s share` : <>As of <DateText value={asOf} /></>}
+      primaryAction={{ label: 'Add holding', onClick: () => onNavigate('holdings/add'), icon: <Plus /> }}
+      moreActions={[
+        { label: 'Import statements', icon: <Upload />, onSelect: () => onNavigate('import') },
+        { label: 'Record a transaction', icon: <Wallet />, onSelect: () => onNavigate('expenses') },
+      ]}
+      aside={(
+        <label className="hidden items-center gap-2 text-sm text-ink-muted md:flex">
+          As of
+          <Input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-40" aria-label="Show figures as of" />
+        </label>
       )}
-
-      {dashboard.networthHistory.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Net Worth Trend</h2>
-          <div className="min-w-0 w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-            <Suspense fallback={<div className="h-[220px]" aria-hidden="true" />}>
-              <NetWorthTrendChart data={dashboard.networthHistory} live={{ date: asOf, value: Number(dashboard.networth) }} />
-            </Suspense>
-          </div>
-        </div>
-      )}
-
-      {dashboard.membersNetworth.length > 1 && (
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">By Member</h2>
-            <span className="text-[10px] text-[var(--text-muted)]">Tap a card to see breakdown</span>
-          </div>
-          <div className="card-grid grid gap-3">
-            {dashboard.membersNetworth.map((m) => {
-              const isExpanded = memberExpand.isExpanded(m.member_id)
-              const holdings = allMemberHoldings[m.member_id] ?? []
-              const memberAccts = allMemberAccounts[m.member_id] ?? []
-              const loading = allMemberHoldings[m.member_id] === undefined
-              return (
-                <ExpandableGridCard
-                  key={m.member_id}
-                  expanded={isExpanded}
-                  onToggle={() => memberExpand.toggle(m.member_id)}
-                  className={isExpanded ? 'ring-2 ring-primary-400 ring-offset-1 rounded-xl' : ''}
-                  collapsed={<MemberNetWorthRow member={m} householdTotal={parseFloat(dashboard.networth)} />}
-                >
-                  {loading ? (
-                    <p className="py-2 text-xs text-[var(--text-muted)]">Loading {m.member_name}'s breakdown…</p>
-                  ) : holdings.length === 0 && memberAccts.length === 0 ? (
-                    <p className="py-2 text-xs text-[var(--text-muted)]">No holdings or accounts recorded for {m.member_name}.</p>
-                  ) : (
-                    <MemberWealthBreakdown
-                      memberName={m.member_name}
-                      holdings={holdings}
-                      accounts={memberAccts}
-                      memberTotal={parseFloat(m.networth)}
-                      householdTotal={parseFloat(dashboard.networth)}
-                      categories={categories}
-                      mfDetailsByInvestment={mfDetailsByInvestment}
-                    />
-                  )}
-                </ExpandableGridCard>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {filteredBreakdown.length > 0 && (
-        <CategoryBreakdownCard items={filteredBreakdown} />
-      )}
-
-      {householdId && <MarketCapSplitCard householdId={householdId} asOf={asOf} />}
-
-      {activeHoldings.length > 0 && (
-        <RecentHoldings holdings={activeHoldings} onViewAll={() => onNavigate('holdings')} />
-      )}
-
-      {maturingFDs.length > 0 && (
-        <MaturingFDsCard items={maturingFDs} windowDays={MATURING_WINDOW_DAYS} />
-      )}
-
-      {maturingBonds.length > 0 && (
-        <MaturingBondsCard items={maturingBonds} windowDays={MATURING_WINDOW_DAYS} />
-      )}
-
-      <BondCouponsCard
-        items={bondCouponsDue}
-        accountOptions={accounts}
-        onReceived={refreshBondCoupons}
-      />
-
-      <NeedsAttentionCard householdId={householdId} onNavigate={onNavigate} onChanged={refreshDashboard} />
-
-      <MissedSipsCard
-        items={dashboard.missedSip}
-        accountOptions={accounts}
-        onPaid={refreshDashboard}
-      />
-
-      <MissedRDsCard
-        items={dashboard.missedRD}
-        accountOptions={accounts}
-        onPaid={refreshDashboard}
-      />
-
-      <MissedPremiumsCard
-        items={dashboard.missedPremiums}
-        accountOptions={accounts}
-        onPaid={refreshDashboard}
-      />
-
-      <InsuranceSummaryCard summary={insuranceSummary} />
-
-      {dashboard.holdings.length > 0 && (
-        <SummaryTable
-          holdings={dashboard.holdings}
-          accounts={dashboard.accounts}
-          memberHoldings={allMemberHoldings}
-          memberAccounts={allMemberAccounts}
-          membersNetworth={dashboard.membersNetworth}
-          categoryBreakdown={dashboard.categoryBreakdown}
-          onRequestMemberHoldings={() => { /* all members are prefetched by useAllMemberHoldings */ }}
-        />
-      )}
-
-      {!dashboardLoading && dashboard.holdings.length === 0 && dashboard.categoryBreakdown.length === 0 && (
-        <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center">
-          <p className="text-3xl">💼</p>
-          <p className="mt-2 text-sm font-medium text-[var(--text-2)]">No assets yet</p>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">Go to Holdings to add instruments, or import data from Settings.</p>
-          <button
-            type="button"
-            className="mt-4 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+      summary={(
+        <>
+          <StatCard
+            label={isMemberView ? `${memberName}’s net worth` : 'Net worth'}
+            loading={loading}
+            value={<Amount value={displayNetworth} format="compact" />}
+            delta={(monthDelta !== null || xirr !== null) ? (
+              <span className="inline-flex flex-wrap items-center gap-x-2">
+                {monthDelta !== null && <Delta value={monthDelta} label="1M" />}
+                {xirr !== null && <span>XIRR {fmtPercent(xirr * 100)}</span>}
+              </span>
+            ) : isFiltered ? 'Filtered by type' : undefined}
+          />
+          <StatCard label="Invested" loading={loading} value={<Amount value={totals.invested} format="compact" />} subtitle="In holdings" />
+          <StatCard
+            label="Gain"
+            loading={loading}
+            value={<Amount value={totals.gain} format="compact" signed tone="gain" />}
+            delta={<Delta value={totals.gainPct} label="on invested" />}
+          />
+          <StatCard
+            label="Holdings"
+            loading={loading}
+            value={fmtCount(activeHoldings.length)}
+            subtitle={`${fmtCount(baseAccounts.length)} account${baseAccounts.length === 1 ? '' : 's'}`}
             onClick={() => onNavigate('holdings')}
-          >
-            Add Assets
-          </button>
-        </div>
+            actionLabel="Open Investments"
+          />
+        </>
+      )}
+      toolbar={typeChips && (
+        <FilterBar
+          extra={typeChips}
+          extraChips={presentTypes.filter((t) => excluded.has(t)).map((t) => ({ key: t, label: `Hiding ${typeLabel(t)}`, onRemove: () => toggleType(t) }))}
+          onClearAll={() => setExcludedSaved(new Set())}
+        />
+      )}
+    >
+      {nothingYet ? (
+        <Card>
+          <EmptyState
+            size="page"
+            icon={<Wallet />}
+            title="No assets yet"
+            description="Add your first holding or import a statement to see your net worth here."
+            action={<Button variant="secondary" onClick={() => onNavigate('import')} icon={<Upload />}>Import statements</Button>}
+          />
+        </Card>
+      ) : (
+        <>
+          <ActionItemsCard
+            householdId={householdId}
+            onNavigate={onNavigate}
+            onChanged={refreshDashboard}
+            accountOptions={accounts}
+            maturingFDs={maturingFDs}
+            maturingBonds={maturingBonds}
+            maturingWindowDays={MATURING_WINDOW_DAYS}
+            bondCouponsDue={bondCouponsDue}
+            onCouponsChanged={refreshBondCoupons}
+            missedSip={dashboard.missedSip}
+            missedRD={dashboard.missedRD}
+            missedPremiums={dashboard.missedPremiums}
+            insurance={insuranceSummary}
+          />
+
+          {!isMemberView && !isFiltered && (
+            <ChartCard
+              title="Net worth trend"
+              range={{ value: range, onChange: setRange }}
+              loading={loading}
+              empty={dashboard.networthHistory.length === 0 ? { title: 'No history yet', description: 'Snapshots are saved each time valuations run.' } : null}
+              note="Solid: saved snapshots. Dashed: from the last snapshot to today’s live value."
+            >
+              <Suspense fallback={<Skeleton variant="chart" />}>
+                <NetWorthTrendChart data={dashboard.networthHistory} live={{ date: asOf, value: parseFloat(dashboard.networth) }} range={range} />
+              </Suspense>
+            </ChartCard>
+          )}
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <Suspense fallback={<Skeleton variant="card" />}>
+              <AllocationCard items={filteredBreakdown} />
+            </Suspense>
+            {householdId > 0 && <MarketCapSplitCard householdId={householdId} asOf={asOf} />}
+          </div>
+
+          {dashboard.membersNetworth.length > 1 && (
+            <MemberCards
+              members={dashboard.membersNetworth}
+              householdTotal={parseFloat(dashboard.networth)}
+              holdingsByMember={allMemberHoldings}
+              accountsByMember={allMemberAccounts}
+              categories={categories}
+              mfDetailsByInvestment={mfDetailsByInvestment}
+            />
+          )}
+
+          {insuranceSummary && insuranceSummary.total_active > 0 && (
+            <section className="grid gap-4" aria-label="Insurance coverage">
+              <SectionHeader title="Insurance coverage" action={<SectionLink href="#/insurance" />} />
+              <StatStrip className="lg:grid-cols-3">
+                <StatCard label="Active policies" value={fmtCount(insuranceSummary.total_active)}
+                  subtitle={Object.entries(insuranceSummary.by_type).map(([t, n]) => `${n} ${t.replace(/_/g, ' ')}`).join(' · ')} />
+                <StatCard label="Sum insured" value={<Amount value={insuranceSummary.total_sum_insured} format="compact" />} />
+                <StatCard label="Annual premium" value={<Amount value={insuranceSummary.total_annual_premium} format="compact" />} />
+              </StatStrip>
+            </section>
+          )}
+
+          {dashboard.holdings.length > 0 && (
+            <PortfolioSummaryCard
+              holdings={isFiltered ? dashboard.holdings.filter((h) => !excluded.has(h.instrument_type)) : dashboard.holdings}
+              accounts={dashboard.accounts}
+              memberHoldings={allMemberHoldings}
+              memberAccounts={allMemberAccounts}
+              membersNetworth={dashboard.membersNetworth}
+              categoryBreakdown={dashboard.categoryBreakdown}
+            />
+          )}
+        </>
+      )}
+    </PageLayout>
+  )
+}
+
+/** Asset-type toggles: filled = included. The first six by value, the rest under "More". */
+function TypeChips({ types, excluded, onToggle }: { types: string[]; excluded: Set<string>; onToggle: (t: string) => void }) {
+  const shown = types.slice(0, VISIBLE_TYPE_CHIPS)
+  const rest = types.slice(VISIBLE_TYPE_CHIPS)
+  const swatch = (t: string) => <span className="h-2.5 w-2.5 rounded-sm" style={{ background: assetTypeColor(t) }} aria-hidden />
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2" role="group" aria-label="Asset types included">
+      {shown.map((t) => (
+        <Chip key={t} selected={!excluded.has(t)} onClick={() => onToggle(t)} icon={swatch(t)}>{typeLabel(t)}</Chip>
+      ))}
+      {rest.length > 0 && (
+        <Menu
+          title="More asset types"
+          items={rest.map((t) => ({
+            label: typeLabel(t),
+            icon: <Check className={excluded.has(t) ? 'invisible' : ''} />,
+            onSelect: () => onToggle(t),
+          }))}
+          trigger={({ toggle, ref, open }) => (
+            <Chip ref={ref} selected={false} onClick={toggle} title={open ? undefined : 'More asset types'}
+              count={rest.length}>
+              More{rest.some((t) => excluded.has(t)) ? ' (some hidden)' : ''}
+            </Chip>
+          )}
+        />
       )}
     </div>
   )
 }
+

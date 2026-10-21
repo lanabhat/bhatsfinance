@@ -1,9 +1,13 @@
+import { Landmark } from 'lucide-react'
 import { Money } from '../common/Money'
+import { DateText } from '../ui/DateText'
 import { ExpandableGridCard } from '../common/ExpandableGridCard'
 import { useExpandable } from '../../hooks/useExpandable'
 import type { MaturingFD } from '../../types/domain'
 
 type Props = {
+  /** Inside the Home action-items sheet: no heading of its own. */
+  embedded?: boolean
   items: MaturingFD[]
   windowDays: number
 }
@@ -53,25 +57,25 @@ function GroupSummaryRow({ group }: { group: MemberGroup }) {
   const initials = group.label.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
 
   return (
-    <div className="tap min-w-0 rounded-xl border border-amber-100 bg-amber-50 dark:bg-amber-900/15 px-4 py-3">
+    <div className="tap min-w-0 rounded-xl border border-line bg-surface px-4 py-3">
       <div className="flex min-w-0 items-center gap-2.5">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface)] text-sm font-semibold text-[var(--text-2)]">
           {initials}
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-[var(--text)]">{group.label}</p>
-          <p className="text-[11px] text-[var(--text-muted)]">{group.items.length} FD{group.items.length === 1 ? '' : 's'} · {formatRemaining(soonest)}</p>
+          <p className="text-xs text-[var(--text-muted)]">{group.items.length} FD{group.items.length === 1 ? '' : 's'} · {formatRemaining(soonest)}</p>
         </div>
       </div>
       <div className="mt-2.5 flex items-end justify-between">
-        <Money value={total} className="text-lg font-bold text-amber-800 dark:text-amber-300 tabular-nums" />
+        <Money value={total} className="text-lg font-bold text-ink tabular-nums" />
         <p className="text-xs text-[var(--text-faint)]">maturity total</p>
       </div>
     </div>
   )
 }
 
-export function MaturingFDsCard({ items, windowDays }: Props) {
+export function MaturingFDsCard({ items, windowDays, embedded }: Props) {
   const groupExpand = useExpandable<string>()
 
   if (items.length === 0) return null
@@ -80,10 +84,12 @@ export function MaturingFDsCard({ items, windowDays }: Props) {
 
   return (
     <div>
+      {!embedded && (
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Maturing Soon</h2>
-        <span className="text-[10px] text-[var(--text-muted)]">Next {windowDays} days</span>
+        <h2 className="text-base font-semibold text-ink">Maturing Soon</h2>
+        <span className="text-xs text-[var(--text-muted)]">Next {windowDays} days</span>
       </div>
+      )}
       <div className="card-grid grid gap-3">
         {groups.map(group => {
           const isExpanded = groupExpand.isExpanded(group.key)
@@ -92,10 +98,10 @@ export function MaturingFDsCard({ items, windowDays }: Props) {
               key={group.key}
               expanded={isExpanded}
               onToggle={() => groupExpand.toggle(group.key)}
-              className={isExpanded ? 'ring-2 ring-amber-400 ring-offset-1 rounded-xl' : ''}
+              className={isExpanded ? 'ring-2 ring-accent ring-offset-1 rounded-xl' : ''}
               collapsed={<GroupSummaryRow group={group} />}
             >
-              <div className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50 dark:bg-amber-900/15">
+              <div className="overflow-hidden rounded-xl border border-line bg-surface">
                 {group.items.map((fd, i) => {
                   const elapsedPct = fd.total_tenure_days > 0
                     ? Math.min(100, (fd.elapsed_days / fd.total_tenure_days) * 100)
@@ -104,25 +110,25 @@ export function MaturingFDsCard({ items, windowDays }: Props) {
                   const isJoint = fd.owners && fd.owners.length > 1
                   const otherOwners = isJoint ? fd.owners.filter(o => o.member_name !== group.label).map(o => o.member_name) : []
                   return (
-                    <div key={fd.fd_id} className={`px-4 py-3 ${isLast ? '' : 'border-b border-amber-100'}`}>
+                    <div key={fd.fd_id} className={`px-4 py-3 ${isLast ? '' : 'border-b border-line'}`}>
                       <div className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface)] text-base">🏦</span>
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-ink-muted"><Landmark className="h-4 w-4" aria-hidden /></span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-[var(--text)]">{fd.instrument_name}</p>
                           <p className="text-xs text-[var(--text-muted)]">
-                            {fd.annual_rate}% · matures {fd.maturity_date}
+                            {fd.annual_rate}% · matures <DateText value={fd.maturity_date} />
                             {isJoint && otherOwners.length > 0 && ` · Joint with ${otherOwners.join(', ')}`}
                           </p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-sm font-bold text-amber-800 dark:text-amber-300"><Money value={fd.maturity_value} /></p>
+                          <p className="text-sm font-bold text-ink"><Money value={fd.maturity_value} /></p>
                           <p className="text-xs text-[var(--text-muted)]">{formatRemaining(fd.days_remaining)}</p>
                         </div>
                       </div>
-                      <div className="mt-2 h-1.5 w-full rounded-full bg-amber-100">
-                        <div className="h-1.5 rounded-full bg-amber-500 transition-all" style={{ width: `${elapsedPct}%` }} />
+                      <div className="mt-2 h-1.5 w-full rounded-full bg-surface-3">
+                        <div className="h-1.5 rounded-full bg-surface0 transition-all" style={{ width: `${elapsedPct}%` }} />
                       </div>
-                      <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                      <div className="mt-1 flex items-center justify-between text-xs text-[var(--text-muted)]">
                         <span>now: <Money value={fd.current_value} /></span>
                         <span>{Math.round(elapsedPct)}% of tenure elapsed</span>
                       </div>

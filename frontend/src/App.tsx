@@ -6,6 +6,8 @@ import { PageErrorBoundary } from './components/PageErrorBoundary'
 import { AppLayout } from './components/layout/AppLayout'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { MemberScopeProvider } from './context/MemberScopeContext'
+import { PageChromeProvider } from './context/PageChromeContext'
 import { PrivacyProvider } from './context/PrivacyContext'
 import { TermsProvider } from './context/TermsContext'
 import { ThemeProvider } from './context/ThemeContext'
@@ -202,7 +204,11 @@ function AuthGate() {
   if (user.status === 'denied') return <DeniedPage />
   return (
     <AppProvider>
-      <AppInner />
+      <MemberScopeProvider>
+        <PageChromeProvider>
+          <AppInner />
+        </PageChromeProvider>
+      </MemberScopeProvider>
     </AppProvider>
   )
 }

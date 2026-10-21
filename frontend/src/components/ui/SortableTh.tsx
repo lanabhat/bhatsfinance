@@ -19,7 +19,7 @@ export function SortableTh<T extends string>({ label, col, sortCol, sortDir, onS
   const active = sortCol === col
   return (
     <th
-      className={`cursor-pointer select-none whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] hover:text-[var(--text)] ${align === 'right' ? 'text-right' : 'text-left'} ${className}`}
+      className={`cursor-pointer select-none whitespace-nowrap px-3 py-2 text-xs font-semibold text-ink-muted hover:text-ink ${align === 'right' ? 'text-right' : 'text-left'} ${className}`}
       onClick={() => onSort(col)}
     >
       {label}{active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}

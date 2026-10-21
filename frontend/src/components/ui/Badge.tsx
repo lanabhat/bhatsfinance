@@ -1,33 +1,54 @@
+import type { ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 
-type Color = 'teal' | 'amber' | 'red' | 'purple' | 'blue' | 'slate' | 'green'
+/**
+ * Non-interactive status/tag label. Semantic tones only; pair a warning/danger tone
+ * with words ("Matures in 12 days", "Inactive"), never colour alone.
+ * For anything clickable or selectable use <Chip>.
+ */
+export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info'
+type LegacyColor = 'teal' | 'amber' | 'red' | 'purple' | 'blue' | 'slate' | 'green'
 
 type Props = {
-  label: string
-  color?: Color
+  children?: ReactNode
+  /** Older API: text via `label`. */
+  label?: string
+  tone?: BadgeTone
+  /** Older API: mapped onto tones. */
+  color?: LegacyColor
+  size?: 'sm' | 'md'
+  icon?: ReactNode
   className?: string
+  title?: string
 }
 
-const colorMap: Record<Color, string> = {
-  teal: 'bg-indigo-50 dark:bg-indigo-900/15 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-900/30 dark:text-indigo-300',
-  amber: 'bg-amber-50 dark:bg-amber-900/15 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300',
-  red: 'bg-rose-50 dark:bg-rose-900/15 text-rose-700 ring-rose-600/20 dark:bg-rose-900/30 dark:text-rose-300',
-  purple: 'bg-purple-50 dark:bg-purple-900/15 text-purple-700 ring-purple-600/20 dark:bg-purple-900/30 dark:text-purple-300',
-  blue: 'bg-blue-50 dark:bg-blue-900/15 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-300',
-  slate: 'bg-[var(--surface-2)] text-[var(--text-2)] ring-[var(--border)]',
-  green: 'bg-emerald-50 dark:bg-emerald-900/15 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300',
+const toneClasses: Record<BadgeTone, string> = {
+  neutral: 'bg-surface-2 text-ink-2 ring-line',
+  accent: 'bg-accent-subtle text-accent ring-accent/25',
+  success: 'bg-success-subtle text-success ring-success/25',
+  warning: 'bg-warning-subtle text-warning ring-warning/25',
+  danger: 'bg-danger-subtle text-danger ring-danger/25',
+  info: 'bg-info-subtle text-info ring-info/25',
 }
 
-export function Badge({ label, color = 'slate', className }: Props) {
+const LEGACY: Record<LegacyColor, BadgeTone> = {
+  teal: 'accent', blue: 'info', purple: 'accent', amber: 'warning', red: 'danger', green: 'success', slate: 'neutral',
+}
+
+export function Badge({ children, label, tone, color, size = 'sm', icon, className, title }: Props) {
+  const t = tone ?? (color ? LEGACY[color] : 'neutral')
   return (
     <span
+      title={title}
       className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
-        colorMap[color],
+        'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full font-medium ring-1 ring-inset [&>svg]:h-3 [&>svg]:w-3',
+        size === 'sm' ? 'h-5 px-2 text-xs' : 'h-6 px-2 text-sm',
+        toneClasses[t],
         className,
       )}
     >
-      {label}
+      {icon}
+      {children ?? label}
     </span>
   )
 }

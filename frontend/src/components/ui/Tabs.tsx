@@ -1,3 +1,5 @@
+import { cn } from '../../lib/cn'
+
 type Tab<T extends string> = {
   key: T
   label: string
@@ -9,38 +11,37 @@ type Props<T extends string> = {
   active: T
   onChange: (key: T) => void
   size?: 'sm' | 'md'
+  /** Accessible name for the group. */
+  label?: string
+  className?: string
 }
 
-export function Tabs<T extends string>({ tabs, active, onChange, size = 'md' }: Props<T>) {
-  const base = size === 'sm'
-    ? 'px-3 py-1.5 text-xs'
-    : 'px-4 py-2 text-sm'
-
+/** Segmented control — view tabs (By type / By member) and chart range tabs (1M … All). */
+export function Tabs<T extends string>({ tabs, active, onChange, size = 'md', label, className }: Props<T>) {
   return (
-    <div className="flex min-w-0 flex-wrap gap-1 rounded-xl bg-[var(--surface-2)] p-1">
-      {tabs.map((tab) => (
-        <button
-          key={tab.key}
-          type="button"
-          onClick={() => onChange(tab.key)}
-          className={`flex shrink-0 items-center gap-1.5 rounded-lg font-medium transition-all ${base} ${
-            active === tab.key
-              ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm'
-              : 'text-[var(--text-muted)] hover:text-[var(--text)]'
-          }`}
-        >
-          {tab.label}
-          {tab.count !== undefined && (
-            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
-              active === tab.key
-                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
-                : 'bg-[var(--surface-3)] text-[var(--text-muted)]'
-            }`}>
-              {tab.count}
-            </span>
-          )}
-        </button>
-      ))}
+    <div role="tablist" aria-label={label} className={cn('inline-flex min-w-0 max-w-full gap-1 overflow-x-auto rounded-[var(--radius-md)] bg-surface-2 p-1', className)}>
+      {tabs.map((tab) => {
+        const on = active === tab.key
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(tab.key)}
+            className={cn(
+              'flex shrink-0 items-center gap-1 whitespace-nowrap rounded-[var(--radius-sm)] font-medium transition-colors',
+              size === 'sm' ? 'h-7 px-2 text-xs' : 'h-[calc(var(--control-h)-8px)] px-3 text-sm',
+              on ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink',
+            )}
+          >
+            {tab.label}
+            {tab.count !== undefined && <span className={cn('tabular-nums', on ? 'text-accent' : 'text-ink-faint')}>{tab.count}</span>}
+          </button>
+        )
+      })}
     </div>
   )
 }
+
+export const SegmentedControl = Tabs

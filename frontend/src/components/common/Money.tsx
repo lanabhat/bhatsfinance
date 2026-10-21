@@ -1,41 +1,39 @@
 import { useState } from 'react'
-import { fmtINR, fmtINRCompact } from '../../lib/fmt'
+import { fmtINR, MASKED_TEXT } from '../../lib/fmt'
 import { usePrivacy } from '../../context/PrivacyContext'
+import { Amount } from '../ui/Amount'
 
 type Props = {
   value: number | string | null | undefined
-  /** Replacement when privacy mode is on. Default: '••••' */
+  /** Ignored — masking is the fixed-width bar from <Amount>. */
   mask?: string
   className?: string
-  /** Show compact (8.3 L / 1.2 Cr) by default, with hover tooltip + click-to-toggle exact amount. Default: true */
+  /** Compact (₹8.3 L) with click-to-toggle exact amount. Default: true */
   compact?: boolean
 }
 
-export function Money({ value, mask = '••••', className, compact = true }: Props) {
-  const { hidden } = usePrivacy()
+/**
+ * Older wrapper over <Amount>, kept so existing screens pick up the shared formatting and
+ * privacy bar. New code uses <Amount> directly.
+ */
+export function Money({ value, className, compact = true }: Props) {
   const [expanded, setExpanded] = useState(false)
-  if (hidden) return <span className={className} aria-label="hidden">{mask}</span>
-
-  const exact = fmtINR(value ?? 0)
-  if (!compact) return <span className={className}>{exact}</span>
-
-  const display = expanded ? exact : fmtINRCompact(value ?? 0)
+  if (!compact) return <Amount value={value} format="precise" className={className} />
   return (
     <span
-      className={`${className ?? ''} ${expanded ? '' : 'cursor-pointer'}`.trim()}
-      title={exact}
+      className={expanded ? undefined : 'cursor-pointer'}
       onClick={(e) => { e.stopPropagation(); setExpanded((p) => !p) }}
     >
-      {display}
+      <Amount value={value} format={expanded ? 'full' : 'compact'} className={className} />
     </span>
   )
 }
 
-/** For places that build strings inline (chart tooltips, table cells, template literals). Always exact — compact toggling needs a stateful element. */
+/** For text-only contexts (chart tooltips, template strings): exact amount, or the shared mask. */
 export function useMaskedFmt() {
   const { hidden } = usePrivacy()
-  return (value: number | string | null | undefined, mask = '••••') => {
-    if (hidden) return mask
+  return (value: number | string | null | undefined) => {
+    if (hidden) return MASKED_TEXT
     return fmtINR(value ?? 0)
   }
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Money } from '../common/Money'
+import { DateText } from '../ui/DateText'
 import { ExpandableGridCard } from '../common/ExpandableGridCard'
 import { useExpandable } from '../../hooks/useExpandable'
 import { MarkPremiumPaidSheet } from '../insurance/MarkPremiumPaidSheet'
@@ -9,6 +10,8 @@ import type { MissedPremiumAlert, OptionItem } from '../../types/domain'
 import { useErrorToast } from '../../hooks/useErrorToast'
 
 type Props = {
+  /** Inside the Home action-items sheet: no heading of its own. */
+  embedded?: boolean
   items: MissedPremiumAlert[]
   accountOptions: OptionItem[]
   onPaid: () => void | Promise<void>
@@ -45,7 +48,7 @@ function groupByPolicy(items: MissedPremiumAlert[]): PolicyGroup[] {
   return [...map.values()]
 }
 
-export function MissedPremiumsCard({ items, accountOptions, onPaid }: Props) {
+export function MissedPremiumsCard({ items, accountOptions, onPaid, embedded }: Props) {
   const [sheetTarget, setSheetTarget] = useState<MissedPremiumAlert | null>(null)
   const [bulkSheetGroup, setBulkSheetGroup] = useState<PolicyGroup | null>(null)
   const [ignoringId, setIgnoringId] = useState<string | null>(null)
@@ -94,9 +97,9 @@ export function MissedPremiumsCard({ items, accountOptions, onPaid }: Props) {
 
   return (
     <div>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+      {!embedded && <h2 className="mb-3 text-base font-semibold text-ink">
         Insurance Premiums Due
-      </h2>
+      </h2>}
       <div className="card-grid grid gap-3">
         {groups.map((group) => {
           const isIgnoringGroup = ignoringPolicyId === group.policy_id
@@ -106,20 +109,20 @@ export function MissedPremiumsCard({ items, accountOptions, onPaid }: Props) {
               key={group.policy_id}
               expanded={isExpanded}
               onToggle={() => groupExpand.toggle(group.policy_id)}
-              className={isExpanded ? 'ring-2 ring-rose-400 ring-offset-1 rounded-xl' : ''}
+              className={isExpanded ? 'ring-2 ring-accent ring-offset-1 rounded-xl' : ''}
               collapsed={
-                <div className="tap min-w-0 rounded-xl border border-rose-100 bg-rose-50 dark:border-rose-900/30 dark:bg-rose-900/10 px-4 py-3">
+                <div className="tap min-w-0 rounded-xl border border-line bg-surface dark:border-line px-4 py-3">
                   <p className="truncate text-sm font-medium text-[var(--text)]">{group.policy_name}</p>
                   {group.policy_number && (
-                    <p className="truncate font-mono text-[10px] text-[var(--text-faint)]">{group.policy_number}</p>
+                    <p className="truncate font-mono text-xs text-[var(--text-faint)]">{group.policy_number}</p>
                   )}
-                  <p className="text-[11px] text-[var(--text-muted)]">
+                  <p className="text-xs text-[var(--text-muted)]">
                     {group.dues.length} due{group.dues.length === 1 ? '' : 's'}
                     {group.insurer_name ? ` · ${group.insurer_name}` : ''}
                     {group.member_name ? ` · ${group.member_name}` : ''}
                   </p>
                   <div className="mt-2 flex items-end justify-between">
-                    <span className="text-lg font-bold text-rose-700 dark:text-rose-300 tabular-nums">
+                    <span className="text-lg font-bold text-ink tabular-nums">
                       {group.total > 0 ? <Money value={group.total} /> : '—'}
                     </span>
                     <p className="text-xs text-[var(--text-faint)]">total due</p>
@@ -127,9 +130,9 @@ export function MissedPremiumsCard({ items, accountOptions, onPaid }: Props) {
                 </div>
               }
             >
-              <div className="overflow-hidden rounded-xl border border-rose-100 bg-rose-50 dark:border-rose-900/30 dark:bg-rose-900/10">
+              <div className="overflow-hidden rounded-xl border border-line bg-surface dark:border-line">
                 {group.dues.length > 1 && (
-                  <div className="flex items-center justify-end gap-3 border-b border-rose-100/60 dark:border-rose-900/20 px-4 py-1.5">
+                  <div className="flex items-center justify-end gap-3 border-b border-line dark:border-line px-4 py-1.5">
                     <button
                       type="button"
                       disabled={isIgnoringGroup}
@@ -141,7 +144,7 @@ export function MissedPremiumsCard({ items, accountOptions, onPaid }: Props) {
                     <button
                       type="button"
                       onClick={() => setBulkSheetGroup(group)}
-                      className="text-xs font-medium text-rose-700 dark:text-rose-300 hover:text-rose-800"
+                      className="text-xs font-medium text-ink hover:text-ink"
                     >
                       Mark all paid →
                     </button>
@@ -154,29 +157,29 @@ export function MissedPremiumsCard({ items, accountOptions, onPaid }: Props) {
                   return (
                     <div
                       key={key}
-                      className="flex items-center gap-2 border-b border-rose-100/60 dark:border-rose-900/20 px-4 py-2.5 last:border-0"
+                      className="flex items-center gap-2 border-b border-line dark:border-line px-4 py-2.5 last:border-0"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs text-[var(--text-muted)]">Due {item.due_date}</p>
+                        <p className="text-xs text-[var(--text-muted)]">Due <DateText value={item.due_date} /></p>
                         {item.grace_end && item.grace_end !== item.due_date && (
-                          <p className="text-[10px] text-[var(--text-muted)]">Grace until {item.grace_end}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Grace until {item.grace_end}</p>
                         )}
                       </div>
-                      <p className="shrink-0 text-sm font-medium text-rose-700 dark:text-rose-300">
+                      <p className="shrink-0 text-sm font-medium text-ink">
                         {parseFloat(item.premium_amount) > 0 ? <Money value={item.premium_amount} /> : '—'}
                       </p>
                       <button
                         type="button"
                         disabled={isIgnoring}
                         onClick={() => ignoreOne(item)}
-                        className="shrink-0 rounded-md border border-rose-200 dark:border-rose-800 px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-rose-100 dark:hover:bg-rose-900/30 disabled:opacity-40"
+                        className="shrink-0 rounded-md border border-line dark:border-line px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-surface-2 disabled:opacity-40"
                       >
                         {isIgnoring ? '…' : 'Ignore'}
                       </button>
                       <button
                         type="button"
                         onClick={() => setSheetTarget(item)}
-                        className="shrink-0 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700"
+                        className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:bg-accent-hover"
                       >
                         Paid
                       </button>

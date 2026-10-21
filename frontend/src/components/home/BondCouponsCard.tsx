@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Money } from '../common/Money'
+import { DateText } from '../ui/DateText'
 import { ExpandableGridCard } from '../common/ExpandableGridCard'
 import { useExpandable } from '../../hooks/useExpandable'
 import { MarkBondCouponReceivedSheet } from './MarkBondCouponReceivedSheet'
@@ -8,6 +9,8 @@ import type { BondCouponDue, OptionItem } from '../../types/domain'
 import { useErrorToast } from '../../hooks/useErrorToast'
 
 type Props = {
+  /** Inside the Home action-items sheet: no heading of its own. */
+  embedded?: boolean
   items: BondCouponDue[]
   accountOptions: OptionItem[]
   onReceived: () => void | Promise<void>
@@ -40,7 +43,7 @@ function groupByBond(items: BondCouponDue[]): BondGroup[] {
   return [...map.values()]
 }
 
-export function BondCouponsCard({ items, accountOptions, onReceived }: Props) {
+export function BondCouponsCard({ items, accountOptions, onReceived, embedded }: Props) {
   const [sheetTarget, setSheetTarget] = useState<BondCouponDue | null>(null)
   const [ignoringId, setIgnoringId] = useState<string | null>(null)
   const [ignoringBondId, setIgnoringBondId] = useState<number | null>(null)
@@ -88,9 +91,9 @@ export function BondCouponsCard({ items, accountOptions, onReceived }: Props) {
 
   return (
     <div>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+      {!embedded && <h2 className="mb-3 text-base font-semibold text-ink">
         Bond Coupons Due
-      </h2>
+      </h2>}
       <div className="card-grid grid gap-3">
         {groups.map((group) => {
           const isIgnoringGroup = ignoringBondId === group.bond_id
@@ -100,16 +103,16 @@ export function BondCouponsCard({ items, accountOptions, onReceived }: Props) {
               key={group.bond_id}
               expanded={isExpanded}
               onToggle={() => groupExpand.toggle(group.bond_id)}
-              className={isExpanded ? 'ring-2 ring-emerald-400 ring-offset-1 rounded-xl' : ''}
+              className={isExpanded ? 'ring-2 ring-accent ring-offset-1 rounded-xl' : ''}
               collapsed={
-                <div className="tap min-w-0 rounded-xl border border-emerald-100 bg-emerald-50 dark:border-emerald-900/30 dark:bg-emerald-900/10 px-4 py-3">
+                <div className="tap min-w-0 rounded-xl border border-line bg-surface dark:border-line px-4 py-3">
                   <p className="truncate text-sm font-medium text-[var(--text)]">{group.instrument_name}</p>
-                  <p className="text-[11px] text-[var(--text-muted)]">
+                  <p className="text-xs text-[var(--text-muted)]">
                     {group.dues.length} due{group.dues.length === 1 ? '' : 's'}
                     {group.issuer_name ? ` · ${group.issuer_name}` : ''}
                   </p>
                   <div className="mt-2 flex items-end justify-between">
-                    <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                    <span className="text-lg font-bold text-ink tabular-nums">
                       {group.total > 0 ? <Money value={group.total} /> : '—'}
                     </span>
                     <p className="text-xs text-[var(--text-faint)]">total due</p>
@@ -117,9 +120,9 @@ export function BondCouponsCard({ items, accountOptions, onReceived }: Props) {
                 </div>
               }
             >
-              <div className="overflow-hidden rounded-xl border border-emerald-100 bg-emerald-50 dark:border-emerald-900/30 dark:bg-emerald-900/10">
+              <div className="overflow-hidden rounded-xl border border-line bg-surface dark:border-line">
                 {group.dues.length > 1 && (
-                  <div className="flex items-center justify-end gap-3 border-b border-emerald-100/60 dark:border-emerald-900/20 px-4 py-1.5">
+                  <div className="flex items-center justify-end gap-3 border-b border-line dark:border-line px-4 py-1.5">
                     <button
                       type="button"
                       disabled={isIgnoringGroup}
@@ -137,29 +140,29 @@ export function BondCouponsCard({ items, accountOptions, onReceived }: Props) {
                   return (
                     <div
                       key={key}
-                      className="flex items-center gap-2 border-b border-emerald-100/60 dark:border-emerald-900/20 px-4 py-2.5 last:border-0"
+                      className="flex items-center gap-2 border-b border-line dark:border-line px-4 py-2.5 last:border-0"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs text-[var(--text-muted)]">Due {item.due_date}</p>
+                        <p className="text-xs text-[var(--text-muted)]">Due <DateText value={item.due_date} /></p>
                         {item.grace_end && item.grace_end !== item.due_date && (
-                          <p className="text-[10px] text-[var(--text-muted)]">Grace until {item.grace_end}</p>
+                          <p className="text-xs text-[var(--text-muted)]">Grace until {item.grace_end}</p>
                         )}
                       </div>
-                      <p className="shrink-0 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                      <p className="shrink-0 text-sm font-medium text-ink">
                         {parseFloat(item.coupon_amount) > 0 ? <Money value={item.coupon_amount} /> : '—'}
                       </p>
                       <button
                         type="button"
                         disabled={isIgnoring}
                         onClick={() => ignoreOne(item)}
-                        className="shrink-0 rounded-md border border-emerald-200 dark:border-emerald-800 px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-emerald-100 dark:hover:bg-emerald-900/30 disabled:opacity-40"
+                        className="shrink-0 rounded-md border border-line dark:border-line px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-surface-2 disabled:opacity-40"
                       >
                         {isIgnoring ? '…' : 'Ignore'}
                       </button>
                       <button
                         type="button"
                         onClick={() => setSheetTarget(item)}
-                        className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                        className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:bg-accent-hover"
                       >
                         Received
                       </button>

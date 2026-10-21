@@ -21,17 +21,12 @@ type Bucket = {
   key: string
   label: string
   color: string
+  /** Instrument/account type key — for lib/icons.ts. */
   icon: string
   value: number            // absolute value in INR
   items: { name: string; value: number }[]
 }
 
-const TYPE_ICON: Record<string, string> = {
-  mutual_fund: '📊', equity: '📈', fd: '🏦', rd: '🏦', epf: '🛡️',
-  ppf: '🛡️', nps: '🛡️', gold: '🪙', real_estate: '🏠', sip: '🔄',
-  insurance: '☂️', cash: '💵', other: '💼', vehicle: '🚗', liability: '⚠️',
-  savings: '🏦',
-}
 
 // Deterministic shade of the base mutual_fund blue per sub-category name, so
 // "Large Cap", "Mid Cap", "Debt", "Corporate Bond" etc. read as distinct but
@@ -76,18 +71,18 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
         key = `mf_${subLabel.toLowerCase()}`
         label = subLabel
         color = mfShade(subLabel)
-        icon = '📊'
+        icon = 'mutual_fund'
       } else if (h.asset_category && categoryMap.has(h.asset_category)) {
         const cat = categoryMap.get(h.asset_category)!
         key = `cat_${cat.id}`
         label = cat.name
         color = cat.color
-        icon = cat.icon_name || TYPE_ICON[h.instrument_type] || '💼'
+        icon = h.instrument_type
       } else {
         key = `type_${h.instrument_type}`
         label = h.instrument_type.replace(/_/g, ' ')
         color = typeColor(h.instrument_type)
-        icon = TYPE_ICON[h.instrument_type] || '💼'
+        icon = h.instrument_type
       }
       const bucket = getOrCreate(key, label, color, icon)
       bucket.value += mv
@@ -152,7 +147,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
                 <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: b.color }} />
                 <span className="flex-1 min-w-0 text-xs font-medium text-[var(--text-2)] capitalize truncate">{b.label}</span>
                 {/* % of member */}
-                <span className="text-[11px] tabular-nums text-[var(--text-muted)] w-8 text-right shrink-0">{Math.abs(pctOfMember).toFixed(1)}%</span>
+                <span className="text-xs tabular-nums text-[var(--text-muted)] w-8 text-right shrink-0">{Math.abs(pctOfMember).toFixed(1)}%</span>
                 {/* mini bar of member share — hidden on mobile */}
                 <div className="hidden sm:block w-16 h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden shrink-0">
                   <div
@@ -161,7 +156,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
                   />
                 </div>
                 {/* % of household — hidden on mobile */}
-                <span className="text-[11px] tabular-nums text-[var(--text-muted)] w-12 text-right hidden sm:block shrink-0">
+                <span className="text-xs tabular-nums text-[var(--text-muted)] w-12 text-right hidden sm:block shrink-0">
                   {Math.abs(pctOfHousehold).toFixed(1)}% HH
                 </span>
                 {/* value */}
@@ -180,18 +175,18 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
                   return (
                     <div key={i} className="flex items-center gap-2 px-3 py-1.5 border-b border-[var(--border)] last:border-0 bg-[var(--surface-2)]/50">
                       <span className="w-2.5 shrink-0" />
-                      <span className="flex-1 min-w-0 text-[11px] text-[var(--text-2)] truncate">{item.name}</span>
-                      <span className="text-[10px] tabular-nums text-[var(--text-muted)] w-8 text-right shrink-0">{pctOfCat.toFixed(1)}%</span>
+                      <span className="flex-1 min-w-0 text-xs text-[var(--text-2)] truncate">{item.name}</span>
+                      <span className="text-xs tabular-nums text-[var(--text-muted)] w-8 text-right shrink-0">{pctOfCat.toFixed(1)}%</span>
                       <div className="hidden sm:block w-16 h-1 rounded-full bg-[var(--surface-2)] overflow-hidden shrink-0">
                         <div
                           className="h-full rounded-full opacity-60"
                           style={{ width: `${Math.min(Math.abs(pctOfCat), 100)}%`, backgroundColor: b.color }}
                         />
                       </div>
-                      <span className="text-[10px] tabular-nums text-[var(--text-muted)] w-12 text-right hidden sm:block shrink-0">
+                      <span className="text-xs tabular-nums text-[var(--text-muted)] w-12 text-right hidden sm:block shrink-0">
                         {Math.abs(pctOfHH).toFixed(1)}% HH
                       </span>
-                      <span className="text-[11px] tabular-nums text-[var(--text-2)] w-20 text-right shrink-0"><Money value={item.value} /></span>
+                      <span className="text-xs tabular-nums text-[var(--text-2)] w-20 text-right shrink-0"><Money value={item.value} /></span>
                       <span className="w-3 shrink-0" />
                     </div>
                   )
@@ -203,7 +198,7 @@ export function MemberWealthBreakdown({ memberName, holdings, accounts, memberTo
       </div>
 
       {/* Legend line */}
-      <p className="text-[10px] text-[var(--text-muted)]">% = share of {memberName}'s wealth · HH% = share of household total</p>
+      <p className="text-xs text-[var(--text-muted)]">% = share of {memberName}'s wealth · HH% = share of household total</p>
     </div>
   )
 }

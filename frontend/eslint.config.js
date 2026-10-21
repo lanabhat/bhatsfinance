@@ -26,7 +26,8 @@ export default defineConfig([
       'react-refresh/only-export-components': ['error', {
         allowConstantExport: true,
         allowExportNames: ['useApp', 'useAuth', 'usePrivacy', 'useTerms', 'useTheme', 'useToast',
-          'hasModePreference', 'useMaskedFmt', 'useChartTheme'],
+          'hasModePreference', 'useMaskedFmt', 'useChartTheme', 'useUndoable', 'useMemberScope', 'usePageChrome',
+          'useRegisterPageHeader', 'SegmentedControl'],
       }],
     },
   },

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { Button } from './Button'
 
 type Props = {
   open: boolean
@@ -36,26 +37,12 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-title"
       >
-        <div className="w-full max-w-sm rounded-2xl bg-[var(--surface)] p-6 shadow-[var(--shadow-modal)] max-h-[90dvh] overflow-y-auto">
-          <h3 id="confirm-title" className="mb-2 text-base font-semibold text-[var(--text)]">{title}</h3>
-          <p className="mb-6 text-sm text-[var(--text-muted)]">{message}</p>
+        <div className="w-full max-w-sm rounded-[var(--radius-xl)] bg-surface p-6 shadow-[var(--shadow-modal)] max-h-[90dvh] overflow-y-auto">
+          <h3 id="confirm-title" className="mb-2 text-base font-semibold text-ink">{title}</h3>
+          <p className="mb-6 text-sm text-ink-muted">{message}</p>
           <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="secondary-btn"
-            >
-              {cancelLabel}
-            </button>
-            <button
-              type="button"
-              onClick={onConfirm}
-              className={`inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-white transition-opacity hover:opacity-90 ${
-                danger ? 'bg-rose-600' : 'bg-primary-600'
-              }`}
-            >
-              {confirmLabel}
-            </button>
+            <Button variant="secondary" onClick={onCancel}>{cancelLabel}</Button>
+            <Button variant={danger ? 'destructive' : 'primary'} onClick={onConfirm}>{confirmLabel}</Button>
           </div>
         </div>
       </div>

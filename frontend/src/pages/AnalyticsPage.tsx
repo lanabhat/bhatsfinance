@@ -1,33 +1,38 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CoinSpinner } from '../components/common/CoinSpinner'
 import { useApp } from '../context/AppContext'
 import { getJson, toQueryString } from '../api/http'
 import { fetchHoldingsHistory } from '../api/analyticsApi'
 import type { HoldingsTrendPoint } from '../api/analyticsApi'
-import { KpiCard } from '../components/analytics/KpiCard'
 import { ValuationTrendChart } from '../components/analytics/ValuationTrendChart'
 import { AllocationTreemap } from '../components/analytics/dashboard/AllocationTreemap'
 import { AssetClassBar } from '../components/analytics/dashboard/AssetClassBar'
 import { DimensionBars } from '../components/analytics/dashboard/DimensionBars'
 import { FactsTable } from '../components/analytics/dashboard/FactsTable'
-import { DIM_LABELS, pct, useMoney } from '../components/analytics/dashboard/facts'
+import { DIM_LABELS, pct } from '../components/analytics/dashboard/facts'
 import type { Fact, FactsPayload } from '../components/analytics/dashboard/facts'
 import { useCrossFilter } from '../components/analytics/dashboard/useCrossFilter'
+import { ChartCard } from '../components/charts/ChartCard'
+import { Amount } from '../components/ui/Amount'
+import { Card } from '../components/ui/Card'
+import { Chip } from '../components/ui/Chip'
+import { DateText } from '../components/ui/DateText'
+import { Delta } from '../components/ui/Delta'
+import { ErrorState } from '../components/ui/EmptyState'
+import { FilterBar } from '../components/ui/FilterBar'
+import { Input } from '../components/ui/Input'
+import { PageLayout } from '../components/ui/PageLayout'
+import { Skeleton } from '../components/ui/Skeleton'
+import { StatCard } from '../components/ui/StatCard'
+import { useMemberScope } from '../context/MemberScopeContext'
+import { fmtCount } from '../lib/fmt'
+import { filterByRange } from '../lib/chartRange'
+import type { ChartRange } from '../lib/chartRange'
 
-type Range = '1M' | '3M' | '6M' | '1Y' | 'All'
-const RANGES: Range[] = ['1M', '3M', '6M', '1Y', 'All']
-const RANGE_MONTHS: Record<Exclude<Range, 'All'>, number> = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12 }
 
 // Dashboard type labels back to instrument_type, for the value-over-time chart.
 const TYPE_KEYS: Record<string, string> = {
   Stock: 'equity', ETF: 'etf', 'Mutual Fund': 'mutual_fund', FD: 'fd', RD: 'rd', Bond: 'bond', EPF: 'epf', PPF: 'ppf', NPS: 'nps',
   Gold: 'gold', 'Real Estate': 'real_estate', Lending: 'lending', Cash: 'cash', Vehicle: 'vehicle', Other: 'other',
-}
-
-function subMonths(dateStr: string, months: number): string {
-  const d = new Date(dateStr)
-  d.setMonth(d.getMonth() - months)
-  return d.toISOString().slice(0, 10)
 }
 
 const _d = new Date()
@@ -43,7 +48,6 @@ const EMPTY: Fact[] = []
  */
 export function AnalyticsPage() {
   const { householdId } = useApp()
-  const money = useMoney()
   const [asOf, setAsOf] = useState(today)
   // Results are keyed by what they were loaded for, so "loading" is simply a key
   // mismatch, and a refetch keeps showing the previous view (dimmed) meanwhile.
@@ -85,8 +89,15 @@ export function AnalyticsPage() {
   }, [facts])
   const memberSel = cf.selected('member')
 
+  // The header's member scope picks the member here too (the chips still allow several).
+  const { memberName } = useMemberScope()
+  const { set: setFilter } = cf
+  useEffect(() => {
+    if (memberName) setFilter('member', [memberName])
+  }, [memberName, setFilter])
+
   // Value over time follows a single selected member / type.
-  const [range, setRange] = useState<Range>('1Y')
+  const [range, setRange] = useState<ChartRange>('1Y')
   const oneMember = cf.filters.member?.length === 1 ? facts?.members.find((m) => m.name === cf.filters.member![0]) : undefined
   const oneTypeKey = cf.filters.type?.length === 1 ? TYPE_KEYS[cf.filters.type[0]] : undefined
   const trendKey = `${householdId}|${oneTypeKey ?? ''}|${oneMember?.id ?? ''}`
@@ -101,10 +112,7 @@ export function AnalyticsPage() {
   }, [householdId, oneTypeKey, oneMember?.id, trendKey])
   const trend = trendLoaded?.points ?? []
   const trendLoading = trendLoaded?.key !== trendKey
-  const trendData = range === 'All' ? trend : trend.filter((p) => p.date >= subMonths(asOf, RANGE_MONTHS[range]) && p.date <= asOf)
-
-  if (loading && !facts) return <div className="flex justify-center py-16"><CoinSpinner size={56} /></div>
-  if (error && !facts) return <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+  const trendData = filterByRange(trend, range, (p) => p.date, new Date(`${asOf}T00:00:00`)).filter((p) => p.date <= asOf)
 
   const bars = (dim: 'type' | 'member' | 'market_cap' | 'category' | 'classification' | 'provider', title: string, opts: { limit?: number; hint?: string; only?: (r: Fact) => boolean } = {}) => (
     <DimensionBars title={title} dim={dim}
@@ -113,99 +121,86 @@ export function AnalyticsPage() {
       limit={opts.limit} hint={opts.hint} />
   )
 
-  return (
-    <section className={`grid gap-4 pb-24 transition-opacity ${loading ? 'opacity-60' : ''}`}>
-      {/* Filters: one row above everything they scope */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => cf.clear('member')}
-          className={`rounded-full border px-3 py-1 text-xs font-medium ${memberSel.size === 0
-            ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-            : 'border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--surface-2)]'}`}>
-          Whole household
-        </button>
-        {memberChips.map((m) => (
-          <button key={m.name} type="button" onClick={() => cf.toggle('member', m.name)}
-            title={m.included ? undefined : 'Not counted in household net worth — shown only when selected'}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${memberSel.has(m.name)
-              ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-              : 'border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--surface-2)]'} ${m.included ? '' : 'border-dashed'}`}>
-            {memberSel.has(m.name) ? '✓ ' : ''}{m.name}
-          </button>
-        ))}
-        <label className="ml-auto flex items-center gap-2 text-xs text-[var(--text-muted)]">
-          As of
-          <input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value)}
-            className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 text-sm text-[var(--text)]" />
-        </label>
-      </div>
+  const firstLoad = loading && !facts
+  const otherFilters = cf.active.filter((a) => a.dim !== 'member')
 
-      {cf.active.filter((a) => a.dim !== 'member').length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-[var(--text-muted)]">Filtered by</span>
-          {cf.active.filter((a) => a.dim !== 'member').map((a) => (
-            <button key={`${a.dim}:${a.value}`} type="button" onClick={() => cf.toggle(a.dim, a.value)}
-              className="flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-3)]">
-              <span className="text-[var(--text-muted)]">{DIM_LABELS[a.dim]}:</span> {a.value} <span aria-hidden>✕</span>
-            </button>
-          ))}
-          <button type="button" onClick={() => cf.clear()} className="ml-1 text-xs text-primary-600 hover:underline dark:text-primary-300">
-            Clear all
-          </button>
+  return (
+    <PageLayout
+      title="Analytics"
+      description={<>As of <DateText value={asOf} /> · every chart filters the others</>}
+      aside={(
+        <label className="hidden items-center gap-2 text-sm text-ink-muted md:flex">
+          As of
+          <Input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value)} className="w-40" aria-label="Show figures as of" />
+        </label>
+      )}
+      summary={(
+        <>
+          <StatCard label="Value" loading={firstLoad} value={<Amount value={kpi.value} format="compact" />}
+            subtitle={`${fmtCount(kpi.holdings)} holdings · ${fmtCount(kpi.members)} member${kpi.members === 1 ? '' : 's'}`} />
+          <StatCard label="Invested" loading={firstLoad} value={<Amount value={kpi.invested} format="compact" />} />
+          <StatCard label="Gain" loading={firstLoad} value={<Amount value={kpi.gain} format="compact" signed tone="gain" />}
+            delta={<Delta value={kpi.gainPct} label="on invested" />} />
+          <StatCard label="Equity share" loading={firstLoad} value={`${kpi.equityPct.toFixed(1)}%`} subtitle="Of value in view" />
+        </>
+      )}
+      toolbar={(
+        <FilterBar
+          extra={(
+            <div className="flex min-w-0 flex-wrap items-center gap-2" role="group" aria-label="Members">
+              <Chip selected={memberSel.size === 0} onClick={() => cf.clear('member')}>Whole household</Chip>
+              {memberChips.map((m) => (
+                <Chip key={m.name} selected={memberSel.has(m.name)} onClick={() => cf.toggle('member', m.name)}
+                  title={m.included ? undefined : 'Not counted in household net worth — shown only when selected'}>
+                  {m.included ? m.name : `${m.name} (excluded)`}
+                </Chip>
+              ))}
+            </div>
+          )}
+          extraChips={otherFilters.map((a) => ({ key: `${a.dim}:${a.value}`, label: `${DIM_LABELS[a.dim]}: ${a.value}`, onRemove: () => cf.toggle(a.dim, a.value) }))}
+          onClearAll={() => cf.clear()}
+        />
+      )}
+    >
+      {error && !facts ? (
+        <Card><ErrorState message={error} /></Card>
+      ) : firstLoad ? (
+        <div className="grid gap-6 lg:grid-cols-3"><Skeleton variant="card" /><Skeleton variant="card" /><Skeleton variant="card" /></div>
+      ) : (
+        <div className={`grid min-w-0 gap-6 transition-opacity ${loading ? 'opacity-60' : ''}`}>
+          <div className="grid gap-6 lg:grid-cols-3">
+            {bars('type', 'Type', { hint: 'What you hold' })}
+            <AssetClassBar rows={cf.rowsFor('asset_class')} selected={cf.selected('asset_class')}
+              onToggle={(v) => cf.toggle('asset_class', v)} onClear={() => cf.clear('asset_class')} />
+            {bars('member', 'Members', { hint: 'Who holds it' })}
+          </div>
+
+          <AllocationTreemap filters={cf.filters} rowsFor={cf.rowsFor} set={cf.set} toggle={cf.toggle} />
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            {bars('market_cap', 'Market cap', { hint: 'Stocks + equity funds', only: (r) => r.market_cap !== '—' })}
+            {bars('category', 'Category')}
+            {bars('classification', 'Classification', { limit: 12, hint: 'Fund category, cap, debt…' })}
+            {bars('provider', 'Fund house / provider', { limit: 10, only: (r) => r.provider !== '—' })}
+          </div>
+
+          <FactsTable rows={rows} selected={cf.selected('holding')} onToggle={(h) => cf.toggle('holding', h)} />
+
+          <ChartCard
+            title={`Value over time${oneTypeKey ? ` — ${cf.filters.type![0]}` : ''}${oneMember ? ` · ${oneMember.name}` : ''}`}
+            subtitle="Invested vs current value. Follows the member and type when exactly one of each is selected."
+            range={{ value: range, onChange: setRange }}
+            loading={trendLoading}
+            empty={trendData.length === 0 ? { title: 'No valuation history yet', description: 'Run a bulk snapshot or import holdings data to build history.' } : null}
+            legend={[
+              { key: 'invested', label: 'Invested', color: 'var(--series-other)', value: trendData[trendData.length - 1]?.invested },
+              { key: 'current', label: 'Current', color: 'var(--primary)', value: trendData[trendData.length - 1]?.current },
+            ]}
+          >
+            <ValuationTrendChart data={trendData} />
+          </ChartCard>
         </div>
       )}
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <KpiCard label="Value" value={money.compact(kpi.value)} />
-        <KpiCard label="Invested" value={money.compact(kpi.invested)} />
-        <KpiCard label="Gain" value={`${kpi.gain >= 0 ? '+' : ''}${money.compact(kpi.gain)}`}
-          sub={kpi.gainPct !== null ? [{ label: '', value: `${kpi.gainPct >= 0 ? '+' : ''}${kpi.gainPct.toFixed(1)}%`, positive: kpi.gainPct >= 0 }] : undefined} />
-        <KpiCard label="Equity share" value={`${kpi.equityPct.toFixed(1)}%`} />
-        <KpiCard label="Holdings" value={String(kpi.holdings)} />
-        <KpiCard label="Members" value={String(kpi.members)} />
-      </div>
-
-      {/* Overview */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        {bars('type', 'Type', { hint: 'What you hold' })}
-        <AssetClassBar rows={cf.rowsFor('asset_class')} selected={cf.selected('asset_class')}
-          onToggle={(v) => cf.toggle('asset_class', v)} onClear={() => cf.clear('asset_class')} />
-        {bars('member', 'Members', { hint: 'Who holds it' })}
-      </div>
-
-      <AllocationTreemap filters={cf.filters} rowsFor={cf.rowsFor} set={cf.set} toggle={cf.toggle} />
-
-      {/* Drill-downs */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {bars('market_cap', 'Market cap', { hint: 'Stocks + equity funds', only: (r) => r.market_cap !== '—' })}
-        {bars('category', 'Category')}
-        {bars('classification', 'Classification', { limit: 12, hint: 'Fund category, cap, debt…' })}
-        {bars('provider', 'Fund house / provider', { limit: 10, only: (r) => r.provider !== '—' })}
-      </div>
-
-      <FactsTable rows={rows} selected={cf.selected('holding')} onToggle={(h) => cf.toggle('holding', h)} />
-
-      {/* Value over time (single member / type when exactly one is selected) */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <div>
-            <h3 className="text-sm font-semibold text-[var(--text)]">
-              Value over time{oneTypeKey ? ` — ${cf.filters.type![0]}` : ''}{oneMember ? ` · ${oneMember.name}` : ''}
-            </h3>
-            <p className="text-xs text-[var(--text-muted)]">Invested vs current value. Follows the member and type when one of each is selected.</p>
-          </div>
-          <div className="ml-auto flex gap-1.5">
-            {RANGES.map((r) => (
-              <button key={r} type="button" onClick={() => setRange(r)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium ${range === r ? 'bg-primary-600 text-white'
-                  : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)]'}`}>
-                {r}
-              </button>
-            ))}
-          </div>
-        </div>
-        {trendLoading ? <div className="flex justify-center py-8"><CoinSpinner size={48} /></div> : <ValuationTrendChart data={trendData} />}
-      </div>
-    </section>
+    </PageLayout>
   )
 }

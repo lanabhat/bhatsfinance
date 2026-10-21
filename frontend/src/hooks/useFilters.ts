@@ -17,7 +17,8 @@ export type FilterAccessor<T> = {
   labelOf?: (value: string) => string
 }
 
-const NONE = '(none)'
+/** Filter value for "no value" (e.g. Uncategorised) — usable in deep links. */
+export const NONE = '(none)'
 
 function valuesOf<T>(row: T, accessor: FilterAccessor<T>): string[] {
   const v = accessor.get(row)

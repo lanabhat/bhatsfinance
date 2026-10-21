@@ -1,3 +1,4 @@
+import { X } from 'lucide-react'
 import type { ComponentType, SVGProps } from 'react'
 import {
   TagsIcon, LedgerIcon, ValuationIcon, ExpensesIcon, MutualFundsIcon,
@@ -60,11 +61,9 @@ type Props = {
   onNavigate: (route: string) => void
   currentRoute: string
   role?: string
-  /** Width class applied to the desktop panel — should match the sidebar's current width so it overlays it exactly. */
-  sidebarWidthClass: string
 }
 
-export function MoreSheet({ open, onClose, onNavigate, currentRoute, role, sidebarWidthClass }: Props) {
+export function MoreSheet({ open, onClose, onNavigate, currentRoute, role }: Props) {
   if (!open) return null
 
   const groups = role === 'super_admin'
@@ -82,32 +81,30 @@ export function MoreSheet({ open, onClose, onNavigate, currentRoute, role, sideb
 
       {/* ── Desktop: overlay panel that takes over the sidebar's position exactly ── */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 hidden ${sidebarWidthClass} flex-col border-r border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-modal)] md:flex`}
+        className={`fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-line bg-surface shadow-[var(--shadow-modal)] md:flex`}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-4">
-          <p className="text-sm font-semibold text-[var(--text)]">More</p>
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
+          <p className="text-sm font-semibold text-ink">More</p>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
             aria-label="Close"
-          >
-            ✕
-          </button>
+          ><X className="h-4 w-4" aria-hidden /></button>
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 py-3">
           {groups.map((group) => (
             <div key={group.label}>
-              <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">{group.label}</p>
-              <div className="grid gap-0.5">
+              <p className="mb-1 px-3 text-xs font-semibold text-ink-muted">{group.label}</p>
+              <div className="grid gap-1">
                 {group.items.map((item) => (
                   <button
                     key={item.key}
                     type="button"
                     className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition-colors ${
                       currentRoute === item.key
-                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
-                        : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+                        ? 'bg-accent-subtle text-accent'
+                        : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
                     }`}
                     onClick={() => { onNavigate(item.key); onClose() }}
                   >
@@ -122,22 +119,20 @@ export function MoreSheet({ open, onClose, onNavigate, currentRoute, role, sideb
       </div>
 
       {/* ── Mobile: full-screen panel that takes over the entire viewport (replaces bottom nav view) ── */}
-      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--surface)] md:hidden">
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-4">
-          <p className="text-base font-semibold text-[var(--text)]">More</p>
+      <div className="fixed inset-0 z-50 flex flex-col bg-surface md:hidden">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
+          <p className="text-base font-semibold text-ink">More</p>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
             aria-label="Close"
-          >
-            ✕
-          </button>
+          ><X className="h-4 w-4" aria-hidden /></button>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-4 pb-24">
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 py-4 pb-24">
           {groups.map((group) => (
             <div key={group.label}>
-              <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">{group.label}</p>
+              <p className="mb-2 px-3 text-xs font-semibold text-ink-muted">{group.label}</p>
               <div className="grid gap-1">
                 {group.items.map((item) => (
                   <button
@@ -145,8 +140,8 @@ export function MoreSheet({ open, onClose, onNavigate, currentRoute, role, sideb
                     type="button"
                     className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors ${
                       currentRoute === item.key
-                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
-                        : 'text-[var(--text-2)] hover:bg-[var(--surface-2)]'
+                        ? 'bg-accent-subtle text-accent'
+                        : 'text-ink-2 hover:bg-surface-2'
                     }`}
                     onClick={() => { onNavigate(item.key); onClose() }}
                   >

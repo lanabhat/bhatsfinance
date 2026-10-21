@@ -71,6 +71,8 @@ State is split across context providers wrapped around the whole app: `AuthProvi
 
 API layer: `frontend/src/api/*.ts`, one file per domain, all built on `frontend/src/api/http.ts`. `http.ts` handles CSRF (`ensureCsrfCookie()` fetches `GET /api/csrf/` to seed the `csrftoken` cookie, then every mutating call reads it back and sends `X-CSRFToken`) and `credentials: 'include'` for session cookies on every request. `frontend/src/api.ts` is a deprecated stub — don't add to it.
 
+**UI:** pages are built from the shared library in `frontend/src/components/ui/` (PageLayout, StatCard, FilterBar, DataTable, DetailDrawer, Amount/Delta/DateText…) on the tokens in `index.css` — see `frontend/UI-GUIDELINES.md`. `npm run check:ui` flags raw colours, sub-12px text, emoji, one-off buttons and inline formatting (strict for migrated pages, ratcheted for the rest).
+
 Almost every page/component takes `householdId` and pre-loaded option lists (`memberOptions`, `accountOptions`, `instrumentOptions`, `canDelete`) as props from `App.tsx`/`AppContext` rather than fetching them itself.
 
 ## Cross-cutting notes

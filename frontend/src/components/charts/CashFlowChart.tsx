@@ -1,6 +1,7 @@
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useMaskedFmt } from '../common/Money'
-import { usePrivacy } from '../../context/PrivacyContext'
+import { fmtMonth, fmtMonthAxis } from '../../lib/fmt'
+import { CASHFLOW_COLOR, CASHFLOW_SERIES } from '../../lib/palette'
 import { useChartTheme, ChartTooltip } from './chartTheme'
 
 export type CashFlowPoint = {
@@ -13,14 +14,15 @@ export type CashFlowPoint = {
 
 export type CashFlowBucket = 'income' | 'expense' | 'investment' | 'savings'
 
+
 type Props = {
   data: CashFlowPoint[]
   onSelect?: (month: string, bucket: CashFlowBucket) => void
 }
 
+/** Monthly income / expense / investment / savings. Legend is rendered by the ChartCard. */
 export function CashFlowChart({ data, onSelect }: Props) {
   const fmt = useMaskedFmt()
-  const { hidden } = usePrivacy()
   const ct = useChartTheme()
   const barProps = (bucket: CashFlowBucket) => onSelect ? {
     cursor: 'pointer' as const,
@@ -30,17 +32,15 @@ export function CashFlowChart({ data, onSelect }: Props) {
     },
   } : {}
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke={ct.grid} />
-        <XAxis dataKey="month" tick={{ fontSize: 11, fill: ct.axis }} stroke={ct.grid} />
-        <YAxis tick={{ fontSize: 11, fill: ct.axis }} stroke={ct.grid} tickFormatter={(v) => hidden ? '••' : `₹${(v / 1000).toFixed(0)}k`} />
-        <Tooltip cursor={{ fill: ct.grid, opacity: 0.3 }} content={(p) => <ChartTooltip {...p} fmt={fmt} />} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Bar dataKey="income" name="Income" fill="#10b981" radius={[4, 4, 0, 0]} {...barProps('income')} />
-        <Bar dataKey="expense" name="Expense" fill="#f43f5e" radius={[4, 4, 0, 0]} {...barProps('expense')} />
-        <Bar dataKey="investment" name="Investment" fill="#6366f1" radius={[4, 4, 0, 0]} {...barProps('investment')} />
-        <Bar dataKey="savings" name="Savings" fill="#f59e0b" radius={[4, 4, 0, 0]} {...barProps('savings')} />
+    <ResponsiveContainer width="100%" height={300} minWidth={0}>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={2}>
+        <CartesianGrid {...ct.gridProps} />
+        <XAxis dataKey="month" {...ct.xAxis} tickFormatter={fmtMonthAxis} />
+        <YAxis {...ct.yAxisINR} />
+        <Tooltip cursor={{ fill: ct.grid, opacity: 0.3 }} content={(p) => <ChartTooltip {...p} fmt={fmt} labelFmt={fmtMonth} />} />
+        {CASHFLOW_SERIES.map((s) => (
+          <Bar key={s.key} dataKey={s.key} name={s.label} fill={CASHFLOW_COLOR[s.key]} radius={[4, 4, 0, 0]} isAnimationActive={false} {...barProps(s.key)} />
+        ))}
       </BarChart>
     </ResponsiveContainer>
   )
