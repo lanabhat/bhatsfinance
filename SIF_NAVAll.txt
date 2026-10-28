@@ -51,10 +51,10 @@ Open Ended Schemes(Equity Oriented Investment Strategies - Equity Long-Short Fun
  
 Altiva SIF
  
-SIF-163;INF754K30177;-;Altiva Equity Long-Short Fund;Direct Plan;Growth;10.0025;26-Oct-2026
-SIF-162;INF754K30185;INF754K30193;Altiva Equity Long-Short Fund;Direct Plan;IDCW;10.0026;26-Oct-2026
-SIF-161;INF754K30219;-;Altiva Equity Long-Short Fund;Regular Plan;Growth;9.9905;26-Oct-2026
-SIF-164;INF754K30227;INF754K30235;Altiva Equity Long-Short Fund;Regular Plan;IDCW;9.9904;26-Oct-2026
+SIF-163;INF754K30177;-;Altiva Equity Long-Short Fund;Direct Plan;Growth;10.0410;27-Oct-2026
+SIF-162;INF754K30185;INF754K30193;Altiva Equity Long-Short Fund;Direct Plan;IDCW;10.0410;27-Oct-2026
+SIF-161;INF754K30219;-;Altiva Equity Long-Short Fund;Regular Plan;Growth;10.0285;27-Oct-2026
+SIF-164;INF754K30227;INF754K30235;Altiva Equity Long-Short Fund;Regular Plan;IDCW;10.0284;27-Oct-2026
  
 Apex SIF
  
@@ -149,40 +149,40 @@ Interval Fund Schemes(Hybrid Investment Strategies - Active Asset Allocator Long
  
 DynaSIF SIF
  
-SIF-88;INF579M30109;-;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;GROWTH OPTION;10.3480;26-Oct-2026
-SIF-86;INF579M30117;INF579M30125;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Option;10.3480;26-Oct-2026
-SIF-87;INF579M30075;-;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;GROWTH OPTION;10.2682;26-Oct-2026
-SIF-89;INF579M30083;INF579M30091;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Option;10.2682;26-Oct-2026
+SIF-88;INF579M30109;-;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;GROWTH OPTION;10.3604;27-Oct-2026
+SIF-86;INF579M30117;INF579M30125;DynaSIF Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Option;10.3604;27-Oct-2026
+SIF-87;INF579M30075;-;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;GROWTH OPTION;10.2801;27-Oct-2026
+SIF-89;INF579M30083;INF579M30091;DynaSIF Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Option;10.2801;27-Oct-2026
  
 iSIF SIF
  
-SIF-125;INF109K30067;-;iSIF Active Asset Allocator Long-Short Fund;;;10.1697;26-Oct-2026
-SIF-124;INF109K30059;-;iSIF Active Asset Allocator Long-Short Fund;;;10.1142;26-Oct-2026
+SIF-125;INF109K30067;-;iSIF Active Asset Allocator Long-Short Fund;;;10.1982;27-Oct-2026
+SIF-124;INF109K30059;-;iSIF Active Asset Allocator Long-Short Fund;;;10.1421;27-Oct-2026
  
 qsif SIF
  
-SIF-92;INF966L30258;INF966L30266;qsif Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Option;12.6347;26-Oct-2026
-SIF-91;INF966L30225;INF966L30233;qsif Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Option;12.5342;26-Oct-2026
-SIF-90;INF966L30241;-;qsif Active Asset Allocator Long-Short Fund;Direct Plan;Growth Option;12.6347;26-Oct-2026
-SIF-93;INF966L30217;-;qsif Active Asset Allocator Long-Short Fund;Regular Plan;Growth Option;12.5342;26-Oct-2026
+SIF-92;INF966L30258;INF966L30266;qsif Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Option;12.7099;27-Oct-2026
+SIF-91;INF966L30225;INF966L30233;qsif Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Option;12.6084;27-Oct-2026
+SIF-90;INF966L30241;-;qsif Active Asset Allocator Long-Short Fund;Direct Plan;Growth Option;12.7099;27-Oct-2026
+SIF-93;INF966L30217;-;qsif Active Asset Allocator Long-Short Fund;Regular Plan;Growth Option;12.6084;27-Oct-2026
  
 Titanium SIF
  
-SIF-167;INF277K30161;-;Titanium Active Asset Allocator Long-Short Fund;Direct Plan;Growth;10.0020;26-Oct-2026
-SIF-170;INF277K30179;-;Titanium Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Payout;10.0020;26-Oct-2026
-SIF-166;-;INF277K30187;Titanium Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Reinvestment;10.0020;26-Oct-2026
-SIF-169;INF277K30138;-;Titanium Active Asset Allocator Long-Short Fund;Regular Plan;Growth;9.9967;26-Oct-2026
-SIF-165;INF277K30146;-;Titanium Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Payout;9.9967;26-Oct-2026
-SIF-168;-;INF277K30153;Titanium Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Reinvestment;9.9967;26-Oct-2026
+SIF-167;INF277K30161;-;Titanium Active Asset Allocator Long-Short Fund;Direct Plan;Growth;10.0194;27-Oct-2026
+SIF-170;INF277K30179;-;Titanium Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Payout;10.0194;27-Oct-2026
+SIF-166;-;INF277K30187;Titanium Active Asset Allocator Long-Short Fund;Direct Plan;IDCW Reinvestment;10.0194;27-Oct-2026
+SIF-169;INF277K30138;-;Titanium Active Asset Allocator Long-Short Fund;Regular Plan;Growth;10.0138;27-Oct-2026
+SIF-165;INF277K30146;-;Titanium Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Payout;10.0138;27-Oct-2026
+SIF-168;-;INF277K30153;Titanium Active Asset Allocator Long-Short Fund;Regular Plan;IDCW Reinvestment;10.0138;27-Oct-2026
  
 Interval Fund Schemes(Hybrid Investment Strategies - Hybrid Long-Short Fund)
  
 Altiva SIF
  
-SIF-9;INF754K30011;-;Altiva Hybrid Long-Short Fund;Direct Plan;Growth;10.9042;26-Oct-2026
-SIF-10;INF754K30029;INF754K30037;Altiva Hybrid Long-Short Fund;Direct Plan;IDCW;10.4869;26-Oct-2026
-SIF-11;INF754K30052;-;Altiva Hybrid Long-Short Fund;Regular Plan;Growth;10.7998;26-Oct-2026
-SIF-12;INF754K30060;INF754K30078;Altiva Hybrid Long-Short Fund;Regular Plan;IDCW;10.3833;26-Oct-2026
+SIF-9;INF754K30011;-;Altiva Hybrid Long-Short Fund;Direct Plan;Growth;10.9341;27-Oct-2026
+SIF-10;INF754K30029;INF754K30037;Altiva Hybrid Long-Short Fund;Direct Plan;IDCW;10.4556;27-Oct-2026
+SIF-11;INF754K30052;-;Altiva Hybrid Long-Short Fund;Regular Plan;Growth;10.8292;27-Oct-2026
+SIF-12;INF754K30060;INF754K30078;Altiva Hybrid Long-Short Fund;Regular Plan;IDCW;10.3515;27-Oct-2026
  
 Apex SIF
  
