@@ -28,10 +28,10 @@ SIF-34;INF109K30034;-;iSIF Equity Ex-Top 100 Long-Short Fund;;;9.74;30-Oct-2026
  
 Magnum SIF
  
-SIF-159;INF200K30106;-;Magnum Equity Ex-Top 100 Long Short Fund;Direct Plan;Growth;9.3770;30-Oct-2026
-SIF-160;INF200K30114;INF200K30122;Magnum Equity Ex-Top 100 Long Short Fund;Direct Plan;IDCW;9.3771;30-Oct-2026
-SIF-157;INF200K30072;-;Magnum Equity Ex-Top 100 Long Short Fund;Regular Plan;Growth;9.3558;30-Oct-2026
-SIF-158;INF200K30080;INF200K30098;Magnum Equity Ex-Top 100 Long Short Fund;Regular Plan;IDCW;9.3467;30-Oct-2026
+SIF-159;INF200K30106;-;Magnum Equity Ex-Top 100 Long Short Fund;Direct Plan;Growth;9.3771;31-Oct-2026
+SIF-160;INF200K30114;INF200K30122;Magnum Equity Ex-Top 100 Long Short Fund;Direct Plan;IDCW;9.3771;31-Oct-2026
+SIF-157;INF200K30072;-;Magnum Equity Ex-Top 100 Long Short Fund;Regular Plan;Growth;9.3556;31-Oct-2026
+SIF-158;INF200K30080;INF200K30098;Magnum Equity Ex-Top 100 Long Short Fund;Regular Plan;IDCW;9.3464;31-Oct-2026
  
 qsif SIF
  
@@ -69,11 +69,11 @@ SIF-115;INF582M30020;INF582M30038;Arthaya Equity Long Short Fund;Regular Plan;ID
  
 Arudha SIF
  
-SIF-61;INF194K30523;-;Arudha Equity Long-Short Fund;Direct Plan;Growth;10.087;30-Oct-2026
-SIF-75;INF194K30424;INF194K30507;Arudha Equity Long-Short Fund;Regular Plan;Annual IDCW;9.716;30-Oct-2026
-SIF-62;INF194K30358;-;Arudha Equity Long-Short Fund;Regular Plan;Growth;9.995;30-Oct-2026
-SIF-69;INF194K30390;INF194K30473;Arudha Equity Long-Short Fund;Regular Plan;Monthly IDCW;9.87;30-Oct-2026
-SIF-71;INF194K30408;INF194K30481;Arudha Equity Long-Short Fund;Regular Plan;Quarterly IDCW;9.995;30-Oct-2026
+SIF-61;INF194K30523;-;Arudha Equity Long-Short Fund;Direct Plan;Growth;10.087;31-Oct-2026
+SIF-75;INF194K30424;INF194K30507;Arudha Equity Long-Short Fund;Regular Plan;Annual IDCW;9.716;31-Oct-2026
+SIF-62;INF194K30358;-;Arudha Equity Long-Short Fund;Regular Plan;Growth;9.995;31-Oct-2026
+SIF-69;INF194K30390;INF194K30473;Arudha Equity Long-Short Fund;Regular Plan;Monthly IDCW;9.869;31-Oct-2026
+SIF-71;INF194K30408;INF194K30481;Arudha Equity Long-Short Fund;Regular Plan;Quarterly IDCW;9.995;31-Oct-2026
  
 Diviniti SIF
  
@@ -193,12 +193,12 @@ SIF-79;INF209K30016;-;Apex Hybrid Long-Short Fund;Direct Plan;GROWTH;10.8162;30-
  
 Arudha SIF
  
-SIF-51;INF194K30259;INF194K30333;Arudha Hybrid Long-Short Fund;Direct Plan;Annual IDCW;10.342;30-Oct-2026
-SIF-54;INF194K30184;-;Arudha Hybrid Long-Short Fund;Direct Plan;Growth;10.439;30-Oct-2026
-SIF-48;INF194K30242;INF194K30325;Arudha Hybrid Long-Short Fund;Direct Plan;Half Yearly IDCW;10.436;30-Oct-2026
-SIF-43;INF194K30044;INF194K30127;Arudha Hybrid Long-Short Fund;Regular Plan;Fortnightly IDCW;10.004;30-Oct-2026
-SIF-40;INF194K30010;-;Arudha Hybrid Long-Short Fund;Regular Plan;Growth;10.402;30-Oct-2026
-SIF-44;INF194K30051;INF194K30135;Arudha Hybrid Long-Short Fund;Regular Plan;Monthly IDCW;10.402;30-Oct-2026
+SIF-51;INF194K30259;INF194K30333;Arudha Hybrid Long-Short Fund;Direct Plan;Annual IDCW;10.343;31-Oct-2026
+SIF-54;INF194K30184;-;Arudha Hybrid Long-Short Fund;Direct Plan;Growth;10.44;31-Oct-2026
+SIF-48;INF194K30242;INF194K30325;Arudha Hybrid Long-Short Fund;Direct Plan;Half Yearly IDCW;10.437;31-Oct-2026
+SIF-43;INF194K30044;INF194K30127;Arudha Hybrid Long-Short Fund;Regular Plan;Fortnightly IDCW;10.005;31-Oct-2026
+SIF-40;INF194K30010;-;Arudha Hybrid Long-Short Fund;Regular Plan;Growth;10.403;31-Oct-2026
+SIF-44;INF194K30051;INF194K30135;Arudha Hybrid Long-Short Fund;Regular Plan;Monthly IDCW;10.403;31-Oct-2026
  
 Infinity SIF
  
@@ -214,10 +214,10 @@ SIF-35;INF109K30018;-;iSIF Hybrid Long-Short Fund;;;10.1362;30-Oct-2026
  
 Magnum SIF
  
-SIF-14;INF200K30049;-;Magnum Hybrid Long Short Fund;Direct Plan;Growth;10.3182;30-Oct-2026
-SIF-15;INF200K30056;INF200K30064;Magnum Hybrid Long Short Fund;Direct Plan;IDCW;10.3240;30-Oct-2026
-SIF-13;INF200K30015;-;Magnum Hybrid Long Short Fund;Regular Plan;Growth;10.2446;30-Oct-2026
-SIF-16;INF200K30023;INF200K30031;Magnum Hybrid Long Short Fund;Regular Plan;IDCW;10.2437;30-Oct-2026
+SIF-14;INF200K30049;-;Magnum Hybrid Long Short Fund;Direct Plan;Growth;10.3186;31-Oct-2026
+SIF-15;INF200K30056;INF200K30064;Magnum Hybrid Long Short Fund;Direct Plan;IDCW;10.3245;31-Oct-2026
+SIF-13;INF200K30015;-;Magnum Hybrid Long Short Fund;Regular Plan;Growth;10.2449;31-Oct-2026
+SIF-16;INF200K30023;INF200K30031;Magnum Hybrid Long Short Fund;Regular Plan;IDCW;10.2440;31-Oct-2026
  
 Platinum SIF
  
