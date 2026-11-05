@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
 import { usePrivacy } from '../../context/PrivacyContext'
 import { cn } from '../../lib/cn'
 import { formatAmount, fmtINRWhole } from '../../lib/fmt'
 import type { AmountFormat } from '../../lib/fmt'
+import { useStatValue } from './statValueContext'
 
 export type AmountTone = 'default' | 'gain' | 'debit' | 'credit' | 'muted'
 
@@ -24,8 +26,14 @@ const MASK_WIDTH: Record<AmountFormat, string> = { full: 'w-[5.5em]', compact: '
  * Every rupee figure in the app goes through here: Indian grouping, tabular numerals,
  * a sign and colour for gains, and a fixed-width privacy bar instead of "••••".
  */
-export function Amount({ value, format = 'full', signed, tone = 'default', className }: Props) {
+export function Amount({ value, format: requested = 'full', signed, tone = 'default', className }: Props) {
   const { hidden } = usePrivacy()
+  // Inside a StatCard, "compact" follows the card (the user's full/short KPI setting).
+  const stat = useStatValue()
+  const followsCard = stat !== null && requested === 'compact'
+  const format = followsCard ? stat.format : requested
+  const register = followsCard ? stat.registerAmount : undefined
+  useEffect(() => { register?.() }, [register])
   const n = typeof value === 'string' ? parseFloat(value) : (value ?? NaN)
 
   if (hidden) {

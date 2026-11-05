@@ -48,7 +48,7 @@ accounts they own, Transactions passes them as the member filter). It is remembe
 | Status / tags | `Badge` | `neutral`, `accent`, `success`, `warning`, `danger`, `info`; always with words |
 | Tabs, range tabs | `Tabs` (= `SegmentedControl`) | |
 | Form fields | `Field` + `Input` / `Select` | label above, same height as buttons |
-| Money | `Amount` | `format="full"` in tables (₹12,34,567), `"compact"` in summaries (₹1.2 Cr); `signed` + `tone="gain"` for gains, `debit`/`credit` for flows |
+| Money | `Amount` | `format="full"` in tables (₹12,34,567), `"compact"` in summaries (₹1.2 Cr — inside a `StatCard` it shows the full figure by default; clicking the card switches every KPI to short form and back, and a figure too wide for its card falls back to short); `signed` + `tone="gain"` for gains, `debit`/`credit` for flows |
 | Change | `Delta` | sign + arrow + colour; `invert` where up is bad (spend) |
 | Date | `DateText` | 18 Oct 2026 · `short` 18 Oct · `month` Oct 2026 |
 | Person | `MemberAvatar` | "A, B" shows the first + "+1" |

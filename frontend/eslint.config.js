@@ -25,7 +25,7 @@ export default defineConfig([
       // any other non-component export still gets flagged.
       'react-refresh/only-export-components': ['error', {
         allowConstantExport: true,
-        allowExportNames: ['useApp', 'useAuth', 'usePrivacy', 'useTerms', 'useTheme', 'useToast',
+        allowExportNames: ['useAmountDisplay', 'useApp', 'useAuth', 'usePrivacy', 'useTerms', 'useTheme', 'useToast',
           'hasModePreference', 'useMaskedFmt', 'useChartTheme', 'useUndoable', 'useMemberScope', 'usePageChrome',
           'useRegisterPageHeader', 'SegmentedControl'],
       }],

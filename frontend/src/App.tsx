@@ -4,6 +4,7 @@ import { queryClient } from './api/queryClient'
 import { lazyPage } from './lib/lazyPage'
 import { PageErrorBoundary } from './components/PageErrorBoundary'
 import { AppLayout } from './components/layout/AppLayout'
+import { AmountDisplayProvider } from './context/AmountDisplayContext'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { MemberScopeProvider } from './context/MemberScopeContext'
@@ -220,9 +221,11 @@ function App() {
       <TermsProvider>
         <ToastProvider>
           <PrivacyProvider>
+          <AmountDisplayProvider>
             <AuthProvider>
               <AuthGate />
             </AuthProvider>
+          </AmountDisplayProvider>
           </PrivacyProvider>
         </ToastProvider>
       </TermsProvider>
