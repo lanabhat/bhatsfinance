@@ -34,6 +34,8 @@ const STRICT = [
   'src/pages/SpendTrendsPage.tsx',
   'src/pages/AnalyticsPage.tsx',
   'src/components/holdings/HoldingDetailDrawer.tsx',
+  'src/components/holdings/BondTermsForm.tsx',
+  'src/components/holdings/FdTermsForm.tsx',
   'src/components/holdings/HoldingsCardView.tsx',
   'src/components/accounts/',
   'src/components/analytics/dashboard/FactsTable.tsx',

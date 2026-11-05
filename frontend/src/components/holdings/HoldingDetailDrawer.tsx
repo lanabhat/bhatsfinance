@@ -24,6 +24,9 @@ import { SectionHeader } from '../ui/SectionHeader'
 import { Skeleton } from '../ui/Skeleton'
 import type { AssetCategory, DashboardHolding, Instrument, InstrumentOwnership, Transaction, ValuationSnapshot } from '../../types/domain'
 
+/** Points at the FDDetails / BondDetails row behind one deposit line. */
+export type DepositRef = { kind: 'fd' | 'bond'; id: number }
+
 type Props = {
   open: boolean
   onClose: () => void
@@ -31,12 +34,14 @@ type Props = {
   holding: DashboardHolding
   instrument: Instrument
   category?: AssetCategory
-  maturities?: (MaturityInfo & { investmentDate: string })[]
+  maturities?: (MaturityInfo & { investmentDate: string; terms?: DepositRef })[]
   onBuy: () => void
   /** Omit for value-based holdings that don't sell by units. */
   onSell?: () => void
   onUpdateValue: () => void
   onEdit: () => void
+  /** Opens the rate / maturity editor for one FD or bond deposit. */
+  onEditTerms?: (ref: DepositRef) => void
   /** Asks to delete (with its transactions and valuations); the page handles confirm/undo. */
   onDelete: () => void
   onTransactionsChanged: () => Promise<void>
@@ -123,7 +128,14 @@ export function HoldingDetailDrawer(p: Props) {
         { label: 'Last valued', value: <DateText value={holding.last_valued_on} /> },
         ...(p.maturities ?? []).map((m, i) => ({
           label: (p.maturities!.length > 1 ? `Deposit ${i + 1}` : 'Deposit'),
-          value: <>{fmtRate(m.rate)} · from <DateText value={m.investmentDate} format="short" /> · matures <DateText value={m.date} /> ({formatMaturity(m.date)})</>,
+          value: (
+            <>
+              {fmtRate(m.rate)} · from <DateText value={m.investmentDate} format="short" /> · matures <DateText value={m.date} /> ({formatMaturity(m.date)})
+              {canWrite && m.terms && p.onEditTerms && (
+                <> · <Button variant="link" onClick={() => p.onEditTerms!(m.terms!)}>Edit terms</Button></>
+              )}
+            </>
+          ),
           wide: true,
         })),
       ]}

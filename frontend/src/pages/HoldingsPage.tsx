@@ -17,6 +17,9 @@ import { InstrumentForm } from '../components/assets/InstrumentForm'
 import { InvestmentForm } from '../components/assets/InvestmentForm'
 import { AssetCategoryForm } from '../components/assets/AssetCategoryForm'
 import type { MaturityInfo } from '../components/assets/InstrumentRow'
+import type { DepositRef } from '../components/holdings/HoldingDetailDrawer'
+import { BondTermsForm } from '../components/holdings/BondTermsForm'
+import { FdTermsForm } from '../components/holdings/FdTermsForm'
 import { BuyForm } from '../components/holdings/BuyForm'
 import { SellForm } from '../components/holdings/SellForm'
 import { HoldingDetailDrawer } from '../components/holdings/HoldingDetailDrawer'
@@ -102,6 +105,8 @@ type SheetState =
   | { type: 'sell'; instrumentId: number; investmentId?: number; holdingName: string; currentQuantity: string | null }
   | { type: 'edit_instrument'; instrument: Instrument }
   | { type: 'edit_investment'; investment: Investment }
+  | { type: 'edit_bond'; bond: BondDetails }
+  | { type: 'edit_fd'; fd: FDDetails }
   | { type: 'category'; item?: AssetCategory }
   | { type: 'fund-match' }
   | { type: 'duplicates' }
@@ -233,13 +238,13 @@ export function HoldingsPage() {
 
   const maturityByInstrument = useMemo(() => {
     // One instrument can hold several FD/Bond deposits — keep every leg, nearest first.
-    const m = new Map<number, (MaturityInfo & { investmentDate: string })[]>()
-    const push = (instrumentId: number, entry: MaturityInfo & { investmentDate: string }) => {
+    const m = new Map<number, (MaturityInfo & { investmentDate: string; terms: DepositRef })[]>()
+    const push = (instrumentId: number, entry: MaturityInfo & { investmentDate: string; terms: DepositRef }) => {
       const list = m.get(instrumentId)
       if (list) list.push(entry); else m.set(instrumentId, [entry])
     }
-    for (const d of fdDetails) push(d.instrument, { date: d.maturity_date, rate: d.annual_rate, investmentDate: d.investment_date })
-    for (const d of bondDetails) push(d.instrument, { date: d.maturity_date, rate: d.coupon_rate, investmentDate: d.investment_date })
+    for (const d of fdDetails) push(d.instrument, { date: d.maturity_date, rate: d.annual_rate, investmentDate: d.investment_date, terms: { kind: 'fd', id: d.id } })
+    for (const d of bondDetails) push(d.instrument, { date: d.maturity_date, rate: d.coupon_rate, investmentDate: d.investment_date, terms: { kind: 'bond', id: d.id } })
     for (const list of m.values()) list.sort((a, b) => a.date.localeCompare(b.date))
     return m
   }, [fdDetails, bondDetails])
@@ -546,6 +551,16 @@ export function HoldingsPage() {
       if (investment) { setSheet({ type: 'edit_investment', investment }); return }
     }
     setSheet({ type: 'edit_instrument', instrument: resolveInstrument(h) })
+  }
+
+  const editTerms = (ref: DepositRef) => {
+    if (ref.kind === 'fd') {
+      const fd = fdDetails.find((d) => d.id === ref.id)
+      if (fd) setSheet({ type: 'edit_fd', fd })
+    } else {
+      const bond = bondDetails.find((d) => d.id === ref.id)
+      if (bond) setSheet({ type: 'edit_bond', bond })
+    }
   }
 
   // View → Edit → Buy / Sell / Update value → Delete, the same everywhere.
@@ -893,6 +908,7 @@ export function HoldingsPage() {
           onSell={isQuantityTracked(detailHolding) ? () => setSheet({ type: 'sell', instrumentId: detailInst.id, investmentId: detailHolding.investment_id ?? undefined, holdingName: detailHolding.display_name, currentQuantity: detailHolding.quantity }) : undefined}
           onUpdateValue={() => setSheet({ type: 'valuation', instrumentId: detailInst.id, investmentId: detailHolding.investment_id, instrumentName: detailHolding.display_name })}
           onEdit={() => openEdit(detailHolding)}
+          onEditTerms={editTerms}
           onDelete={() => deleteHolding(detailHolding)}
           onTransactionsChanged={afterTransactionsChanged}
         />
@@ -968,6 +984,18 @@ export function HoldingsPage() {
         <Sheet title={investmentEditTitle(sheet.investment, instrumentsFull)} onClose={close}>
           <InvestmentForm investment={sheet.investment}
             onSave={async () => { close(); await refreshDashboard(); await loadInvestments(); await loadMfDetails() }} onCancel={close} />
+        </Sheet>
+      )}
+      {sheet.type === 'edit_bond' && (
+        <Sheet title="Edit bond terms" onClose={close}>
+          <BondTermsForm bond={sheet.bond}
+            onSave={async () => { close(); await refreshDashboard(); setBondDetails(await portfolioApi.listBondDetails()) }} onCancel={close} />
+        </Sheet>
+      )}
+      {sheet.type === 'edit_fd' && (
+        <Sheet title="Edit deposit terms" onClose={close}>
+          <FdTermsForm fd={sheet.fd}
+            onSave={async () => { close(); await refreshDashboard(); setFdDetails(await fdDetailsApi.list()) }} onCancel={close} />
         </Sheet>
       )}
       {sheet.type === 'category' && (
