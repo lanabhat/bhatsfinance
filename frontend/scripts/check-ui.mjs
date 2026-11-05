@@ -36,6 +36,7 @@ const STRICT = [
   'src/components/holdings/HoldingDetailDrawer.tsx',
   'src/components/holdings/BondTermsForm.tsx',
   'src/components/holdings/FdTermsForm.tsx',
+  'src/components/imports/IndiaBondsImportWizard.tsx',
   'src/components/holdings/HoldingsCardView.tsx',
   'src/components/accounts/',
   'src/components/analytics/dashboard/FactsTable.tsx',

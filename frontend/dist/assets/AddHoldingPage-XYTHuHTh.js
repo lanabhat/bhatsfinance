@@ -1,1 +1,0 @@
-import{r as e}from"./react-Bi7DTBAI.js";import{Cn as t}from"./app-C3AF7zjA.js";import{t as n}from"./BuyForm-7LaDxbCh.js";var r=e();function i({onDone:e}){let{householdId:i,refreshDashboard:a}=t();return(0,r.jsx)(`div`,{className:`max-w-3xl`,children:(0,r.jsx)(n,{householdId:i,scroll:!1,onSave:async()=>{await a(),e()},onCancel:e})})}export{i as AddHoldingPage};

@@ -460,6 +460,112 @@ async function postForm<T>(url: string, formData: FormData): Promise<T> {
   }
 }
 
+// ── IndiaBonds deal sheets (ingestion/indiabonds.py) ──────────────────────────
+
+export type IndiaBondsDeal = {
+  side: 'buy' | 'sell'
+  order_id: string
+  deal_id: string
+  buyer_name: string
+  seller_name: string
+  isin: string
+  security_name: string
+  issuer_name: string
+  security_nature: string
+  bond_type: string
+  coupon_rate: string | null
+  coupon_frequency: string | null
+  first_coupon_date: string | null
+  interest_schedule: string
+  redemption_schedule: { date: string; percent: string }[]
+  maturity_date: string | null
+  face_value: string | null
+  quantity: number
+  price: string | null
+  deal_date: string | null
+  value_date: string
+  principal: string | null
+  accrued_interest: string
+  accrued_days: number | null
+  settlement_amount: string
+  notes: string
+}
+
+/** A lot field (or the funding buy's amount/date/price): now vs the deal sheet. */
+export type IndiaBondsFieldDiff = { field: string; label: string; current: string | number | null; file: string | number | null; changed: boolean }
+
+export type IndiaBondsExtras = {
+  account_id: number | null
+  credit_rating: string
+  grace_days: number
+  maturity_value: string | null
+  notes: string
+  /** Matched lots: the lot's notes with the deal's redemption line added — what Append writes. */
+  notes_appended?: string
+}
+
+export type IndiaBondsStatus = 'new' | 'matched_changed' | 'matched_same' | 'already_imported' | 'duplicate'
+
+export type IndiaBondsFilePreview = {
+  filename: string
+  error?: string
+  error_code?: string
+  deal: IndiaBondsDeal
+  status: IndiaBondsStatus
+  match: {
+    bond_details_id: number
+    instrument_id: number
+    instrument_name: string
+    funding: { id: number; tx_date: string; amount: string } | null
+    coupon_acks: number
+  } | null
+  diff: IndiaBondsFieldDiff[]
+  extras: IndiaBondsExtras
+  sell_plan: { bond_details_id: number; instrument_name: string; quantity_before: number; quantity_after: number; take: number }[]
+  matched_member: { id: number; name: string; relation: string; confidence: number } | null
+  members: { id: number; name: string; relation: string }[]
+}
+
+export type IndiaBondsAction = 'create' | 'append' | 'edit' | 'replace' | 'skip'
+
+export type IndiaBondsItem = {
+  filename: string
+  deal: IndiaBondsDeal
+  action: IndiaBondsAction
+  bond_details_id?: number
+  member_id: number | null
+  account_id: number | null
+  /** Final lot / buy values — Edit (the user's choices) and Create/Replace (fill-ins). */
+  values?: Record<string, string>
+  extras?: Partial<IndiaBondsExtras>
+  refresh_snapshot?: boolean
+}
+
+export type ValuationIssue = {
+  instrument_id: number
+  instrument_name: string
+  bond_details_id: number | null
+  severity: 'error' | 'warning' | 'info'
+  code: string
+  message: string
+  suggestion: string
+  fields: string[]
+}
+
+export type IndiaBondsResult = {
+  filename: string
+  order_id: string
+  action: IndiaBondsAction
+  status: 'created' | 'appended' | 'edited' | 'replaced' | 'skipped' | 'error'
+  changed?: string[]
+  instrument_id?: number
+  instrument_name?: string
+  error?: string
+  coupon_acks_moved?: number
+}
+
+export type IndiaBondsApplyResult = { results: IndiaBondsResult[]; change_summary: ChangeSummary; valuation_issues: ValuationIssue[] }
+
 export const importApi = {
   previewFile: async (file: File): Promise<ImportPreviewResult> => {
     const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
@@ -532,6 +638,25 @@ export const importApi = {
     dryRun = false,
   ): Promise<{ results: NpsFileResult[]; change_summary: ChangeSummary }> =>
     httpPost(`${BASE}/imports/nps-apply`, { household_id: householdId, items, dry_run: dryRun }),
+
+  previewIndiaBondsFiles: async (householdId: number, files: File[], password?: string): Promise<IndiaBondsFilePreview[]> => {
+    const fd = new FormData()
+    fd.append('household_id', String(householdId))
+    for (const f of files) fd.append('files', f)
+    if (password) fd.append('password', password)
+    return postForm<IndiaBondsFilePreview[]>(`${BASE}/imports/indiabonds-preview`, fd)
+  },
+
+  /** A refused apply (valuation errors / unacknowledged warnings) throws {error, valuation_issues}. */
+  applyIndiaBondsImport: (
+    householdId: number,
+    items: IndiaBondsItem[],
+    dryRun = false,
+    acknowledgeWarnings = false,
+  ): Promise<IndiaBondsApplyResult> =>
+    httpPost(`${BASE}/imports/indiabonds-apply`, {
+      household_id: householdId, items, dry_run: dryRun, acknowledge_warnings: acknowledgeWarnings,
+    }),
 
   previewEpfPassbookFiles: async (householdId: number, files: File[]): Promise<EpfFilePreview[]> => {
     const fd = new FormData()

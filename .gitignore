@@ -34,3 +34,4 @@ backup/
 # Pre-compressed frontend copies made by deploy.sh on the server
 frontend/dist/**/*.gz
 frontend/dist/**/*.br
+bonds/

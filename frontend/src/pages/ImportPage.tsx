@@ -3,6 +3,7 @@ import { ImportWizard } from './ImportWizard'
 import { GrowwImportWizard } from '../components/imports/GrowwImportWizard'
 import { FDAdviceImportWizard } from '../components/imports/FDAdviceImportWizard'
 import { NpsImportWizard } from '../components/imports/NpsImportWizard'
+import { IndiaBondsImportWizard } from '../components/imports/IndiaBondsImportWizard'
 import { EpfPassbookImportWizard } from '../components/imports/EpfPassbookImportWizard'
 import { PpfStatementImportWizard } from '../components/imports/PpfStatementImportWizard'
 import { SBIStatementImportWizard } from '../components/imports/SBIStatementImportWizard'
@@ -10,7 +11,7 @@ import { ImportHistory } from '../components/imports/ImportHistory'
 import { UpstoxConnect } from '../components/integrations/UpstoxConnect'
 import type { OptionItem } from '../types/domain'
 
-type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'nps' | 'epf' | 'ppf' | 'sbi' | 'history'
+type Tab = 'import' | 'groww' | 'upstox' | 'fd' | 'bonds' | 'nps' | 'epf' | 'ppf' | 'sbi' | 'history'
 
 type Props = {
   householdId: number
@@ -32,6 +33,7 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
         <button className={tabCls('groww')} onClick={() => setTab('groww')}>Portfolio Import</button>
         <button className={tabCls('upstox')} onClick={() => setTab('upstox')}>Upstox</button>
         <button className={tabCls('fd')} onClick={() => setTab('fd')}>FD Import</button>
+        <button className={tabCls('bonds')} onClick={() => setTab('bonds')}>Bonds (IndiaBonds)</button>
         <button className={tabCls('nps')} onClick={() => setTab('nps')}>NPS Import</button>
         <button className={tabCls('epf')} onClick={() => setTab('epf')}>EPF Import</button>
         <button className={tabCls('ppf')} onClick={() => setTab('ppf')}>PPF Import</button>
@@ -43,7 +45,7 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
         <article className="panel">
           <h2>Import history</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-            Every holdings, FD/RD and SBI statement import, with what it changed — values before and after, units, and new or closed holdings.
+            Every holdings, FD/RD, bond deal sheet and SBI statement import, with what it changed — values before and after, units, and new or closed holdings.
           </p>
           <ImportHistory householdId={householdId} />
         </article>
@@ -90,6 +92,18 @@ export function ImportPage({ householdId, memberOptions, accountOptions, instrum
             supported; other banks are parsed on a best-effort basis and reviewable before import.
           </p>
           <FDAdviceImportWizard householdId={householdId} />
+        </article>
+      )}
+
+      {tab === 'bonds' && (
+        <article className="panel">
+          <h2>Bonds — IndiaBonds deal sheets</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Upload the deal sheet PDF for each bond trade (IndiaBonds → Profile icon → My orders → select the bond →
+            Deal Sheet → Download). Coupon, schedule, face value and the buy are read from it; bonds you already
+            recorded are matched so you can append, edit or replace them.
+          </p>
+          <IndiaBondsImportWizard householdId={householdId} />
         </article>
       )}
 

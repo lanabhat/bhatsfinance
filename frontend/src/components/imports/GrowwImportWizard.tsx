@@ -369,7 +369,7 @@ export function GrowwImportWizard({ householdId }: Props) {
                     <ul className="col-span-2 grid gap-1 text-[var(--text-muted)]">
                       {(er.reclassified ?? 0) > 0 && <li>{er.reclassified} holding{er.reclassified === 1 ? '' : 's'} moved to the right type (mutual fund / bond).</li>}
                       {(er.units_adjusted ?? 0) > 0 && <li>{er.units_adjusted} holding{er.units_adjusted === 1 ? '' : 's'} changed quantity — recorded as a buy/sell at the statement price.</li>}
-                      {(er.bonds_created?.length ?? 0) > 0 && <li>New bond{er.bonds_created!.length === 1 ? '' : 's'}: {er.bonds_created!.join(', ')} — add coupon and maturity on the Instruments page to track accrual.</li>}
+                      {(er.bonds_created?.length ?? 0) > 0 && <li>New bond{er.bonds_created!.length === 1 ? '' : 's'}: {er.bonds_created!.join(', ')} — import their IndiaBonds deal sheets (Import → Bonds) or use Edit terms on the holding to add coupon and maturity.</li>}
                       {(er.bond_quantity_mismatch?.length ?? 0) > 0 && (
                         <li className="text-amber-600 dark:text-amber-400">Quantity differs from the bond already recorded: {er.bond_quantity_mismatch!.join(', ')}. Check it on the Instruments page.</li>
                       )}

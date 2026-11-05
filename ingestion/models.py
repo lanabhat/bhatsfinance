@@ -26,6 +26,7 @@ class ImportBatch(TimeStampedModel):
         EPF = 'epf', 'EPF passbook'
         PPF = 'ppf', 'PPF statement'
         DATA = 'data', 'Data import'
+        INDIABONDS = 'indiabonds', 'IndiaBonds deal sheet'
 
     household = models.ForeignKey('core.Household', on_delete=models.CASCADE, related_name='import_batches')
     source = models.CharField(max_length=10, choices=SourceType.choices, default=SourceType.CSV)

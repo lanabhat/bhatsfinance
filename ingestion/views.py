@@ -1012,6 +1012,112 @@ class NpsApplyView(APIView):
         return Response({'results': all_results, 'change_summary': summary}, status=200 if dry_run else 201)
 
 
+class IndiaBondsPreviewView(APIView):
+    """Step 1: parse IndiaBonds deal sheet PDFs (one trade each), match each to a bond lot
+    already recorded and show what differs — see ingestion/indiabonds.py."""
+
+    def post(self, request):
+        from core.models import Household
+        from ingestion.indiabonds import preview_deals
+        from ingestion.indiabonds_parser import IndiaBondsParseError, parse_indiabonds_deal_sheet
+        from ingestion.pdf_decrypt import IncorrectPasswordError
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'error': 'household_id is required'}, status=400)
+        try:
+            household = Household.objects.get(pk=int(household_id))
+        except Household.DoesNotExist:
+            return Response({'error': 'Household not found'}, status=404)
+
+        files = request.FILES.getlist('files') or ([request.FILES['file']] if request.FILES.get('file') else [])
+        if not files:
+            return Response({'error': 'No files provided'}, status=400)
+        password = request.data.get('password') or None
+
+        members = household.members.filter(is_active=True)
+        member_names = {m.full_name.lower(): m for m in members}
+        member_list = [{'id': m.id, 'name': m.full_name, 'relation': m.relation_type} for m in members]
+
+        parsed, results = [], []
+        for f in files:
+            try:
+                deal = parse_indiabonds_deal_sheet(f.read(), password)
+            except IncorrectPasswordError as e:
+                results.append({'filename': f.name, 'error': str(e), 'error_code': 'bad_password'})
+                continue
+            except (IndiaBondsParseError, ValueError) as e:
+                results.append({'filename': f.name, 'error': str(e)})
+                continue
+            parsed.append((f.name, deal))
+
+        for (filename, deal), preview in zip(parsed, preview_deals(household, [d for _, d in parsed])):
+            # The household member is the buyer on a buy deal sheet, the seller on a sell.
+            owner_name = deal['seller_name'] if deal['side'] == 'sell' else deal['buyer_name']
+            matched, confidence = _fuzzy_match_member(owner_name, member_names)
+            results.append({
+                'filename': filename, 'deal': deal, **preview,
+                'matched_member': (
+                    {'id': matched.id, 'name': matched.full_name, 'relation': matched.relation_type, 'confidence': confidence}
+                    if matched else None
+                ),
+                'members': member_list,
+            })
+        return Response(results)
+
+
+class IndiaBondsApplyView(APIView):
+    """Step 2: apply the confirmed action per deal (create / append / edit / replace /
+    skip), then check what the affected holdings are worth. A dry run is the preview.
+    A real apply is refused (and rolled back) when a holding would be mis-valued, or
+    when there are warnings the user hasn't acknowledged."""
+
+    def post(self, request):
+        from core.models import Household
+        from ingestion.change_summary import is_dry_run, record_import, summarise_import
+        from ingestion.indiabonds import ValuationBlocked, apply_items, check_bond_valuations
+        from instruments.models import Account
+
+        household_id = request.data.get('household_id')
+        if not household_id:
+            return Response({'error': 'household_id is required'}, status=400)
+        try:
+            household = Household.objects.get(pk=int(household_id))
+        except Household.DoesNotExist:
+            return Response({'error': 'Household not found'}, status=404)
+
+        items = request.data.get('items', [])
+        if not items:
+            return Response({'error': 'items is required'}, status=400)
+        dry_run = is_dry_run(request.data)
+        acknowledged = request.data.get('acknowledge_warnings') is True
+
+        members = {m.id: m for m in household.members.all()}
+        accounts = {a.id: a for a in Account.objects.filter(household=household)}
+
+        def run():
+            results, touched, deals_by_lot = apply_items(household, items, members, accounts)
+            issues = check_bond_valuations(household, touched, deals_by_lot)
+            blocking = [i for i in issues if i['severity'] == 'error' or (i['severity'] == 'warning' and not acknowledged)]
+            if blocking and not dry_run:
+                raise ValuationBlocked(issues)
+            return results, issues
+
+        try:
+            (results, issues), summary = summarise_import(household, run, dry_run)
+        except ValuationBlocked as e:
+            return Response({
+                'error': 'Not imported — fix the issues below first.' if any(i['severity'] == 'error' for i in e.issues)
+                         else 'Not imported — confirm you’ve checked the warnings first.',
+                'valuation_issues': e.issues,
+            }, status=400)
+        if not dry_run:
+            filenames = ', '.join(dict.fromkeys(i.get('filename', '') for i in items if i.get('filename')))
+            record_import(household, 'indiabonds', filenames, None, summary, {'results': results})
+        return Response({'results': results, 'change_summary': summary, 'valuation_issues': issues},
+                        status=200 if dry_run else 201)
+
+
 class EpfPassbookPreviewView(APIView):
     """Step 1: parse one or more uploaded EPFO Member Passbook PDFs (one financial year each)."""
 

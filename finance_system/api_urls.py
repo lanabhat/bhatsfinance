@@ -5,7 +5,7 @@ from alerts.views import BondCouponRemindersView, MissedRDAlertsView, MissedSIPA
 from insurance.views import InsurancePolicyViewSet, InsuranceSummaryView, MissedPremiumRemindersView, VehicleClaimViewSet
 from core.views import CsrfView, HouseholdViewSet, IntegrationCredentialViewSet, MemberViewSet, UserAdminViewSet
 from expenses.views import ExpenseCategoryViewSet, UnmappedExpensesView
-from ingestion.views import CSVImportView, EpfPassbookApplyView, EpfPassbookPreviewView, FDAdviceApplyView, FDAdvicePreviewView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportHistoryDetailView, ImportHistoryView, ImportPreviewView, ImportSchemasView, NpsApplyView, NpsPreviewView, PpfStatementApplyView, PpfStatementPreviewView, SBIStatementApplyView, SBIStatementPreviewView
+from ingestion.views import CSVImportView, EpfPassbookApplyView, EpfPassbookPreviewView, FDAdviceApplyView, FDAdvicePreviewView, GrowwApplyView, GrowwPreviewView, ImportApplyView, ImportHistoryDetailView, ImportHistoryView, ImportPreviewView, ImportSchemasView, IndiaBondsApplyView, IndiaBondsPreviewView, NpsApplyView, NpsPreviewView, PpfStatementApplyView, PpfStatementPreviewView, SBIStatementApplyView, SBIStatementPreviewView
 from insights.views import AllocationSuggestionView, AllocationView, AttentionView, CategoryBreakdownView, MarketCapSplitView, AllocationFactsView, CashFlowView, DiversificationView, FundPerformanceView, HoldingsHistoryView, HoldingsView, HouseholdAccountsView, MembersNetWorthView, NetWorthHistoryView, NetWorthView, RebalancingView, SpendAnalyticsView, XIRRView
 from reports.views import StatementExportView, StatementPreviewView
 from instruments.views import (
@@ -157,6 +157,8 @@ urlpatterns = [
     path('imports/fd-advice-apply', FDAdviceApplyView.as_view(), name='imports-fd-advice-apply'),
     path('imports/nps-preview', NpsPreviewView.as_view(), name='imports-nps-preview'),
     path('imports/nps-apply', NpsApplyView.as_view(), name='imports-nps-apply'),
+    path('imports/indiabonds-preview', IndiaBondsPreviewView.as_view(), name='imports-indiabonds-preview'),
+    path('imports/indiabonds-apply', IndiaBondsApplyView.as_view(), name='imports-indiabonds-apply'),
     path('imports/epf-passbook-preview', EpfPassbookPreviewView.as_view(), name='imports-epf-passbook-preview'),
     path('imports/epf-passbook-apply', EpfPassbookApplyView.as_view(), name='imports-epf-passbook-apply'),
     path('imports/ppf-statement-preview', PpfStatementPreviewView.as_view(), name='imports-ppf-statement-preview'),

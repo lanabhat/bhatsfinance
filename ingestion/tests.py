@@ -1193,3 +1193,269 @@ class DataImportChangeSummaryTests(TestCase):
         self.assertEqual(applied.status_code, 201, applied.data)
         self.assertEqual(applied.data['change_summary'], preview.data['change_summary'])
         self.assertEqual(ImportBatch.objects.get().kind, 'data')
+
+
+# ── IndiaBonds deal sheets ──────────────────────────────────────────────────────
+
+def _deal_sheet_text(order='IB-DIR-19082026-BUY-304219', isin='INE658F08565',
+                     name='KERALA INFRASTRUCTURE INVESTMENT FUND BOARD SR VII STRPP C 9.30 BD 21JN32 FVRS1LAC',
+                     coupon='9.3000', schedule='QUARTERLY :- 21-OCT, 21-JAN, 21-APR, 21-JUL',
+                     redemption='21-APR-2031: 25.0000%, 21-JUL-2031: 25.0000%, 21-OCT-2031: 25.0000%, 21-JAN-2032: 25.0000%',
+                     face='100,000.00', quantum='200,000.00', bonds='2', price='103.1301', value_date='19-AUG-2026',
+                     principal='206,260.20', accrued='1,477.81', days='29', settlement='207,738.01'):
+    """The text pdfplumber extracts from a deal sheet (layout copied from a real one, names made up)."""
+    return f"""DEAL SHEET
+Buyer Name: ASHA TESTER NCL Code: ABCDE1234FIB Seller Name: SOME BROKER NCL Code: SBRK
+LIMITED
+Kind Attention: ASHA TESTER
+INDIABONDS ORDER ID {order}
+INDIABONDS DEAL ID IB-X-01-{order[3:]}
+ISIN {isin}
+SECURITY NAME {name}
+SECURITY NATURE UNSECURED
+COUPON RATE {coupon}%
+COUPON TYPE FIXED INTEREST
+INTEREST PAYMENT DATE {schedule}
+ALLOTMENT DATE 21-JAN-2026
+PUT / CALL OPTION N.A.
+REDEMPTION DATE {redemption}
+LAST INTEREST PAYMENT DATE 21-JUL-2026 [TUESDAY]
+FACE VALUE (INR) {face}
+QUANTUM (INR) {quantum} [NO. OF BONDS :- {bonds}] PRICE - {price}
+DATE DEAL DATE - 19-AUG-2026 VALUE DATE - {value_date}
+PRINCIPAL AMOUNT (INR) {principal}
+ACCRUED/EX INTEREST (INR) {accrued} [NO. OF DAYS :- {days}]
+TOTAL CONSIDERATION (INR) {settlement}
+STAMP DUTY (INR) (TO BE PAID BY
+0.00 (Rs.NIL) TO BE RETAINED BY EXCHANGE
+BUYER)
+BROKERAGE / CONVENIENCE
+0.00
+CHARGES (INR)
+SETTLEMENT AMOUNT (INR)
+{settlement} (Rs. Some Amount Only)
+(INCLUSIVE OF STAMP DUTY)
+SETTLEMENT DATE & TIME 19-AUG-2026 19:38:16
+"""
+
+
+SGS_TEXT = dict(order='IB-DIR-19082026-BUY-304206', isin='IN3920260020', name='7.75% DELHI SGS 24 JUN 2041', coupon='7.7500',
+                schedule='TWICE A YEAR :- 24-DEC, 24-JUN', redemption='24-JUN-2041: 100.0000%', face='100.00',
+                quantum='100,000.00', bonds='1000', price='102.2007', value_date='20-AUG-2026', principal='102,200.70',
+                accrued='1,205.56', days='56', settlement='103,406.26')
+
+
+class IndiaBondsParserTests(TestCase):
+    def test_quarterly_bond_with_partial_redemption(self):
+        from ingestion.indiabonds_parser import parse_deal_sheet_text
+
+        d = parse_deal_sheet_text(_deal_sheet_text())
+        self.assertEqual(d['side'], 'buy')
+        self.assertEqual(d['buyer_name'], 'ASHA TESTER')
+        self.assertEqual(d['issuer_name'], 'KERALA INFRASTRUCTURE INVESTMENT FUND BOARD')
+        self.assertEqual(d['bond_type'], 'corporate')
+        self.assertEqual(d['coupon_frequency'], 'quarterly')
+        self.assertEqual(d['first_coupon_date'], '2026-10-21')
+        self.assertEqual(d['maturity_date'], '2032-01-21')
+        self.assertEqual(len(d['redemption_schedule']), 4)
+        self.assertIn('Redeems 25% on 21-Apr-2031', d['notes'])
+        self.assertEqual((d['face_value'], d['quantity'], d['principal']), ('100000.00', 2, '206260.20'))
+        self.assertEqual((d['accrued_interest'], d['accrued_days']), ('1477.81', 29))
+        self.assertEqual((d['stamp_duty'], d['brokerage'], d['settlement_amount']), ('0.00', '0.00', '207738.01'))
+
+    def test_state_government_bond(self):
+        from ingestion.indiabonds_parser import parse_deal_sheet_text
+
+        d = parse_deal_sheet_text(_deal_sheet_text(**SGS_TEXT))
+        self.assertEqual(d['bond_type'], 'government')
+        self.assertEqual(d['issuer_name'], 'DELHI GOVERNMENT')
+        self.assertEqual(d['coupon_frequency'], 'half_yearly')
+        self.assertEqual(d['first_coupon_date'], '2026-12-24')
+        self.assertEqual(d['maturity_date'], '2041-06-24')
+        self.assertEqual((d['face_value'], d['quantity'], d['value_date']), ('100.00', 1000, '2026-08-20'))
+        self.assertEqual(d['notes'], '')
+
+    def test_missing_required_values_raise(self):
+        from ingestion.indiabonds_parser import IndiaBondsParseError, parse_deal_sheet_text
+
+        with self.assertRaises(IndiaBondsParseError):
+            parse_deal_sheet_text(_deal_sheet_text().replace('SETTLEMENT AMOUNT (INR)', 'SOMETHING ELSE'))
+        with self.assertRaises(IndiaBondsParseError):
+            parse_deal_sheet_text('Some other PDF')
+
+
+class IndiaBondsImportTests(TestCase):
+    def setUp(self):
+        from ingestion.indiabonds_parser import parse_deal_sheet_text
+
+        self.household = Household.objects.create(name='Bond Family')
+        self.member = Member.objects.create(household=self.household, full_name='Asha Tester', relation_type='self')
+        self.bank = Account.objects.create(household=self.household, name='Bank', account_type='bank')
+        self.client = _approved_client(self.household)
+        self.kiifb2 = parse_deal_sheet_text(_deal_sheet_text())
+        self.kiifb1 = parse_deal_sheet_text(_deal_sheet_text(
+            order='IB-DIR-19082026-BUY-304218', quantum='100,000.00', bonds='1', principal='103,130.10',
+            accrued='738.90', settlement='103,869.00'))
+        self.sgs = parse_deal_sheet_text(_deal_sheet_text(**SGS_TEXT))
+
+    def _lot(self, name, isin, qty, face, coupon, amount, invested=date(2026, 8, 19), notes=''):
+        from instruments.models import BondDetails
+
+        inst = Instrument.objects.create(household=self.household, name=name, instrument_type='bond', symbol=isin,
+                                         default_account=self.bank)
+        tx = Transaction.objects.create(
+            household=self.household, instrument=inst, account=self.bank, member=self.member, tx_date=invested,
+            amount=Decimal(amount), quantity=Decimal(qty), direction='outflow', transaction_type='buy',
+            idempotency_key=f'manual-{name}')
+        return BondDetails.objects.create(
+            instrument=inst, funding_transaction=tx, isin=isin, face_value=Decimal(face), quantity=qty,
+            coupon_rate=Decimal(coupon), coupon_frequency='quarterly', investment_date=invested,
+            maturity_date=date(2032, 1, 21), credit_rating='AA', grace_days=7, notes=notes)
+
+    def _apply(self, items, dry_run=False, ack=False):
+        return self.client.post('/api/imports/indiabonds-apply', {
+            'household_id': self.household.id, 'items': items, 'dry_run': dry_run, 'acknowledge_warnings': ack,
+        }, format='json')
+
+    def test_matches_same_isin_lots_by_quantity_and_never_twice(self):
+        from ingestion.indiabonds import preview_deals
+
+        one = self._lot('KIIFB 1', 'INE658F08565', 1, '103869', '8.8', '103869.00')
+        two = self._lot('KIIFB 2', 'INE658F08565', 2, '100000', '8.8', '207738.01')
+        out = preview_deals(self.household, [self.kiifb1, self.kiifb2])
+        self.assertEqual([o['match']['bond_details_id'] for o in out], [one.id, two.id])
+        changed = {d['field'] for d in out[0]['diff'] if d['changed']}
+        self.assertTrue({'coupon_rate', 'face_value'} <= changed)
+
+    def test_create_new_bond_then_reupload_is_already_imported(self):
+        from ingestion.indiabonds import preview_deals
+        from instruments.models import BondDetails
+
+        r = self._apply([{'filename': 'a.pdf', 'deal': self.sgs, 'action': 'create', 'member_id': self.member.id,
+                          'account_id': self.bank.id, 'extras': {'credit_rating': 'SOV'}}])
+        self.assertEqual(r.status_code, 201, r.data)
+        lot = BondDetails.objects.get()
+        self.assertEqual((lot.instrument.name, lot.bond_type, lot.quantity, lot.face_value, lot.credit_rating),
+                         ('DELHI GOVERNMENT', 'government', 1000, Decimal('100.00'), 'SOV'))
+        tx = lot.funding_transaction
+        self.assertEqual((tx.amount, tx.account_id, tx.metadata['order_id'], tx.metadata['accrued_interest']),
+                         (Decimal('103406.26'), self.bank.id, 'IB-DIR-19082026-BUY-304206', '1205.56'))
+        self.assertEqual(preview_deals(self.household, [self.sgs])[0]['status'], 'already_imported')
+        again = self._apply([{'filename': 'a.pdf', 'deal': self.sgs, 'action': 'create'}])
+        self.assertEqual(again.status_code, 201)
+        self.assertEqual(Transaction.objects.filter(transaction_type='buy').count(), 1)
+
+    def test_append_applies_deal_values_and_keeps_extras(self):
+        lot = self._lot('Delhi', 'IN3920260020', 1000, '100', '7.75', '100000.00', invested=date(2026, 8, 20), notes='mine')
+        old_tx_id = lot.funding_transaction_id
+        r = self._apply([{'filename': 'a.pdf', 'deal': self.sgs, 'action': 'append', 'bond_details_id': lot.id}])
+        self.assertEqual(r.status_code, 201, r.data)
+        lot.refresh_from_db()
+        self.assertEqual((lot.bond_type, lot.coupon_frequency, lot.first_coupon_date), ('government', 'half_yearly', date(2026, 12, 24)))
+        self.assertEqual((lot.credit_rating, lot.grace_days, lot.notes), ('AA', 7, 'mine'))
+        tx = lot.funding_transaction
+        self.assertNotEqual(tx.id, old_tx_id)
+        self.assertEqual((tx.amount, tx.idempotency_key, tx.metadata['order_id']), (Decimal('103406.26'), 'manual-Delhi', self.sgs['order_id']))
+
+    def test_append_adds_redemption_note(self):
+        lot = self._lot('KIIFB', 'INE658F08565', 2, '100000', '8.8', '207738.01', notes='keep me')
+        self._apply([{'filename': 'a.pdf', 'deal': self.kiifb2, 'action': 'append', 'bond_details_id': lot.id}])
+        lot.refresh_from_db()
+        self.assertTrue(lot.notes.startswith('keep me\nRedeems 25%'))
+        self.assertEqual(lot.coupon_rate, Decimal('9.3'))
+
+    def test_edit_writes_only_chosen_values(self):
+        lot = self._lot('KIIFB', 'INE658F08565', 1, '103869', '8.8', '103869.00')
+        r = self._apply([{'filename': 'a.pdf', 'deal': self.kiifb1, 'action': 'edit', 'bond_details_id': lot.id,
+                          'values': {'coupon_rate': '9.30', 'face_value': '100000'},
+                          'extras': {'credit_rating': 'AAA', 'notes': 'typed'}}])
+        self.assertEqual(r.status_code, 201, r.data)
+        lot.refresh_from_db()
+        self.assertEqual((lot.coupon_rate, lot.face_value, lot.credit_rating, lot.notes), (Decimal('9.3'), Decimal('100000'), 'AAA', 'typed'))
+        self.assertEqual(lot.coupon_frequency, 'quarterly')  # not chosen, kept
+        self.assertEqual(lot.funding_transaction.amount, Decimal('103869.00'))
+
+    def test_replace_recreates_lot_and_keeps_coupon_history(self):
+        from instruments.models import BondCouponAck, BondDetails, InstrumentOwnership
+        from valuations.models import ValuationSnapshot
+
+        lot = self._lot('KIIFB', 'INE658F08565', 1, '1', '1', '5.00')
+        InstrumentOwnership.objects.create(instrument=lot.instrument, member=self.member, allocation_percent=Decimal('100'))
+        ValuationSnapshot.objects.create(household=self.household, instrument=lot.instrument, valuation_date=date(2026, 9, 1),
+                                         market_value=Decimal('100000'), source='manual')
+        BondCouponAck.objects.create(bond=lot, due_date=date(2026, 10, 21), acknowledged_on=date(2026, 10, 22))
+        old_tx = lot.funding_transaction_id
+        r = self._apply([{'filename': 'a.pdf', 'deal': self.kiifb1, 'action': 'replace', 'bond_details_id': lot.id}], ack=True)
+        self.assertEqual(r.status_code, 201, r.data)
+        new = BondDetails.objects.get()
+        self.assertNotEqual(new.id, lot.id)
+        self.assertEqual((new.instrument_id, new.face_value, new.quantity), (lot.instrument_id, Decimal('100000'), 1))
+        self.assertFalse(Transaction.objects.filter(pk=old_tx).exists())
+        self.assertEqual(new.funding_transaction.amount, Decimal('103869.00'))
+        self.assertEqual(BondCouponAck.objects.get().bond_id, new.id)
+        self.assertTrue(InstrumentOwnership.objects.filter(instrument=lot.instrument).exists())
+        self.assertTrue(ValuationSnapshot.objects.filter(instrument=lot.instrument).exists())
+
+    def test_face_value_as_total_is_flagged(self):
+        lot = self._lot('KIIFB', 'INE658F08565', 2, '207738.01', '9.3', '207738.01')
+        item = {'filename': 'a.pdf', 'deal': self.kiifb2, 'action': 'edit', 'bond_details_id': lot.id,
+                'values': {'face_value': '207738.01'}}
+        r = self._apply([item], dry_run=True)
+        self.assertIn('face_value_scale', {i['code'] for i in r.data['valuation_issues']})
+        self.assertEqual(self._apply([item]).status_code, 400)
+        lot.refresh_from_db()
+        self.assertFalse(lot.funding_transaction.metadata)  # rolled back; nothing written
+
+    def test_percent_unit_price_snapshot_is_flagged_and_can_be_refreshed(self):
+        from valuations.models import ValuationSnapshot
+
+        lot = self._lot('KIIFB', 'INE658F08565', 2, '100000', '9.3', '207738.01')
+        ValuationSnapshot.objects.create(household=self.household, instrument=lot.instrument, valuation_date=date(2026, 9, 1),
+                                         unit_price=Decimal('103.13'), market_value=Decimal('206.26'), source='csv')
+        item = {'filename': 'a.pdf', 'deal': self.kiifb2, 'action': 'append', 'bond_details_id': lot.id}
+        r = self._apply([item], dry_run=True)
+        self.assertIn('valuation_scale', {i['code'] for i in r.data['valuation_issues']})
+        self.assertEqual(self._apply([item]).status_code, 400)
+        fixed = self._apply([{**item, 'refresh_snapshot': True}])
+        self.assertEqual(fixed.status_code, 201, fixed.data)
+        self.assertNotIn('valuation_scale', {i['code'] for i in fixed.data['valuation_issues']})
+
+    def test_negative_holding_blocks_apply(self):
+        from ingestion.indiabonds import check_bond_valuations
+
+        lot = self._lot('KIIFB', 'INE658F08565', 1, '100000', '9.3', '103869.00')
+        Transaction.objects.create(household=self.household, instrument=lot.instrument, tx_date=date(2026, 9, 1),
+                                   amount=Decimal('300000'), quantity=Decimal('3'), direction='inflow', transaction_type='sell')
+        codes = {i['code'] for i in check_bond_valuations(self.household, {lot.instrument_id})}
+        self.assertTrue({'negative_units', 'negative_value'} <= codes)
+        r = self._apply([{'filename': 'a.pdf', 'deal': self.kiifb1, 'action': 'append', 'bond_details_id': lot.id}], ack=True)
+        self.assertEqual(r.status_code, 400)
+
+    def test_sell_takes_units_oldest_first(self):
+        from ingestion.indiabonds_parser import parse_deal_sheet_text
+        from instruments.models import BondDetails
+
+        old = self._lot('KIIFB', 'INE658F08565', 1, '100000', '9.3', '103869.00', invested=date(2026, 8, 1))
+        BondDetails.objects.create(instrument=old.instrument, isin='INE658F08565', face_value=Decimal('100000'), quantity=2,
+                                   coupon_rate=Decimal('9.3'), investment_date=date(2026, 8, 19), maturity_date=date(2032, 1, 21))
+        Transaction.objects.create(household=self.household, instrument=old.instrument, tx_date=date(2026, 8, 19),
+                                   amount=Decimal('207738.01'), quantity=Decimal('2'), direction='outflow', transaction_type='buy')
+        sell = parse_deal_sheet_text(_deal_sheet_text(order='IB-DIR-01102026-SELL-1', quantum='200,000.00', bonds='2',
+                                                      value_date='01-OCT-2026', settlement='208,000.00'))
+        self.assertEqual(sell['side'], 'sell')
+        r = self._apply([{'filename': 's.pdf', 'deal': sell, 'action': 'create', 'account_id': self.bank.id}])
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(list(BondDetails.objects.values_list('quantity', flat=True)), [1])
+        tx = Transaction.objects.get(transaction_type='sell')
+        self.assertEqual((tx.quantity, tx.amount), (Decimal('2'), Decimal('208000.00')))
+
+    def test_dry_run_leaves_nothing_and_apply_records_history(self):
+        from ingestion.models import ImportBatch
+        from instruments.models import BondDetails
+
+        item = {'filename': 'a.pdf', 'deal': self.sgs, 'action': 'create', 'account_id': self.bank.id}
+        self.assertEqual(self._apply([item], dry_run=True).status_code, 200)
+        self.assertFalse(BondDetails.objects.exists())
+        self.assertFalse(ImportBatch.objects.exists())
+        self.assertEqual(self._apply([item]).status_code, 201)
+        self.assertEqual(ImportBatch.objects.get().kind, 'indiabonds')
